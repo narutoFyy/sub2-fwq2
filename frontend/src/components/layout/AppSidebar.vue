@@ -121,7 +121,14 @@
           >
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
-            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+            <span
+              class="sidebar-label"
+              :class="{
+                'sidebar-label-collapsed': sidebarCollapsed,
+                'font-semibold !text-red-500 dark:!text-red-400': item.path === '/activities'
+              }"
+              :aria-hidden="sidebarCollapsed ? 'true' : 'false'"
+            >{{ item.label }}</span>
           </router-link>
         </div>
       </template>
@@ -141,7 +148,14 @@
           >
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
-            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+            <span
+              class="sidebar-label"
+              :class="{
+                'sidebar-label-collapsed': sidebarCollapsed,
+                'font-semibold !text-red-500 dark:!text-red-400': item.path === '/activities'
+              }"
+              :aria-hidden="sidebarCollapsed ? 'true' : 'false'"
+            >{{ item.label }}</span>
           </router-link>
         </div>
       </template>
@@ -709,6 +723,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/purchase', label: t('nav.buySubscription'), icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
+    { path: '/activities', label: t('nav.limitedActivities'), icon: GiftIcon, hideInSimpleMode: true },
     { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
     { path: '/profile', label: t('nav.profile'), icon: UserIcon },
     ...customMenuItemsForUser.value.map((item): NavItem => ({

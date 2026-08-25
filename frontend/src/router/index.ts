@@ -265,6 +265,30 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/activities',
+    name: 'Activities',
+    component: () => import('@/views/user/ActivitiesView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Limited Activities',
+      titleKey: 'activities.title',
+      descriptionKey: 'activities.description'
+    }
+  },
+  {
+    path: '/activities/launch-rebate',
+    name: 'LaunchRebateActivity',
+    component: () => import('@/views/user/LaunchRebateActivityView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Launch Rebate Activity',
+      titleKey: 'activities.launchRebate.title',
+      descriptionKey: 'activities.launchRebate.description'
+    }
+  },
+  {
     path: '/available-channels',
     name: 'UserAvailableChannels',
     component: () => import('@/views/user/AvailableChannelsView.vue'),

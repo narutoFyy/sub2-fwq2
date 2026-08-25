@@ -16,6 +16,7 @@ import type {
   UserAuthProvider,
   UserAffiliateDetail,
   AffiliateTransferResponse,
+  LaunchCampaignDetail,
   PlatformQuotasResponse,
 } from '@/types'
 
@@ -186,6 +187,11 @@ export async function transferAffiliateQuota(): Promise<AffiliateTransferRespons
   return data
 }
 
+export async function getLaunchCampaign(): Promise<LaunchCampaignDetail> {
+  const { data } = await apiClient.get<LaunchCampaignDetail>('/user/activities/launch-rebate')
+  return data
+}
+
 /**
  * 获取当前用户的平台限额 + 用量。
  */
@@ -209,6 +215,7 @@ export const userAPI = {
   startOAuthBinding,
   getAffiliateDetail,
   transferAffiliateQuota,
+  getLaunchCampaign,
   getMyPlatformQuotas,
 }
 

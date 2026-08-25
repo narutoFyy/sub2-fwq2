@@ -100,6 +100,87 @@ LIMIT 1`, u.ID)
 	require.InDelta(t, 12.34, historyAfter, 1e-9)
 }
 
+func TestAffiliateRepository_AccrueLaunchCampaignCredit_CreditsBalanceImmediately(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	txCtx := dbent.NewTxContext(ctx, tx)
+	client := tx.Client()
+	repo := NewAffiliateRepository(client, integrationDB)
+
+	inviter := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("campaign-inviter-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash",
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
+		Balance:      1,
+		Concurrency:  5,
+	})
+	invitee := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("campaign-invitee-%d@example.com", time.Now().UnixNano()+1),
+		PasswordHash: "hash",
+		Role:         service.RoleUser,
+		Status:       service.StatusActive,
+		Concurrency:  5,
+	})
+
+	_, err := repo.EnsureUserAffiliate(txCtx, inviter.ID)
+	require.NoError(t, err)
+	_, err = repo.EnsureUserAffiliate(txCtx, invitee.ID)
+	require.NoError(t, err)
+	bound, err := repo.BindInviter(txCtx, invitee.ID, inviter.ID)
+	require.NoError(t, err)
+	require.True(t, bound)
+
+	_, err = client.ExecContext(txCtx, `
+INSERT INTO affiliate_campaigns (campaign_key, name, starts_at, ends_at, bonus_rate_percent, status, created_at, updated_at)
+VALUES ($1, 'Campaign test', NOW() - INTERVAL '1 hour', NOW() + INTERVAL '1 hour', 50, 'active', NOW(), NOW())
+ON CONFLICT (campaign_key) DO UPDATE
+SET starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at,
+    bonus_rate_percent = EXCLUDED.bonus_rate_percent,
+    status = EXCLUDED.status,
+    updated_at = NOW()`, service.LaunchCampaignKey)
+	require.NoError(t, err)
+
+	redeemedAt := time.Now()
+	redeemCode, err := client.RedeemCode.Create().
+		SetCode(fmt.Sprintf("CAMPAIGN%016d", redeemedAt.UnixNano()%10_000_000_000_000_000)).
+		SetType(service.RedeemTypeBalance).
+		SetValue(10).
+		SetStatus(service.StatusUsed).
+		SetUsedBy(invitee.ID).
+		SetUsedAt(redeemedAt).
+		Save(txCtx)
+	require.NoError(t, err)
+
+	creditedInviterID, applied, err := repo.AccrueLaunchCampaignCredit(txCtx, invitee.ID, redeemCode.ID, 10)
+	require.NoError(t, err)
+	require.True(t, applied)
+	require.Equal(t, inviter.ID, creditedInviterID)
+
+	balance := querySingleFloat(t, txCtx, client,
+		"SELECT balance::double precision FROM users WHERE id = $1", inviter.ID)
+	require.InDelta(t, 6, balance, 1e-9)
+	totalRecharged := querySingleFloat(t, txCtx, client,
+		"SELECT total_recharged::double precision FROM users WHERE id = $1", inviter.ID)
+	require.InDelta(t, 5, totalRecharged, 1e-9)
+	affQuota := querySingleFloat(t, txCtx, client,
+		"SELECT aff_quota::double precision FROM user_affiliates WHERE user_id = $1", inviter.ID)
+	require.InDelta(t, 0, affQuota, 1e-9)
+
+	ledgerCount := querySingleInt(t, txCtx, client,
+		"SELECT COUNT(*) FROM user_affiliate_ledger WHERE user_id = $1 AND action = 'campaign_balance_credit'", inviter.ID)
+	require.Equal(t, 1, ledgerCount)
+
+	creditedInviterID, applied, err = repo.AccrueLaunchCampaignCredit(txCtx, invitee.ID, redeemCode.ID, 10)
+	require.NoError(t, err)
+	require.False(t, applied)
+	require.Zero(t, creditedInviterID)
+	balance = querySingleFloat(t, txCtx, client,
+		"SELECT balance::double precision FROM users WHERE id = $1", inviter.ID)
+	require.InDelta(t, 6, balance, 1e-9)
+}
+
 // TestAffiliateRepository_AccrueQuota_ReusesOuterTransaction guards the
 // cross-layer tx propagation invariant: when AccrueQuota is called with a ctx
 // that already carries a transaction (via dbent.NewTxContext), repo.withTx

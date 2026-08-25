@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -670,6 +671,295 @@ func (r *affiliateRepository) GetAffiliateUserOverview(ctx context.Context, user
 		overview.RebateRateCustom = true
 	}
 	return &overview, rows.Err()
+}
+
+func (r *affiliateRepository) AccrueLaunchCampaignCredit(ctx context.Context, inviteeUserID, redeemCodeID int64, amount float64) (int64, bool, error) {
+	if inviteeUserID <= 0 || redeemCodeID <= 0 || amount <= 0 {
+		return 0, false, nil
+	}
+
+	var applied bool
+	var creditedInviterID int64
+	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
+		rows, err := txClient.QueryContext(txCtx, `
+SELECT ua.inviter_id,
+       rc.used_at,
+       c.bonus_rate_percent::double precision,
+       po.id
+FROM redeem_codes rc
+JOIN user_affiliates ua ON ua.user_id = rc.used_by
+JOIN affiliate_campaigns c ON c.campaign_key = $3
+LEFT JOIN payment_orders po
+       ON po.user_id = rc.used_by
+      AND po.recharge_code = rc.code
+      AND po.order_type = 'balance'
+WHERE rc.id = $1
+  AND rc.used_by = $2
+  AND rc.type = 'balance'
+  AND rc.status = 'used'
+  AND rc.value > 0
+  AND ua.inviter_id IS NOT NULL
+  AND c.status = 'active'
+  AND rc.used_at >= c.starts_at
+  AND rc.used_at <= c.ends_at
+  AND NOT EXISTS (
+      SELECT 1
+      FROM redeem_codes prior
+      WHERE prior.used_by = rc.used_by
+        AND prior.type = 'balance'
+        AND prior.status = 'used'
+        AND prior.value > 0
+        AND (
+            prior.used_at < rc.used_at
+            OR (prior.used_at = rc.used_at AND prior.id < rc.id)
+        )
+  )
+LIMIT 1`, redeemCodeID, inviteeUserID, service.LaunchCampaignKey)
+		if err != nil {
+			return fmt.Errorf("query launch campaign eligibility: %w", err)
+		}
+
+		var inviterID int64
+		var qualifiedAt time.Time
+		var bonusRate float64
+		var paymentOrderID sql.NullInt64
+		if !rows.Next() {
+			closeErr := rows.Close()
+			if closeErr != nil {
+				return closeErr
+			}
+			return nil
+		}
+		if err := rows.Scan(&inviterID, &qualifiedAt, &bonusRate, &paymentOrderID); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+
+		bonusAmount := math.Round(amount*bonusRate*1e6) / 1e8
+		if bonusAmount <= 0 {
+			return nil
+		}
+
+		insertRows, err := txClient.QueryContext(txCtx, `
+INSERT INTO affiliate_campaign_credits (
+    campaign_key,
+    inviter_id,
+    invitee_id,
+    redeem_code_id,
+    payment_order_id,
+    qualifying_amount,
+    bonus_amount,
+    status,
+    qualified_at,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, NOW(), NOW())
+ON CONFLICT DO NOTHING
+RETURNING id`, service.LaunchCampaignKey, inviterID, inviteeUserID, redeemCodeID, nullableInt64ArgFromSQL(paymentOrderID), amount, bonusAmount, qualifiedAt)
+		if err != nil {
+			return fmt.Errorf("insert launch campaign credit: %w", err)
+		}
+		if !insertRows.Next() {
+			closeErr := insertRows.Close()
+			if closeErr != nil {
+				return closeErr
+			}
+			return nil
+		}
+		var campaignCreditID int64
+		if err := insertRows.Scan(&campaignCreditID); err != nil {
+			_ = insertRows.Close()
+			return err
+		}
+		if err := insertRows.Close(); err != nil {
+			return err
+		}
+
+		affected, err := txClient.User.Update().
+			Where(user.IDEQ(inviterID)).
+			AddBalance(bonusAmount).
+			AddTotalRecharged(bonusAmount).
+			Save(txCtx)
+		if err != nil {
+			return fmt.Errorf("credit launch campaign bonus to balance: %w", err)
+		}
+		if affected == 0 {
+			return service.ErrUserNotFound
+		}
+
+		snapshot, err := queryAffiliateTransferSnapshot(txCtx, txClient, inviterID)
+		if err != nil {
+			return err
+		}
+		if _, err := txClient.ExecContext(txCtx, `
+INSERT INTO user_affiliate_ledger (
+    user_id,
+    action,
+    amount,
+    source_user_id,
+    source_order_id,
+    balance_after,
+    aff_quota_after,
+    aff_frozen_quota_after,
+    aff_history_quota_after,
+    created_at,
+    updated_at
+)
+VALUES ($1, 'campaign_balance_credit', $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+			inviterID,
+			bonusAmount,
+			inviteeUserID,
+			nullableInt64ArgFromSQL(paymentOrderID),
+			snapshot.BalanceAfter,
+			snapshot.AvailableQuotaAfter,
+			snapshot.FrozenQuotaAfter,
+			snapshot.HistoryQuotaAfter,
+		); err != nil {
+			return fmt.Errorf("insert launch campaign balance ledger: %w", err)
+		}
+
+		_ = campaignCreditID
+		creditedInviterID = inviterID
+		applied = true
+		return nil
+	})
+	if err != nil {
+		return 0, false, err
+	}
+	return creditedInviterID, applied, nil
+}
+
+func (r *affiliateRepository) GetLaunchCampaignDetail(ctx context.Context, userID int64, limit int) (*service.LaunchCampaignDetail, error) {
+	if userID <= 0 {
+		return nil, service.ErrUserNotFound
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	client := clientFromContext(ctx, r.client)
+
+	campaignRows, err := client.QueryContext(ctx, `
+SELECT campaign_key, name, starts_at, ends_at, bonus_rate_percent::double precision, status
+FROM affiliate_campaigns
+WHERE campaign_key = $1
+LIMIT 1`, service.LaunchCampaignKey)
+	if err != nil {
+		return nil, fmt.Errorf("query launch campaign: %w", err)
+	}
+	detail := &service.LaunchCampaignDetail{}
+	if !campaignRows.Next() {
+		_ = campaignRows.Close()
+		return nil, fmt.Errorf("launch campaign not found")
+	}
+	if err := campaignRows.Scan(&detail.CampaignKey, &detail.Name, &detail.StartsAt, &detail.EndsAt, &detail.BonusRatePercent, &detail.Status); err != nil {
+		_ = campaignRows.Close()
+		return nil, err
+	}
+	if err := campaignRows.Close(); err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	detail.Ended = now.After(detail.EndsAt)
+	detail.Active = detail.Status == "active" && !now.Before(detail.StartsAt) && !detail.Ended
+
+	affiliate, err := ensureUserAffiliateWithClient(ctx, client, userID)
+	if err != nil {
+		return nil, err
+	}
+	detail.AffiliateCode = affiliate.AffCode
+	detail.Leaderboard = make([]service.LaunchCampaignLeaderboardEntry, 0)
+
+	leaderboardRows, err := client.QueryContext(ctx, `
+WITH totals AS (
+    SELECT inviter_id,
+           COUNT(*)::integer AS qualified_count,
+           COALESCE(SUM(qualifying_amount), 0)::double precision AS qualifying_amount,
+           COALESCE(SUM(bonus_amount), 0)::double precision AS bonus_amount,
+           MAX(qualified_at) AS reached_at
+    FROM affiliate_campaign_credits
+    WHERE campaign_key = $1 AND status = 'active'
+    GROUP BY inviter_id
+), ranked AS (
+    SELECT totals.*,
+           ROW_NUMBER() OVER (
+               ORDER BY qualifying_amount DESC, qualified_count DESC, reached_at ASC, inviter_id ASC
+           )::integer AS rank
+    FROM totals
+)
+SELECT ranked.rank,
+       COALESCE(users.email, ''),
+       ranked.qualified_count,
+       ranked.qualifying_amount,
+       ranked.bonus_amount,
+       ranked.inviter_id
+FROM ranked
+JOIN users ON users.id = ranked.inviter_id
+ORDER BY ranked.rank
+LIMIT $2`, service.LaunchCampaignKey, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query launch campaign leaderboard: %w", err)
+	}
+	for leaderboardRows.Next() {
+		var entry service.LaunchCampaignLeaderboardEntry
+		var inviterID int64
+		if err := leaderboardRows.Scan(&entry.Rank, &entry.MaskedEmail, &entry.QualifiedCount, &entry.QualifyingAmount, &entry.BonusAmount, &inviterID); err != nil {
+			_ = leaderboardRows.Close()
+			return nil, err
+		}
+		entry.IsCurrentUser = inviterID == userID
+		detail.Leaderboard = append(detail.Leaderboard, entry)
+	}
+	if err := leaderboardRows.Close(); err != nil {
+		return nil, err
+	}
+
+	statsRows, err := client.QueryContext(ctx, `
+WITH totals AS (
+    SELECT inviter_id,
+           COUNT(*)::integer AS qualified_count,
+           COALESCE(SUM(qualifying_amount), 0)::double precision AS qualifying_amount,
+           COALESCE(SUM(bonus_amount), 0)::double precision AS bonus_amount,
+           MAX(qualified_at) AS reached_at
+    FROM affiliate_campaign_credits
+    WHERE campaign_key = $1 AND status = 'active'
+    GROUP BY inviter_id
+), ranked AS (
+    SELECT totals.*,
+           ROW_NUMBER() OVER (
+               ORDER BY qualifying_amount DESC, qualified_count DESC, reached_at ASC, inviter_id ASC
+           )::integer AS rank
+    FROM totals
+)
+SELECT rank, qualified_count, qualifying_amount, bonus_amount
+FROM ranked
+WHERE inviter_id = $2
+LIMIT 1`, service.LaunchCampaignKey, userID)
+	if err != nil {
+		return nil, fmt.Errorf("query launch campaign user stats: %w", err)
+	}
+	if statsRows.Next() {
+		var rank int
+		if err := statsRows.Scan(&rank, &detail.UserStats.QualifiedCount, &detail.UserStats.QualifyingAmount, &detail.UserStats.BonusAmount); err != nil {
+			_ = statsRows.Close()
+			return nil, err
+		}
+		detail.UserStats.Rank = &rank
+	}
+	if err := statsRows.Close(); err != nil {
+		return nil, err
+	}
+	return detail, nil
+}
+
+func nullableInt64ArgFromSQL(value sql.NullInt64) any {
+	if !value.Valid {
+		return nil
+	}
+	return value.Int64
 }
 
 func buildAffiliateRecordWhere(filter service.AffiliateRecordFilter, timeColumn string, searchColumns []string) (string, []any) {

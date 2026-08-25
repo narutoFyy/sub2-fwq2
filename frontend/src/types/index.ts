@@ -168,6 +168,36 @@ export interface AffiliateTransferResponse {
   balance: number
 }
 
+export interface LaunchCampaignLeaderboardEntry {
+  rank: number
+  masked_email: string
+  qualified_count: number
+  qualifying_amount: number
+  bonus_amount: number
+  is_current_user: boolean
+}
+
+export interface LaunchCampaignUserStats {
+  rank?: number | null
+  qualified_count: number
+  qualifying_amount: number
+  bonus_amount: number
+}
+
+export interface LaunchCampaignDetail {
+  campaign_key: string
+  name: string
+  starts_at: string
+  ends_at: string
+  status: string
+  active: boolean
+  ended: boolean
+  bonus_rate_percent: number
+  affiliate_code: string
+  user_stats: LaunchCampaignUserStats
+  leaderboard: LaunchCampaignLeaderboardEntry[]
+}
+
 export interface SendVerifyCodeRequest {
   email: string
   turnstile_token?: string

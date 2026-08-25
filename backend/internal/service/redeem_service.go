@@ -518,6 +518,7 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 
 	// 余额类正数兑换码触发邀请返利（best-effort，失败不影响兑换结果）
 	if redeemCode.Type == RedeemTypeBalance && redeemCode.Value > 0 {
+		s.tryAccrueLaunchCampaignCredit(ctx, userID, redeemCode.ID, redeemCode.Value)
 		s.tryAccrueAffiliateRebateForRedeem(ctx, userID, redeemCode.Value)
 	}
 
@@ -587,6 +588,20 @@ func (s *RedeemService) tryAccrueAffiliateRebateForRedeem(ctx context.Context, u
 	}
 	if rebate > 0 {
 		logger.LegacyPrintf("service.redeem", "[Redeem] affiliate rebate accrued %.8f for inviter of user %d", rebate, userID)
+	}
+}
+
+func (s *RedeemService) tryAccrueLaunchCampaignCredit(ctx context.Context, userID, redeemCodeID int64, amount float64) {
+	if s.affiliateService == nil {
+		return
+	}
+	applied, err := s.affiliateService.AccrueLaunchCampaignCredit(ctx, userID, redeemCodeID, amount)
+	if err != nil {
+		logger.LegacyPrintf("service.redeem", "[Redeem] launch campaign credit failed for user %d code %d amount %.2f: %v", userID, redeemCodeID, amount, err)
+		return
+	}
+	if applied {
+		logger.LegacyPrintf("service.redeem", "[Redeem] launch campaign bonus accrued for user %d code %d amount %.2f", userID, redeemCodeID, amount)
 	}
 }
 

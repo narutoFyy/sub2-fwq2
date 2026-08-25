@@ -21,6 +21,7 @@ var (
 
 const (
 	affiliateInviteesLimit = 100
+	LaunchCampaignKey      = "launch-rebate-2026-08"
 	// AffiliateCodeMinLength / AffiliateCodeMaxLength bound both system-generated
 	// 12-char codes and admin-customized codes (e.g. "VIP2026").
 	AffiliateCodeMinLength = 4
@@ -92,6 +93,41 @@ type AffiliateDetail struct {
 	// 用于在用户的 /affiliate 页面直观展示「分享后能拿到多少」。
 	EffectiveRebateRatePercent float64            `json:"effective_rebate_rate_percent"`
 	Invitees                   []AffiliateInvitee `json:"invitees"`
+}
+
+type LaunchCampaignLeaderboardEntry struct {
+	Rank             int     `json:"rank"`
+	MaskedEmail      string  `json:"masked_email"`
+	QualifiedCount   int     `json:"qualified_count"`
+	QualifyingAmount float64 `json:"qualifying_amount"`
+	BonusAmount      float64 `json:"bonus_amount"`
+	IsCurrentUser    bool    `json:"is_current_user"`
+}
+
+type LaunchCampaignUserStats struct {
+	Rank             *int    `json:"rank,omitempty"`
+	QualifiedCount   int     `json:"qualified_count"`
+	QualifyingAmount float64 `json:"qualifying_amount"`
+	BonusAmount      float64 `json:"bonus_amount"`
+}
+
+type LaunchCampaignDetail struct {
+	CampaignKey      string                           `json:"campaign_key"`
+	Name             string                           `json:"name"`
+	StartsAt         time.Time                        `json:"starts_at"`
+	EndsAt           time.Time                        `json:"ends_at"`
+	Status           string                           `json:"status"`
+	Active           bool                             `json:"active"`
+	Ended            bool                             `json:"ended"`
+	BonusRatePercent float64                          `json:"bonus_rate_percent"`
+	AffiliateCode    string                           `json:"affiliate_code"`
+	UserStats        LaunchCampaignUserStats          `json:"user_stats"`
+	Leaderboard      []LaunchCampaignLeaderboardEntry `json:"leaderboard"`
+}
+
+type LaunchCampaignRepository interface {
+	AccrueLaunchCampaignCredit(ctx context.Context, inviteeUserID, redeemCodeID int64, amount float64) (int64, bool, error)
+	GetLaunchCampaignDetail(ctx context.Context, userID int64, limit int) (*LaunchCampaignDetail, error)
 }
 
 type AffiliateRepository interface {
@@ -264,6 +300,53 @@ func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64)
 		EffectiveRebateRatePercent: s.resolveRebateRatePercent(ctx, summary),
 		Invitees:                   invitees,
 	}, nil
+}
+
+func (s *AffiliateService) AccrueLaunchCampaignCredit(ctx context.Context, inviteeUserID, redeemCodeID int64, amount float64) (bool, error) {
+	if s == nil || inviteeUserID <= 0 || redeemCodeID <= 0 || amount <= 0 {
+		return false, nil
+	}
+	repo, ok := s.repo.(LaunchCampaignRepository)
+	if !ok {
+		return false, nil
+	}
+	inviterID, applied, err := repo.AccrueLaunchCampaignCredit(ctx, inviteeUserID, redeemCodeID, roundTo(amount, 8))
+	if err == nil && applied {
+		s.invalidateAffiliateCaches(ctx, inviterID)
+	}
+	return applied, err
+}
+
+func (s *AffiliateService) GetLaunchCampaignDetail(ctx context.Context, userID int64) (*LaunchCampaignDetail, error) {
+	if s == nil || userID <= 0 {
+		return nil, infraerrors.BadRequest("INVALID_USER", "invalid user")
+	}
+	repo, ok := s.repo.(LaunchCampaignRepository)
+	if !ok {
+		return nil, infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "campaign service unavailable")
+	}
+	detail, err := repo.GetLaunchCampaignDetail(ctx, userID, 50)
+	if err != nil {
+		return nil, err
+	}
+	for i := range detail.Leaderboard {
+		detail.Leaderboard[i].MaskedEmail = maskLeaderboardEmail(detail.Leaderboard[i].MaskedEmail)
+	}
+	return detail, nil
+}
+
+func maskLeaderboardEmail(email string) string {
+	email = strings.TrimSpace(email)
+	parts := strings.SplitN(email, "@", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "***"
+	}
+	local := []rune(parts[0])
+	visible := 2
+	if len(local) < visible {
+		visible = 1
+	}
+	return string(local[:visible]) + "***@" + parts[1]
 }
 
 func (s *AffiliateService) BindInviterByCode(ctx context.Context, userID int64, rawCode string) error {
