@@ -70,16 +70,18 @@ func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securitya
 		return nil
 	}
 	request := buildSecurityAuditRequest(c, apiKey, subject, protocol, model, body, stage)
-	if matched, blocked := securityaudit.DetectBlockedSecurityTerm(request); blocked {
-		if reqLog != nil {
-			reqLog.Warn("security_audit.blocked_security_term", zap.String("term", matched), zap.String("stage", request.Stage))
-		}
-		return &securityaudit.Decision{
-			Kind:           securityaudit.DecisionBlock,
-			HTTPStatus:     http.StatusForbidden,
-			ErrorCode:      "security_term_blocked",
-			ClientMessage:  "请求包含被禁止的安全操作词，已拦截。",
-			AllowNextStage: false,
+	if securityTermsIncludeGroup(coordinator, request.GroupID) {
+		if matched, blocked := securityaudit.DetectBlockedSecurityTerm(request); blocked {
+			if reqLog != nil {
+				reqLog.Warn("security_audit.blocked_security_term", zap.String("term", matched), zap.String("stage", request.Stage))
+			}
+			return &securityaudit.Decision{
+				Kind:           securityaudit.DecisionBlock,
+				HTTPStatus:     http.StatusForbidden,
+				ErrorCode:      "security_term_blocked",
+				ClientMessage:  "请求包含被禁止的安全操作词，已拦截。",
+				AllowNextStage: false,
+			}
 		}
 	}
 	cacheCompletion := cachesSecurityAuditCompletion(stage)
@@ -136,6 +138,13 @@ func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securitya
 	}
 	logSecurityAuditDone(reqLog, request, decision, false)
 	return &decision
+}
+
+func securityTermsIncludeGroup(coordinator *securityaudit.Coordinator, groupID *int64) bool {
+	if coordinator == nil {
+		return true
+	}
+	return coordinator.SecurityTermsIncludeGroup(groupID)
 }
 
 func logSecurityAuditStart(reqLog *zap.Logger, request securityaudit.Request, bodyBytes int, cached bool) {

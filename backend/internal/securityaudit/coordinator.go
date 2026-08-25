@@ -17,6 +17,10 @@ type PromptEngine interface {
 	Evaluate(ctx context.Context, req Request) (*PromptDecision, error)
 }
 
+type groupScopedPromptEngine interface {
+	SecurityTermsIncludeGroup(groupID *int64) bool
+}
+
 type Coordinator struct {
 	legacy LegacyEngine
 	prompt PromptEngine
@@ -24,6 +28,19 @@ type Coordinator struct {
 
 func NewCoordinator(legacy LegacyEngine, prompt PromptEngine) *Coordinator {
 	return &Coordinator{legacy: legacy, prompt: prompt}
+}
+
+// SecurityTermsIncludeGroup applies the same all-groups/selected-groups scope
+// used by prompt auditing. Engines without group scoping retain the secure
+// default and apply the built-in term policy to every group.
+func (c *Coordinator) SecurityTermsIncludeGroup(groupID *int64) bool {
+	if c == nil || c.prompt == nil {
+		return true
+	}
+	if scoped, ok := c.prompt.(groupScopedPromptEngine); ok {
+		return scoped.SecurityTermsIncludeGroup(groupID)
+	}
+	return true
 }
 
 func (c *Coordinator) Check(ctx context.Context, req Request) Decision {

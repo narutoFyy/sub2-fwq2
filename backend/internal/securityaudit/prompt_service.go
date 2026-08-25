@@ -166,6 +166,20 @@ func (s *PromptService) Evaluate(ctx context.Context, req Request) (*PromptDecis
 	return s.evaluator.Evaluate(ctx, cfg, snapshot)
 }
 
+// SecurityTermsIncludeGroup exposes the configured audit group scope to the
+// gateway's built-in preflight term check. A missing runtime configuration
+// keeps the secure default of applying the policy globally.
+func (s *PromptService) SecurityTermsIncludeGroup(groupID *int64) bool {
+	if s == nil || s.config == nil {
+		return true
+	}
+	cfg, ok := s.config.Active()
+	if !ok {
+		return true
+	}
+	return cfg.IncludesGroup(groupID)
+}
+
 func (s *PromptService) GetConfig() (PublicConfig, error) { return s.config.Public() }
 
 func (s *PromptService) SaveConfig(ctx context.Context, req UpdateConfigRequest, actorID int64) (PublicConfig, error) {

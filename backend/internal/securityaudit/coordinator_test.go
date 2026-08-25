@@ -40,6 +40,32 @@ func (f *fakePromptEngine) Evaluate(context.Context, Request) (*PromptDecision, 
 	return f.decision, f.err
 }
 
+type scopedFakePromptEngine struct {
+	fakePromptEngine
+	include func(*int64) bool
+}
+
+func (f *scopedFakePromptEngine) SecurityTermsIncludeGroup(groupID *int64) bool {
+	return f.include(groupID)
+}
+
+func TestCoordinatorSecurityTermsIncludeGroupUsesPromptScope(t *testing.T) {
+	selected := int64(42)
+	other := int64(7)
+	engine := &scopedFakePromptEngine{
+		include: func(groupID *int64) bool {
+			return groupID != nil && *groupID == selected
+		},
+	}
+	coordinator := NewCoordinator(nil, engine)
+
+	require.True(t, coordinator.SecurityTermsIncludeGroup(&selected))
+	require.False(t, coordinator.SecurityTermsIncludeGroup(&other))
+	require.False(t, coordinator.SecurityTermsIncludeGroup(nil))
+	require.True(t, NewCoordinator(nil, &fakePromptEngine{}).SecurityTermsIncludeGroup(&other))
+	require.True(t, (*Coordinator)(nil).SecurityTermsIncludeGroup(&other))
+}
+
 func TestCoordinatorModesAndPriority(t *testing.T) {
 	tests := []struct {
 		name           string

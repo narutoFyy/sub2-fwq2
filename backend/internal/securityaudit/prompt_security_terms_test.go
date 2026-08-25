@@ -30,3 +30,15 @@ func TestDetectBlockedSecurityTerm(t *testing.T) {
 		})
 	}
 }
+
+func TestActiveConfigIncludesSelectedSecurityTermGroup(t *testing.T) {
+	groupID := int64(42)
+	cfg := ActiveConfig{AllGroups: false, GroupIDs: []int64{42}}
+	if !cfg.IncludesGroup(&groupID) {
+		t.Fatal("selected group should be included")
+	}
+	other := int64(7)
+	if cfg.IncludesGroup(&other) {
+		t.Fatal("unselected group should be excluded")
+	}
+}
