@@ -8,8 +8,45 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
+
+// BlockedSecurityTerms are high-signal requests for bypassing or attacking
+// security controls. They are checked before configurable prompt auditing so
+// the gateway never forwards these requests when audit is disabled.
+var BlockedSecurityTerms = []string{
+	"破限", "破甲", "逆向", "渗透", "破解", "绕过限制", "绕过检测",
+	"反调试", "反虚拟机", "脱壳", "注入攻击", "提权",
+	"crack", "keygen", "reverse engineer", "penetration", "bypass check",
+}
+
+// DetectBlockedSecurityTerm extracts client-controlled prompt text and returns
+// the first matching high-signal security term. Formatting punctuation and
+// whitespace are ignored so trivial obfuscation does not bypass the check.
+func DetectBlockedSecurityTerm(req Request) (string, bool) {
+	snapshot, err := ExtractPromptSnapshot(req)
+	if err != nil {
+		return "", false
+	}
+	normalized := normalizeSecurityTermText(snapshot.ScanText)
+	for _, term := range BlockedSecurityTerms {
+		if strings.Contains(normalized, normalizeSecurityTermText(term)) {
+			return term, true
+		}
+	}
+	return "", false
+}
+
+func normalizeSecurityTermText(value string) string {
+	value = strings.ToLower(value)
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return -1
+	}, value)
+}
 
 var (
 	ErrNoPromptText = errors.New("prompt audit request contains no user text")

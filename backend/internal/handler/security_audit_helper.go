@@ -69,6 +69,19 @@ func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securitya
 	if c == nil || c.Request == nil {
 		return nil
 	}
+	request := buildSecurityAuditRequest(c, apiKey, subject, protocol, model, body, stage)
+	if matched, blocked := securityaudit.DetectBlockedSecurityTerm(request); blocked {
+		if reqLog != nil {
+			reqLog.Warn("security_audit.blocked_security_term", zap.String("term", matched), zap.String("stage", request.Stage))
+		}
+		return &securityaudit.Decision{
+			Kind:           securityaudit.DecisionBlock,
+			HTTPStatus:     http.StatusForbidden,
+			ErrorCode:      "security_term_blocked",
+			ClientMessage:  "请求包含被禁止的安全操作词，已拦截。",
+			AllowNextStage: false,
+		}
+	}
 	cacheCompletion := cachesSecurityAuditCompletion(stage)
 	if cacheCompletion {
 		if completed, exists := c.Get(securityAuditCompletedContextKey); exists && completed == true {
@@ -94,7 +107,6 @@ func runSecurityAudit(c *gin.Context, reqLog *zap.Logger, coordinator *securitya
 		}
 		return &decision
 	}
-	request := buildSecurityAuditRequest(c, apiKey, subject, protocol, model, body, stage)
 	if isSecurityAuditWebSocketStage(request.Stage) {
 		if turnNo, ok := securityAuditWSTurn(c); ok {
 			bodyHash := sha256.Sum256(body)
