@@ -17,8 +17,13 @@ import (
 // the gateway never forwards these requests when audit is disabled.
 var BlockedSecurityTerms = []string{
 	"破限", "破甲", "逆向", "渗透", "破解", "绕过限制", "绕过检测",
-	"反调试", "反虚拟机", "脱壳", "注入攻击", "提权",
+	"反调试", "反虚拟机", "脱壳", "注入攻击", "提权", "越狱",
+	"忽略之前指令", "忽略系统提示", "解除限制", "无限制模式", "开发者模式",
+	"绕过安全", "关闭安全限制", "提示词注入", "系统提示词",
 	"crack", "keygen", "reverse engineer", "penetration", "bypass check",
+	"jailbreak", "do anything now", "developer mode", "ignore previous instructions",
+	"disregard system instructions", "bypass safety", "unrestricted mode", "no restrictions",
+	"reveal system prompt", "prompt injection", "disable safety", "evade detection",
 }
 
 // DetectBlockedSecurityTerm extracts client-controlled prompt text and returns
