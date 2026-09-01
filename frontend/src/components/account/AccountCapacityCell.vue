@@ -3,9 +3,6 @@
     <!-- 并发槽位 -->
     <template v-if="hasProxyBindings">
       <div v-for="binding in enabledBindings" :key="binding.proxy_id" class="flex items-center gap-1">
-        <span class="max-w-[8rem] truncate text-[10px] text-gray-500 dark:text-gray-400" :title="binding.proxy?.name">
-          {{ binding.proxy?.name || `#${binding.proxy_id}` }}
-        </span>
         <CapacityBadge :color-class="bindingClass(binding)" :current="binding.current_concurrency || 0" :max="binding.concurrency">
           <svg class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25z" />
