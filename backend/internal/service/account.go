@@ -186,10 +186,29 @@ func (a *Account) EffectiveLoadFactor() int {
 	if a.LoadFactor != nil && *a.LoadFactor > 0 {
 		return *a.LoadFactor
 	}
-	if a.Concurrency > 0 {
-		return a.Concurrency
+	if concurrency := a.EffectiveConcurrency(); concurrency > 0 {
+		return concurrency
 	}
 	return 1
+}
+
+// EffectiveConcurrency returns the account-level slot limit used by gateway
+// admission. When enabled per-account proxy bindings exist, their capacities
+// form the aggregate account limit; legacy accounts keep their stored value.
+func (a *Account) EffectiveConcurrency() int {
+	if a == nil {
+		return 0
+	}
+	total := 0
+	for _, binding := range a.ProxyBindings {
+		if binding.Enabled && binding.ProxyID > 0 && binding.Concurrency > 0 {
+			total += binding.Concurrency
+		}
+	}
+	if total > 0 {
+		return total
+	}
+	return a.Concurrency
 }
 
 func (a *Account) IsSchedulable() bool {
