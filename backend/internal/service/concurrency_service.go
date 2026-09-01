@@ -64,6 +64,20 @@ type APIKeyConcurrencyCache interface {
 	GetAPIKeyConcurrencyBatch(ctx context.Context, apiKeyIDs []int64) (map[int64]int, error)
 }
 
+// AccountProxyConcurrencyRef identifies one account/proxy slot set.
+// It is intentionally separate from ConcurrencyCache so existing cache
+// implementations can continue using the single-key read as a fallback.
+type AccountProxyConcurrencyRef struct {
+	AccountID int64
+	ProxyID   int64
+}
+
+// AccountProxyConcurrencyCache is an optional batched reader used by admin
+// list responses to avoid one Redis round trip per proxy binding.
+type AccountProxyConcurrencyCache interface {
+	GetAccountProxyConcurrencyBatch(ctx context.Context, refs []AccountProxyConcurrencyRef) (map[AccountProxyConcurrencyRef]int, error)
+}
+
 // OpenAIWSIngressLeaseCache owns the short-lived distributed lease used to
 // bound live client WebSocket sessions. It is deliberately independent of the
 // request-slot namespace: idle ingress connections do not occupy turn slots.
@@ -797,4 +811,36 @@ func (s *ConcurrencyService) GetAccountConcurrencyBatch(ctx context.Context, acc
 	defer cancel()
 
 	return s.cache.GetAccountConcurrencyBatch(redisCtx, accountIDs)
+}
+
+// GetAccountProxyConcurrencyBatch gets current counts for multiple account
+// proxy routes. Caches without the optional batch method use the existing
+// single-route operation to preserve compatibility with narrow test doubles.
+func (s *ConcurrencyService) GetAccountProxyConcurrencyBatch(ctx context.Context, refs []AccountProxyConcurrencyRef) (map[AccountProxyConcurrencyRef]int, error) {
+	result := make(map[AccountProxyConcurrencyRef]int, len(refs))
+	if len(refs) == 0 || s == nil || s.cache == nil {
+		return result, nil
+	}
+
+	redisCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if cache, ok := s.cache.(AccountProxyConcurrencyCache); ok {
+		counts, err := cache.GetAccountProxyConcurrencyBatch(redisCtx, refs)
+		if err != nil {
+			logger.LegacyPrintf("service.concurrency", "Warning: get account proxy concurrency batch failed: %v", err)
+			return result, nil
+		}
+		for _, ref := range refs {
+			result[ref] = counts[ref]
+		}
+		return result, nil
+	}
+
+	for _, ref := range refs {
+		count, err := s.cache.GetAccountProxyConcurrency(redisCtx, ref.AccountID, ref.ProxyID)
+		if err == nil {
+			result[ref] = count
+		}
+	}
+	return result, nil
 }

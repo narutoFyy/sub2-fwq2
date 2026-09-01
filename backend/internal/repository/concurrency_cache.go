@@ -728,6 +728,52 @@ func (c *concurrencyCache) GetAccountProxyConcurrency(ctx context.Context, accou
 	return getCountScript.Run(ctx, c.rdb, []string{key, accountProxyLiveSlotKey(accountID, proxyID)}, c.slotTTLSeconds).Int()
 }
 
+func (c *concurrencyCache) GetAccountProxyConcurrencyBatch(ctx context.Context, refs []service.AccountProxyConcurrencyRef) (map[service.AccountProxyConcurrencyRef]int, error) {
+	result := make(map[service.AccountProxyConcurrencyRef]int, len(refs))
+	if c == nil || c.rdb == nil || len(refs) == 0 {
+		return result, nil
+	}
+
+	now, err := c.rdb.Time(ctx).Result()
+	if err != nil {
+		return nil, fmt.Errorf("redis TIME: %w", err)
+	}
+	cutoffTime := now.Unix() - int64(c.slotTTLSeconds)
+	pipe := c.rdb.Pipeline()
+	type proxyCmd struct {
+		ref      service.AccountProxyConcurrencyRef
+		zcardCmd *redis.IntCmd
+		liveCmd  *redis.IntCmd
+	}
+	cmds := make([]proxyCmd, 0, len(refs))
+	seen := make(map[service.AccountProxyConcurrencyRef]struct{}, len(refs))
+	for _, ref := range refs {
+		if ref.AccountID <= 0 || ref.ProxyID <= 0 {
+			continue
+		}
+		if _, ok := seen[ref]; ok {
+			continue
+		}
+		seen[ref] = struct{}{}
+		key := accountProxySlotKey(ref.AccountID, ref.ProxyID)
+		liveKey := accountProxyLiveSlotKey(ref.AccountID, ref.ProxyID)
+		pipe.ZRemRangeByScore(ctx, key, "-inf", strconv.FormatInt(cutoffTime, 10))
+		pipe.ZRemRangeByScore(ctx, liveKey, "-inf", strconv.FormatInt(now.Unix()-liveLeaseTTLSeconds, 10))
+		cmds = append(cmds, proxyCmd{
+			ref:      ref,
+			zcardCmd: pipe.ZCard(ctx, key),
+			liveCmd:  pipe.ZCard(ctx, liveKey),
+		})
+	}
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
+		return nil, fmt.Errorf("pipeline exec: %w", err)
+	}
+	for _, cmd := range cmds {
+		result[cmd.ref] = int(cmd.zcardCmd.Val() + cmd.liveCmd.Val())
+	}
+	return result, nil
+}
+
 // User slot operations
 
 func (c *concurrencyCache) AcquireUserSlot(ctx context.Context, userID int64, maxConcurrency int, requestID string) (bool, error) {

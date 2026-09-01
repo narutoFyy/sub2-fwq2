@@ -612,6 +612,37 @@ func (h *AccountHandler) List(c *gin.Context) {
 		}
 	}
 
+	// The account list renders each configured proxy route separately. Populate
+	// the route-level live counts here as well as the aggregate account count;
+	// the single-account detail path already performs this enrichment.
+	if h.concurrencyService != nil {
+		proxyRefs := make([]service.AccountProxyConcurrencyRef, 0)
+		for i := range accounts {
+			for j := range accounts[i].ProxyBindings {
+				binding := accounts[i].ProxyBindings[j]
+				if binding.AccountID <= 0 {
+					binding.AccountID = accounts[i].ID
+				}
+				if binding.AccountID > 0 && binding.ProxyID > 0 {
+					proxyRefs = append(proxyRefs, service.AccountProxyConcurrencyRef{
+						AccountID: binding.AccountID,
+						ProxyID:   binding.ProxyID,
+					})
+				}
+			}
+		}
+		if len(proxyRefs) > 0 {
+			proxyCounts, _ := h.concurrencyService.GetAccountProxyConcurrencyBatch(c.Request.Context(), proxyRefs)
+			for i := range accounts {
+				for j := range accounts[i].ProxyBindings {
+					binding := &accounts[i].ProxyBindings[j]
+					ref := service.AccountProxyConcurrencyRef{AccountID: accounts[i].ID, ProxyID: binding.ProxyID}
+					binding.CurrentConcurrency = proxyCounts[ref]
+				}
+			}
+		}
+	}
+
 	// 识别需要查询窗口费用、会话数和 RPM 的账号（Anthropic OAuth/SetupToken 且启用了相应功能）
 	windowCostAccountIDs := make([]int64, 0)
 	sessionLimitAccountIDs := make([]int64, 0)
