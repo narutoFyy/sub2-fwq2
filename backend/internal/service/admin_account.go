@@ -512,6 +512,15 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err := s.accountRepo.Create(ctx, account); err != nil {
 		return nil, err
 	}
+	if len(input.ProxyBindings) > 0 {
+		bindingRepo, ok := s.accountRepo.(AccountProxyBindingRepository)
+		if !ok {
+			return nil, errors.New("account proxy binding repository is not configured")
+		}
+		if err := bindingRepo.ReplaceAccountProxyBindings(ctx, account.ID, input.ProxyBindings); err != nil {
+			return nil, err
+		}
+	}
 
 	// 绑定分组
 	if len(groupIDs) > 0 {
@@ -843,6 +852,18 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			if err := s.accountRepo.UpdateExtra(ctx, account.ID, settings); err != nil {
 				return nil, err
 			}
+		}
+	}
+	if input.ProxyBindings != nil {
+		if account.IsCredentialShadow() {
+			return nil, infraerrors.BadRequest("SPARK_SHADOW_PROXY_BINDINGS", "spark shadow accounts inherit proxy bindings from their parent")
+		}
+		bindingRepo, ok := s.accountRepo.(AccountProxyBindingRepository)
+		if !ok {
+			return nil, errors.New("account proxy binding repository is not configured")
+		}
+		if err := bindingRepo.ReplaceAccountProxyBindings(ctx, account.ID, *input.ProxyBindings); err != nil {
+			return nil, err
 		}
 	}
 

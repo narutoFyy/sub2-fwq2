@@ -2875,6 +2875,10 @@
           <ProxyAdBanner />
         </div>
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
+        <div class="mt-3 border-t border-gray-200 pt-3 dark:border-dark-700">
+          <label class="input-label">{{ t('admin.accounts.proxyBindings') }}</label>
+          <AccountProxyBindingsEditor v-model="form.proxy_bindings" :proxies="proxies" />
+        </div>
       </div>
 
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -3739,6 +3743,7 @@ import type {
   AdminGroup,
   AccountPlatform,
   AccountType,
+  AccountProxyBinding,
   CheckMixedChannelResponse,
   CreateAccountRequest,
   CodexSessionImportMessage,
@@ -3753,6 +3758,7 @@ import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
+import AccountProxyBindingsEditor from '@/components/account/AccountProxyBindingsEditor.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
@@ -4455,6 +4461,7 @@ const form = reactive({
   type: 'oauth' as AccountType, // Will be 'oauth', 'setup-token', or 'apikey'
   credentials: {} as Record<string, unknown>,
   proxy_id: null as number | null,
+  proxy_bindings: [] as AccountProxyBinding[],
   concurrency: 10,
   load_factor: null as number | null,
   priority: 1,
@@ -5009,6 +5016,7 @@ const resetForm = () => {
   form.type = 'oauth'
   form.credentials = {}
   form.proxy_id = null
+  form.proxy_bindings = []
   form.concurrency = 10
   form.load_factor = null
   form.priority = 1
@@ -5228,13 +5236,17 @@ const buildAnthropicExtra = (base?: Record<string, unknown>): Record<string, unk
 
 // Helper function to create account with mixed channel warning handling
 const doCreateAccount = async (payload: CreateAccountRequest) => {
+  const request: CreateAccountRequest = {
+    ...payload,
+    proxy_bindings: payload.proxy_bindings ?? form.proxy_bindings.map((binding) => ({ ...binding }))
+  }
   const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {
-    await submitCreateAccount(payload)
+    await submitCreateAccount(request)
   })
   if (!canContinue) {
     return
   }
-  await submitCreateAccount(payload)
+  await submitCreateAccount(request)
 }
 
 // Handle mixed channel warning confirmation

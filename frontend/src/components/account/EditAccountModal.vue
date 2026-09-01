@@ -1512,6 +1512,10 @@
           <ProxyAdBanner />
         </div>
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
+        <div class="mt-3 border-t border-gray-200 pt-3 dark:border-dark-700">
+          <label class="input-label">{{ t('admin.accounts.proxyBindings') }}</label>
+          <AccountProxyBindingsEditor v-model="form.proxy_bindings" :proxies="proxies" />
+        </div>
       </div>
 
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -2843,6 +2847,7 @@ import { adminAPI } from '@/api/admin'
 import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
 import type {
   Account,
+  AccountProxyBinding,
   Proxy,
   AdminGroup,
   CheckMixedChannelResponse,
@@ -2858,6 +2863,7 @@ import Toggle from '@/components/common/Toggle.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
+import AccountProxyBindingsEditor from '@/components/account/AccountProxyBindingsEditor.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
@@ -3547,6 +3553,7 @@ const form = reactive({
   name: '',
   notes: '',
   proxy_id: null as number | null,
+  proxy_bindings: [] as AccountProxyBinding[],
   concurrency: 1,
   load_factor: null as number | null,
   priority: 1,
@@ -3655,6 +3662,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   form.name = newAccount.name
   form.notes = newAccount.notes || ''
   form.proxy_id = newAccount.proxy_id
+  form.proxy_bindings = (newAccount.proxy_bindings || []).map((binding) => ({ ...binding }))
   form.concurrency = newAccount.concurrency
   form.load_factor = newAccount.load_factor ?? null
   form.priority = newAccount.priority

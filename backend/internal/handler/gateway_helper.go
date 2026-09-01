@@ -447,6 +447,158 @@ func (h *ConcurrencyHelper) AcquireAccountSlotWithWaitTimeout(c *gin.Context, ac
 	return h.waitForSlotWithPingTimeout(c, "account", accountID, maxConcurrency, timeout, isStream, streamStarted, true)
 }
 
+// AcquireAccountProxySlotWithWaitTimeout acquires the aggregate account slot
+// and the selected proxy route slot. The aggregate slot is held while waiting
+// for the route so the account-level capacity remains the authoritative total.
+func (h *ConcurrencyHelper) AcquireAccountProxySlotWithWaitTimeout(c *gin.Context, accountID, proxyID int64, accountConcurrency, proxyConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool) (func(), error) {
+	accountRelease, err := h.AcquireAccountSlotWithWaitTimeout(c, accountID, accountConcurrency, timeout, isStream, streamStarted)
+	if err != nil {
+		return nil, err
+	}
+	proxyRelease, err := h.acquireProxySlotWithWaitTimeout(c, accountID, proxyID, proxyConcurrency, timeout, isStream, streamStarted)
+	if err != nil {
+		if accountRelease != nil {
+			accountRelease()
+		}
+		return nil, err
+	}
+	return func() {
+		if proxyRelease != nil {
+			proxyRelease()
+		}
+		if accountRelease != nil {
+			accountRelease()
+		}
+	}, nil
+}
+
+// TryAcquireSelectedAccountSlot applies the proxy route carried by a scheduler
+// selection. It is used by handlers that have a WaitPlan and need an immediate
+// re-check before entering the wait queue.
+func (h *ConcurrencyHelper) TryAcquireSelectedAccountSlot(ctx context.Context, selection *service.AccountSelectionResult) (func(), bool, error) {
+	if selection == nil || selection.Account == nil || selection.WaitPlan == nil {
+		return nil, false, nil
+	}
+	accountID := selection.Account.ID
+	accountRelease, acquired, err := h.TryAcquireAccountSlot(ctx, accountID, selection.WaitPlan.MaxConcurrency)
+	if err != nil || !acquired || selection.WaitPlan.ProxyID <= 0 {
+		return accountRelease, acquired, err
+	}
+	proxyRelease, proxyAcquired, err := h.tryAcquireAccountProxySlot(ctx, accountID, selection.WaitPlan.ProxyID, selection.WaitPlan.ProxyConcurrency)
+	if err != nil {
+		if accountRelease != nil {
+			accountRelease()
+		}
+		return nil, false, err
+	}
+	if !proxyAcquired {
+		if accountRelease != nil {
+			accountRelease()
+		}
+		return nil, false, nil
+	}
+	return func() {
+		if proxyRelease != nil {
+			proxyRelease()
+		}
+		if accountRelease != nil {
+			accountRelease()
+		}
+	}, true, nil
+}
+
+func (h *ConcurrencyHelper) tryAcquireAccountProxySlot(ctx context.Context, accountID, proxyID int64, maxConcurrency int) (func(), bool, error) {
+	result, err := h.concurrencyService.AcquireAccountProxySlot(ctx, accountID, proxyID, maxConcurrency)
+	if err != nil {
+		return nil, false, err
+	}
+	if !result.Acquired {
+		return nil, false, nil
+	}
+	return result.ReleaseFunc, true, nil
+}
+
+// AcquireSelectedAccountSlotWithWaitTimeout waits for both the aggregate
+// account capacity and the selected proxy route when the scheduler returned a
+// proxy-aware WaitPlan.
+func (h *ConcurrencyHelper) AcquireSelectedAccountSlotWithWaitTimeout(c *gin.Context, selection *service.AccountSelectionResult, isStream bool, streamStarted *bool) (func(), error) {
+	if selection == nil || selection.Account == nil || selection.WaitPlan == nil {
+		return nil, fmt.Errorf("account wait plan is missing")
+	}
+	plan := selection.WaitPlan
+	if plan.ProxyID <= 0 || plan.ProxyConcurrency <= 0 {
+		return h.AcquireAccountSlotWithWaitTimeout(c, selection.Account.ID, plan.MaxConcurrency, plan.Timeout, isStream, streamStarted)
+	}
+	return h.AcquireAccountProxySlotWithWaitTimeout(c, selection.Account.ID, plan.ProxyID, plan.MaxConcurrency, plan.ProxyConcurrency, plan.Timeout, isStream, streamStarted)
+}
+
+func (h *ConcurrencyHelper) acquireProxySlotWithWaitTimeout(c *gin.Context, accountID, proxyID int64, maxConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool) (func(), error) {
+	if proxyID <= 0 || maxConcurrency <= 0 {
+		return func() {}, nil
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+	defer cancel()
+	acquire := func() (*service.AcquireResult, error) {
+		return h.concurrencyService.AcquireAccountProxySlot(ctx, accountID, proxyID, maxConcurrency)
+	}
+	if result, err := acquire(); err != nil {
+		return nil, err
+	} else if result.Acquired {
+		return result.ReleaseFunc, nil
+	}
+	needPing := isStream && h.pingFormat != ""
+	var flusher http.Flusher
+	if needPing {
+		var ok bool
+		flusher, ok = c.Writer.(http.Flusher)
+		if !ok {
+			return nil, fmt.Errorf("streaming not supported")
+		}
+	}
+	var pingCh <-chan time.Time
+	if needPing {
+		ticker := time.NewTicker(h.pingInterval)
+		defer ticker.Stop()
+		pingCh = ticker.C
+	}
+	backoff := initialBackoff
+	timer := time.NewTimer(backoff)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			if parentErr := c.Request.Context().Err(); parentErr != nil {
+				return nil, parentErr
+			}
+			return nil, &ConcurrencyError{SlotType: "account proxy", IsTimeout: true}
+		case <-pingCh:
+			if !*streamStarted {
+				c.Header("Content-Type", "text/event-stream")
+				c.Header("Cache-Control", "no-cache")
+				c.Header("Connection", "keep-alive")
+				c.Header("X-Accel-Buffering", "no")
+				*streamStarted = true
+			}
+			written, err := fmt.Fprint(c.Writer, string(h.pingFormat))
+			if err != nil {
+				return nil, err
+			}
+			recordGatewayStreamHeartbeat(c, written)
+			flusher.Flush()
+		case <-timer.C:
+			result, err := acquire()
+			if err != nil {
+				return nil, err
+			}
+			if result.Acquired {
+				return result.ReleaseFunc, nil
+			}
+			backoff = nextBackoff(backoff)
+			timer.Reset(backoff)
+		}
+	}
+}
+
 // nextBackoff 计算下一次退避时间
 // 性能优化：使用指数退避 + 随机抖动，避免惊群效应
 // current: 当前退避时间

@@ -98,6 +98,15 @@ func (c *stubConcurrencyCacheForTest) ReleaseAccountSlot(_ context.Context, acco
 func (c *stubConcurrencyCacheForTest) GetAccountConcurrency(_ context.Context, _ int64) (int, error) {
 	return c.concurrency, c.concurrencyErr
 }
+func (c *stubConcurrencyCacheForTest) AcquireAccountProxySlot(_ context.Context, _ int64, _ int64, _ int, _ string) (bool, error) {
+	return c.acquireResult, c.acquireErr
+}
+func (c *stubConcurrencyCacheForTest) ReleaseAccountProxySlot(_ context.Context, _ int64, _ int64, _ string) error {
+	return c.releaseErr
+}
+func (c *stubConcurrencyCacheForTest) GetAccountProxyConcurrency(_ context.Context, _ int64, _ int64) (int, error) {
+	return c.concurrency, c.concurrencyErr
+}
 func (c *stubConcurrencyCacheForTest) GetAccountConcurrencyBatch(_ context.Context, accountIDs []int64) (map[int64]int, error) {
 	result := make(map[int64]int, len(accountIDs))
 	for _, accountID := range accountIDs {

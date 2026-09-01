@@ -27,6 +27,9 @@ type ConcurrencyCache interface {
 	ReleaseAccountSlot(ctx context.Context, accountID int64, requestID string) error
 	GetAccountConcurrency(ctx context.Context, accountID int64) (int, error)
 	GetAccountConcurrencyBatch(ctx context.Context, accountIDs []int64) (map[int64]int, error)
+	AcquireAccountProxySlot(ctx context.Context, accountID, proxyID int64, maxConcurrency int, requestID string) (bool, error)
+	ReleaseAccountProxySlot(ctx context.Context, accountID, proxyID int64, requestID string) error
+	GetAccountProxyConcurrency(ctx context.Context, accountID, proxyID int64) (int, error)
 
 	// 账号等待队列（账号级）
 	IncrementAccountWaitCount(ctx context.Context, accountID int64, maxWait int) (bool, error)
@@ -373,6 +376,32 @@ func (s *ConcurrencyService) AcquireAccountSlot(ctx context.Context, accountID i
 		Acquired:    false,
 		ReleaseFunc: nil,
 	}, nil
+}
+
+// AcquireAccountProxySlot reserves a slot for one configured proxy route.
+func (s *ConcurrencyService) AcquireAccountProxySlot(ctx context.Context, accountID, proxyID int64, maxConcurrency int) (*AcquireResult, error) {
+	if maxConcurrency <= 0 || proxyID <= 0 {
+		return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
+	}
+	requestID := generateRequestID()
+	acquired, err := s.cache.AcquireAccountProxySlot(ctx, accountID, proxyID, maxConcurrency, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if !acquired {
+		return &AcquireResult{Acquired: false}, nil
+	}
+	return &AcquireResult{Acquired: true, ReleaseFunc: func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.cache.ReleaseAccountProxySlot(bgCtx, accountID, proxyID, requestID); err != nil {
+			logger.LegacyPrintf("service.concurrency", "Warning: failed to release account proxy slot for %d/%d (req=%s): %v", accountID, proxyID, requestID, err)
+		}
+	}}, nil
+}
+
+func (s *ConcurrencyService) GetAccountProxyConcurrency(ctx context.Context, accountID, proxyID int64) (int, error) {
+	return s.cache.GetAccountProxyConcurrency(ctx, accountID, proxyID)
 }
 
 // AcquireUserSlot attempts to acquire a concurrency slot for a user.

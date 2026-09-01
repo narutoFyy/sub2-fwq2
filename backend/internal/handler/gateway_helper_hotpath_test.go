@@ -47,6 +47,16 @@ func (s *helperConcurrencyCacheStub) AcquireAccountSlot(ctx context.Context, acc
 	return v, nil
 }
 
+func (s *helperConcurrencyCacheStub) AcquireAccountProxySlot(context.Context, int64, int64, int, string) (bool, error) {
+	return true, nil
+}
+func (s *helperConcurrencyCacheStub) ReleaseAccountProxySlot(context.Context, int64, int64, string) error {
+	return nil
+}
+func (s *helperConcurrencyCacheStub) GetAccountProxyConcurrency(context.Context, int64, int64) (int, error) {
+	return 0, nil
+}
+
 func (s *helperConcurrencyCacheStub) ReleaseAccountSlot(ctx context.Context, accountID int64, requestID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

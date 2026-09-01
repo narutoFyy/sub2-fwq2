@@ -307,10 +307,20 @@ type Account struct {
 	ParentChatGPTAccountID      string `json:"parent_chatgpt_account_id,omitempty"`
 
 	Proxy         *Proxy         `json:"proxy,omitempty"`
+	ProxyBindings []AccountProxyBinding `json:"proxy_bindings,omitempty"`
 	AccountGroups []AccountGroup `json:"account_groups,omitempty"`
 
 	GroupIDs []int64  `json:"group_ids,omitempty"`
 	Groups   []*Group `json:"groups,omitempty"`
+}
+
+type AccountProxyBinding struct {
+	ProxyID     int64  `json:"proxy_id"`
+	Concurrency int    `json:"concurrency"`
+	Enabled     bool   `json:"enabled"`
+	SortOrder   int    `json:"sort_order"`
+	CurrentConcurrency int `json:"current_concurrency,omitempty"`
+	Proxy       *Proxy `json:"proxy,omitempty"`
 }
 
 type AccountGroup struct {

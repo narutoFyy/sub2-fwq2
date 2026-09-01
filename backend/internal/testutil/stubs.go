@@ -30,6 +30,15 @@ func (c StubConcurrencyCache) ReleaseAccountSlot(_ context.Context, _ int64, _ s
 func (c StubConcurrencyCache) GetAccountConcurrency(_ context.Context, _ int64) (int, error) {
 	return 0, nil
 }
+func (c StubConcurrencyCache) AcquireAccountProxySlot(_ context.Context, _ int64, _ int64, _ int, _ string) (bool, error) {
+	return true, nil
+}
+func (c StubConcurrencyCache) ReleaseAccountProxySlot(_ context.Context, _ int64, _ int64, _ string) error {
+	return nil
+}
+func (c StubConcurrencyCache) GetAccountProxyConcurrency(_ context.Context, _ int64, _ int64) (int, error) {
+	return 0, nil
+}
 func (c StubConcurrencyCache) IncrementAccountWaitCount(_ context.Context, _ int64, _ int) (bool, error) {
 	return true, nil
 }

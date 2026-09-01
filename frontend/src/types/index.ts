@@ -1198,7 +1198,8 @@ export interface Account {
   auto_pause_on_expired: boolean
   created_at: string
   updated_at: string
-  proxy?: Proxy
+    proxy?: Proxy
+    proxy_bindings?: AccountProxyBinding[]
   group_ids?: number[] // Groups this account belongs to
   groups?: Group[] // Preloaded group objects
 
@@ -1459,6 +1460,7 @@ export interface CreateAccountRequest {
   credentials: Record<string, unknown>
   extra?: Record<string, unknown>
   proxy_id?: number | null
+  proxy_bindings?: AccountProxyBinding[]
   concurrency?: number
   load_factor?: number | null
   priority?: number
@@ -1477,6 +1479,7 @@ export interface UpdateAccountRequest {
   credentials?: Record<string, unknown>
   extra?: Record<string, unknown>
   proxy_id?: number | null
+  proxy_bindings?: AccountProxyBinding[]
   concurrency?: number
   load_factor?: number | null
   priority?: number
@@ -1489,6 +1492,15 @@ export interface UpdateAccountRequest {
   upstream_billing_probe_enabled?: boolean
   upstream_billing_rate_sync_enabled?: boolean
   confirm_mixed_channel_risk?: boolean
+}
+
+export interface AccountProxyBinding {
+  proxy_id: number
+  concurrency: number
+  enabled: boolean
+  sort_order?: number
+  proxy?: Proxy
+  current_concurrency?: number
 }
 
 export interface CheckMixedChannelRequest {

@@ -62,6 +62,7 @@ type Account struct {
 	QuotaDimension  string // 用量维度："" / "global" / "spark"
 
 	Proxy         *Proxy
+	ProxyBindings []AccountProxyBinding
 	AccountGroups []AccountGroup
 	GroupIDs      []int64
 	Groups        []*Group
@@ -82,6 +83,19 @@ type Account struct {
 	headerOverrideCacheRawPtr         uintptr
 	headerOverrideCacheRawLen         int
 	headerOverrideCacheRawSig         uint64
+}
+
+// AccountProxyBinding is an optional per-account proxy route. When an account
+// has no bindings, callers must fall back to the legacy ProxyID/Concurrency
+// fields for backwards compatibility.
+type AccountProxyBinding struct {
+	AccountID   int64
+	ProxyID     int64
+	Concurrency int
+	Enabled     bool
+	SortOrder   int
+	Proxy       *Proxy
+	CurrentConcurrency int `json:"-"`
 }
 
 type OpenAIEndpointCapability string

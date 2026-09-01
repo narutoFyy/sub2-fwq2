@@ -1,7 +1,22 @@
 <template>
   <div class="flex flex-col gap-0.5">
     <!-- 并发槽位 -->
-    <CapacityBadge :color-class="concurrencyClass" :current="currentConcurrency" :max="account.concurrency">
+    <template v-if="hasProxyBindings">
+      <div v-for="binding in enabledBindings" :key="binding.proxy_id" class="flex items-center gap-1">
+        <span class="max-w-[8rem] truncate text-[10px] text-gray-500 dark:text-gray-400" :title="binding.proxy?.name">
+          {{ binding.proxy?.name || `#${binding.proxy_id}` }}
+        </span>
+        <CapacityBadge :color-class="bindingClass(binding)" :current="binding.current_concurrency || 0" :max="binding.concurrency">
+          <svg class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25z" />
+          </svg>
+        </CapacityBadge>
+      </div>
+      <CapacityBadge :color-class="concurrencyClass" :current="bindingCurrentTotal" :max="bindingCapacityTotal">
+        <span class="text-[10px]">Σ</span>
+      </CapacityBadge>
+    </template>
+    <CapacityBadge v-else :color-class="concurrencyClass" :current="currentConcurrency" :max="account.concurrency">
       <svg class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
       </svg>
@@ -50,6 +65,18 @@ const { t } = useI18n()
 
 // ====== 并发 ======
 const currentConcurrency = computed(() => props.account.current_concurrency || 0)
+const enabledBindings = computed(() => (props.account.proxy_bindings || []).filter((binding) => binding.enabled))
+const hasProxyBindings = computed(() => enabledBindings.value.length > 0)
+const bindingCapacityTotal = computed(() => enabledBindings.value.reduce((sum, binding) => sum + Math.max(0, binding.concurrency || 0), 0))
+const bindingCurrentTotal = computed(() => enabledBindings.value.reduce((sum, binding) => sum + (binding.current_concurrency || 0), 0))
+
+const bindingClass = (binding: NonNullable<Account['proxy_bindings']>[number]) => {
+  const current = binding.current_concurrency || 0
+  const max = binding.concurrency || 0
+  if (current >= max) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+  if (current > 0) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+  return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+}
 
 const concurrencyClass = computed(() => {
   const current = currentConcurrency.value

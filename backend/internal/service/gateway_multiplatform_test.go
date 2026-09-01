@@ -2069,6 +2069,16 @@ func (m *mockConcurrencyCache) GetAccountConcurrency(ctx context.Context, accoun
 	return 0, nil
 }
 
+func (m *mockConcurrencyCache) AcquireAccountProxySlot(context.Context, int64, int64, int, string) (bool, error) {
+	return true, nil
+}
+func (m *mockConcurrencyCache) ReleaseAccountProxySlot(context.Context, int64, int64, string) error {
+	return nil
+}
+func (m *mockConcurrencyCache) GetAccountProxyConcurrency(context.Context, int64, int64) (int, error) {
+	return 0, nil
+}
+
 func (m *mockConcurrencyCache) GetAccountConcurrencyBatch(ctx context.Context, accountIDs []int64) (map[int64]int, error) {
 	result := make(map[int64]int, len(accountIDs))
 	for _, accountID := range accountIDs {

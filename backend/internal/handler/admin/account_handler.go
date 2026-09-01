@@ -119,6 +119,7 @@ type CreateAccountRequest struct {
 	Credentials             map[string]any `json:"credentials" binding:"required"`
 	Extra                   map[string]any `json:"extra"`
 	ProxyID                 *int64         `json:"proxy_id"`
+	ProxyBindings           []dto.AccountProxyBinding `json:"proxy_bindings"`
 	Concurrency             int            `json:"concurrency"`
 	Priority                int            `json:"priority"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
@@ -139,6 +140,7 @@ type UpdateAccountRequest struct {
 	Credentials             map[string]any `json:"credentials"`
 	Extra                   map[string]any `json:"extra"`
 	ProxyID                 *int64         `json:"proxy_id"`
+	ProxyBindings           *[]dto.AccountProxyBinding `json:"proxy_bindings"`
 	Concurrency             *int           `json:"concurrency"`
 	Priority                *int           `json:"priority"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
@@ -213,6 +215,28 @@ type AccountSchedulerGroupScore struct {
 	AccountSchedulerScore
 }
 
+func accountProxyBindingsFromDTO(items []dto.AccountProxyBinding) []service.AccountProxyBinding {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]service.AccountProxyBinding, 0, len(items))
+	for _, item := range items {
+		out = append(out, service.AccountProxyBinding{
+			ProxyID: item.ProxyID, Concurrency: item.Concurrency,
+			Enabled: item.Enabled, SortOrder: item.SortOrder,
+		})
+	}
+	return out
+}
+
+func accountProxyBindingsPtrFromDTO(items *[]dto.AccountProxyBinding) *[]service.AccountProxyBinding {
+	if items == nil {
+		return nil
+	}
+	converted := accountProxyBindingsFromDTO(*items)
+	return &converted
+}
+
 const accountListGroupUngroupedQueryValue = "ungrouped"
 
 func (h *AccountHandler) accountResponseFromService(account *service.Account) *dto.Account {
@@ -235,6 +259,13 @@ func (h *AccountHandler) buildAccountResponseWithRuntime(ctx context.Context, ac
 	if h.concurrencyService != nil {
 		if counts, err := h.concurrencyService.GetAccountConcurrencyBatch(ctx, []int64{account.ID}); err == nil {
 			item.CurrentConcurrency = counts[account.ID]
+		}
+		if item.Account != nil {
+			for i := range item.Account.ProxyBindings {
+				if count, err := h.concurrencyService.GetAccountProxyConcurrency(ctx, account.ID, item.Account.ProxyBindings[i].ProxyID); err == nil {
+					item.Account.ProxyBindings[i].CurrentConcurrency = count
+				}
+			}
 		}
 	}
 
@@ -854,6 +885,7 @@ func (h *AccountHandler) Create(c *gin.Context) {
 			Credentials:           req.Credentials,
 			Extra:                 req.Extra,
 			ProxyID:               req.ProxyID,
+			ProxyBindings:         accountProxyBindingsFromDTO(req.ProxyBindings),
 			Concurrency:           req.Concurrency,
 			Priority:              req.Priority,
 			RateMultiplier:        req.RateMultiplier,
@@ -981,6 +1013,7 @@ func (h *AccountHandler) Update(c *gin.Context) {
 		Credentials:           req.Credentials,
 		Extra:                 req.Extra,
 		ProxyID:               req.ProxyID,
+		ProxyBindings:         accountProxyBindingsPtrFromDTO(req.ProxyBindings),
 		Concurrency:           req.Concurrency, // 指针类型，nil 表示未提供
 		Priority:              req.Priority,    // 指针类型，nil 表示未提供
 		RateMultiplier:        req.RateMultiplier,

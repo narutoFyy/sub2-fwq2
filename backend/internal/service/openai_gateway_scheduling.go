@@ -1711,8 +1711,40 @@ func (s *OpenAIGatewayService) newSelectionResult(ctx context.Context, account *
 	if err != nil {
 		return nil, err
 	}
+	selectedBinding, proxyResult, err := selectAccountProxyBinding(ctx, s.concurrencyService, hydrated, acquired)
+	if err != nil {
+		if release != nil {
+			release()
+		}
+		return nil, err
+	}
+	if selectedBinding != nil {
+		hydrated.Proxy = selectedBinding.Proxy
+		proxyID := selectedBinding.ProxyID
+		hydrated.ProxyID = &proxyID
+		if waitPlan != nil {
+			waitPlan.ProxyID = selectedBinding.ProxyID
+			waitPlan.ProxyConcurrency = selectedBinding.Concurrency
+		}
+	}
+	if acquired && selectedBinding != nil {
+		if proxyResult == nil {
+			if release != nil {
+				release()
+			}
+			return nil, ErrNoAvailableAccounts
+		}
+		previousRelease := release
+		release = func() {
+			proxyResult.ReleaseFunc()
+			if previousRelease != nil {
+				previousRelease()
+			}
+		}
+	}
 	return attachSelectionProfitGate(ctx, &AccountSelectionResult{
 		Account:     hydrated,
+		ProxyBinding: selectedBinding,
 		Acquired:    acquired,
 		ReleaseFunc: release,
 		WaitPlan:    waitPlan,

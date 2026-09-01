@@ -144,6 +144,12 @@ type AccountBillingSettingsRepository interface {
 	) error
 }
 
+// AccountProxyBindingRepository is optional so existing narrow test doubles
+// and read-only callers remain source-compatible while the feature rolls out.
+type AccountProxyBindingRepository interface {
+	ReplaceAccountProxyBindings(ctx context.Context, accountID int64, bindings []AccountProxyBinding) error
+}
+
 // AdminAccountRepository makes the account-duplication write capability an explicit
 // construction dependency without forcing read-only gateway test doubles to implement it.
 type AdminAccountRepository interface {

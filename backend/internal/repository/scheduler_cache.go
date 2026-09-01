@@ -869,6 +869,8 @@ func buildSchedulerMetadataAccount(account service.Account) service.Account {
 		Platform:                account.Platform,
 		Type:                    account.Type,
 		Concurrency:             account.Concurrency,
+		ProxyID:                 account.ProxyID,
+		ProxyBindings:           account.ProxyBindings,
 		LoadFactor:              account.LoadFactor,
 		Priority:                account.Priority,
 		RateMultiplier:          account.RateMultiplier,

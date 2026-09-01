@@ -26,6 +26,8 @@ const (
 	// 并发槽位键前缀（有序集合）
 	// 格式: concurrency:account:{accountID}
 	accountSlotKeyPrefix = "concurrency:account:"
+	accountProxySlotKeyPrefix = "concurrency:account_proxy:"
+	accountProxyLiveSlotKeyPrefix = "concurrency:live:account_proxy:"
 	// 格式: concurrency:user:{userID}
 	userSlotKeyPrefix = "concurrency:user:"
 	// 格式: concurrency:api_key:{apiKeyID}
@@ -59,6 +61,14 @@ const (
 	// 且有流量时 TTL 会被不断刷新，必须清扫一次。marker 存在即代表已完成。
 	legacyWaitSweepMarkerKey = "concurrency:startup:legacy_wait_sweep:v1"
 )
+
+func accountProxySlotKey(accountID, proxyID int64) string {
+	return accountProxySlotKeyPrefix + strconv.FormatInt(accountID, 10) + ":" + strconv.FormatInt(proxyID, 10)
+}
+
+func accountProxyLiveSlotKey(accountID, proxyID int64) string {
+	return accountProxyLiveSlotKeyPrefix + strconv.FormatInt(accountID, 10) + ":" + strconv.FormatInt(proxyID, 10)
+}
 
 var (
 	// acquireScript 使用有序集合计数并在未达上限时添加槽位
@@ -701,6 +711,21 @@ func (c *concurrencyCache) GetAccountConcurrencyBatch(ctx context.Context, accou
 		result[cmd.accountID] = int(cmd.zcardCmd.Val() + cmd.liveCmd.Val())
 	}
 	return result, nil
+}
+
+func (c *concurrencyCache) AcquireAccountProxySlot(ctx context.Context, accountID, proxyID int64, maxConcurrency int, requestID string) (bool, error) {
+	key := accountProxySlotKey(accountID, proxyID)
+	result, _, err := runScriptInt64Pair(ctx, c.rdb, acquireScript, []string{key, accountProxyLiveSlotKey(accountID, proxyID)}, maxConcurrency, c.slotTTLSeconds, requestID)
+	return result == 1, err
+}
+
+func (c *concurrencyCache) ReleaseAccountProxySlot(ctx context.Context, accountID, proxyID int64, requestID string) error {
+	return c.rdb.ZRem(ctx, accountProxySlotKey(accountID, proxyID), requestID).Err()
+}
+
+func (c *concurrencyCache) GetAccountProxyConcurrency(ctx context.Context, accountID, proxyID int64) (int, error) {
+	key := accountProxySlotKey(accountID, proxyID)
+	return getCountScript.Run(ctx, c.rdb, []string{key, accountProxyLiveSlotKey(accountID, proxyID)}, c.slotTTLSeconds).Int()
 }
 
 // User slot operations

@@ -566,12 +566,15 @@ func shouldClearStickySession(account *Account, requestedModel string) bool {
 type AccountWaitPlan struct {
 	AccountID      int64
 	MaxConcurrency int
+	ProxyID        int64
+	ProxyConcurrency int
 	Timeout        time.Duration
 	MaxWaiting     int
 }
 
 type AccountSelectionResult struct {
 	Account     *Account
+	ProxyBinding *AccountProxyBinding
 	Acquired    bool
 	ReleaseFunc func()
 	WaitPlan    *AccountWaitPlan // nil means no wait allowed
@@ -579,6 +582,71 @@ type AccountSelectionResult struct {
 	// 局部 ctx 上，handler 必须经 ContextWithSelectionProfitGate 重放后才能在
 	// 调度栈之外做抢槽后终检与准入后粘性绑定。
 	profitGate *openAIProfitControlGate
+}
+
+// selectAccountProxyBinding chooses the least-loaded enabled route and, when
+// requested, reserves its independent Redis slot. The legacy single-proxy
+// account path returns (nil, nil, nil).
+func selectAccountProxyBinding(ctx context.Context, concurrency *ConcurrencyService, account *Account, acquire bool) (*AccountProxyBinding, *AcquireResult, error) {
+	if account == nil || len(account.ProxyBindings) == 0 {
+		return nil, nil, nil
+	}
+	candidates := make([]AccountProxyBinding, 0, len(account.ProxyBindings))
+	for _, binding := range account.ProxyBindings {
+		if binding.Enabled && binding.ProxyID > 0 && binding.Concurrency > 0 {
+			candidates = append(candidates, binding)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, nil, nil
+	}
+	type scored struct {
+		binding AccountProxyBinding
+		load    int
+	}
+	scoredCandidates := make([]scored, 0, len(candidates))
+	for _, binding := range candidates {
+		load := 0
+		if concurrency != nil {
+			if current, err := concurrency.GetAccountProxyConcurrency(ctx, account.ID, binding.ProxyID); err == nil {
+				load = current
+			}
+		}
+		scoredCandidates = append(scoredCandidates, scored{binding: binding, load: load})
+	}
+	sort.SliceStable(scoredCandidates, func(i, j int) bool {
+		left, right := scoredCandidates[i], scoredCandidates[j]
+		leftRate := float64(left.load) / float64(maxIntForProxy(left.binding.Concurrency, 1))
+		rightRate := float64(right.load) / float64(maxIntForProxy(right.binding.Concurrency, 1))
+		if leftRate != rightRate {
+			return leftRate < rightRate
+		}
+		if left.binding.SortOrder != right.binding.SortOrder {
+			return left.binding.SortOrder < right.binding.SortOrder
+		}
+		return left.binding.ProxyID < right.binding.ProxyID
+	})
+	for _, candidate := range scoredCandidates {
+		binding := candidate.binding
+		if !acquire || concurrency == nil {
+			return &binding, nil, nil
+		}
+		result, err := concurrency.AcquireAccountProxySlot(ctx, account.ID, binding.ProxyID, binding.Concurrency)
+		if err != nil {
+			return nil, nil, err
+		}
+		if result.Acquired {
+			return &binding, result, nil
+		}
+	}
+	return &scoredCandidates[0].binding, nil, nil
+}
+
+func maxIntForProxy(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 // ProfitGateActive 报告本次选号是否处于利润门之下。

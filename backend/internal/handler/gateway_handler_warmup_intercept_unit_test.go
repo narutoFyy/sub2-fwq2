@@ -123,6 +123,11 @@ func (f *fakeConcurrencyCache) ReleaseAccountSlot(context.Context, int64, string
 func (f *fakeConcurrencyCache) GetAccountConcurrency(context.Context, int64) (int, error) {
 	return 0, nil
 }
+func (f *fakeConcurrencyCache) AcquireAccountProxySlot(context.Context, int64, int64, int, string) (bool, error) {
+	return true, nil
+}
+func (f *fakeConcurrencyCache) ReleaseAccountProxySlot(context.Context, int64, int64, string) error { return nil }
+func (f *fakeConcurrencyCache) GetAccountProxyConcurrency(context.Context, int64, int64) (int, error) { return 0, nil }
 func (f *fakeConcurrencyCache) IncrementAccountWaitCount(context.Context, int64, int) (bool, error) {
 	return true, nil
 }
