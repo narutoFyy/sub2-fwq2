@@ -6,7 +6,7 @@ import { opsAPI } from '@/api/admin/ops'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
-import type { OpsAlertRuntimeSettings, EmailNotificationConfig, AlertSeverity, OpsAdvancedSettings, OpsMetricThresholds } from '../types'
+import type { OpsAlertRuntimeSettings, EmailNotificationConfig, OpsAdvancedSettings, OpsMetricThresholds } from '../types'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -79,16 +79,7 @@ watch(() => props.show, (show) => {
 })
 
 // 邮件输入
-const alertRecipientInput = ref('')
 const reportRecipientInput = ref('')
-
-// 严重级别选项
-const severityOptions: Array<{ value: AlertSeverity | ''; label: string }> = [
-  { value: '', label: t('admin.ops.email.minSeverityAll') },
-  { value: 'critical', label: t('common.critical') },
-  { value: 'warning', label: t('common.warning') },
-  { value: 'info', label: t('common.info') }
-]
 
 // 验证邮箱
 function isValidEmailAddress(email: string): boolean {
@@ -96,9 +87,9 @@ function isValidEmailAddress(email: string): boolean {
 }
 
 // 添加收件人
-function addRecipient(target: 'alert' | 'report') {
+function addReportRecipient() {
   if (!emailConfig.value) return
-  const raw = (target === 'alert' ? alertRecipientInput.value : reportRecipientInput.value).trim()
+  const raw = reportRecipientInput.value.trim()
   if (!raw) return
 
   if (!isValidEmailAddress(raw)) {
@@ -107,18 +98,17 @@ function addRecipient(target: 'alert' | 'report') {
   }
 
   const normalized = raw.toLowerCase()
-  const list = target === 'alert' ? emailConfig.value.alert.recipients : emailConfig.value.report.recipients
+  const list = emailConfig.value.report.recipients
   if (!list.includes(normalized)) {
     list.push(normalized)
   }
-  if (target === 'alert') alertRecipientInput.value = ''
-  else reportRecipientInput.value = ''
+  reportRecipientInput.value = ''
 }
 
 // 移除收件人
-function removeRecipient(target: 'alert' | 'report', email: string) {
+function removeReportRecipient(email: string) {
   if (!emailConfig.value) return
-  const list = target === 'alert' ? emailConfig.value.alert.recipients : emailConfig.value.report.recipients
+  const list = emailConfig.value.report.recipients
   const idx = list.indexOf(email)
   if (idx >= 0) list.splice(idx, 1)
 }
@@ -206,9 +196,6 @@ async function saveAllSettings() {
   try {
     // 无收件人时自动禁用邮件通知
     if (emailConfig.value) {
-      if (emailConfig.value.alert.enabled && emailConfig.value.alert.recipients.length === 0) {
-        emailConfig.value.alert.enabled = false
-      }
       if (emailConfig.value.report.enabled && emailConfig.value.report.recipients.length === 0) {
         emailConfig.value.report.enabled = false
       }
@@ -262,54 +249,6 @@ async function saveAllSettings() {
         </div>
       </div>
 
-      <!-- 预警配置 -->
-      <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-700/50">
-        <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.settings.alertConfig') }}</h4>
-
-        <div class="space-y-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <label class="font-medium text-gray-900 dark:text-white">{{ t('admin.ops.settings.enableAlert') }}</label>
-            </div>
-            <Toggle v-model="emailConfig.alert.enabled" />
-          </div>
-
-          <div v-if="emailConfig.alert.enabled">
-            <label class="input-label">{{ t('admin.ops.settings.alertRecipients') }}</label>
-            <div class="flex gap-2">
-              <input
-                v-model="alertRecipientInput"
-                type="email"
-                class="input"
-                :placeholder="t('admin.ops.settings.emailPlaceholder')"
-                @keydown.enter.prevent="addRecipient('alert')"
-              />
-              <button class="btn btn-secondary whitespace-nowrap" type="button" @click="addRecipient('alert')">
-                {{ t('common.add') }}
-              </button>
-            </div>
-            <div class="mt-2 flex flex-wrap gap-2">
-              <span
-                v-for="email in emailConfig.alert.recipients"
-                :key="email"
-                class="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-              >
-                {{ email }}
-                <button type="button" class="text-blue-700/80 hover:text-blue-900" @click="removeRecipient('alert', email)">×</button>
-              </span>
-            </div>
-            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.settings.recipientsHint') }}
-            </p>
-          </div>
-
-          <div v-if="emailConfig.alert.enabled">
-            <label class="input-label">{{ t('admin.ops.settings.minSeverity') }}</label>
-            <Select v-model="emailConfig.alert.min_severity" :options="severityOptions" />
-          </div>
-        </div>
-      </div>
-
       <!-- 评估报告配置 -->
       <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-700/50">
         <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.settings.reportConfig') }}</h4>
@@ -330,9 +269,9 @@ async function saveAllSettings() {
                 type="email"
                 class="input"
                 :placeholder="t('admin.ops.settings.emailPlaceholder')"
-                @keydown.enter.prevent="addRecipient('report')"
+                @keydown.enter.prevent="addReportRecipient"
               />
-              <button class="btn btn-secondary whitespace-nowrap" type="button" @click="addRecipient('report')">
+              <button class="btn btn-secondary whitespace-nowrap" type="button" @click="addReportRecipient">
                 {{ t('common.add') }}
               </button>
             </div>
@@ -343,7 +282,7 @@ async function saveAllSettings() {
                 class="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
               >
                 {{ email }}
-                <button type="button" class="text-blue-700/80 hover:text-blue-900" @click="removeRecipient('report', email)">×</button>
+                <button type="button" class="text-blue-700/80 hover:text-blue-900" @click="removeReportRecipient(email)">×</button>
               </span>
             </div>
             <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">

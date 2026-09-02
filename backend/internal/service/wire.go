@@ -819,6 +819,7 @@ func ProvideAPIKeyService(
 
 // ProviderSet is the Wire provider set for all services
 var ProviderSet = wire.NewSet(
+	wire.Bind(new(OAuthAccountMonitorQuotaQuerier), new(*OpenAIQuotaService)),
 	// Core services
 	ProvideAuthService,
 	NewPasskeyService,

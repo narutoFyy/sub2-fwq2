@@ -17,6 +17,16 @@
             @create="showCreate = true"
           >
             <template #after>
+              <button
+                type="button"
+                class="btn btn-secondary px-2 md:px-3"
+                title="OAuth 账号监控"
+                @click="openOAuthMonitor"
+              >
+                <Icon name="shield" size="sm" class="md:mr-1.5" />
+                <span class="hidden md:inline">OAuth 监控</span>
+              </button>
+
               <!-- Auto Refresh Dropdown -->
               <div class="relative" ref="autoRefreshDropdownRef">
                 <button
@@ -184,7 +194,6 @@
           @reset-status="handleBulkResetStatus"
           @refresh-token="handleBulkRefreshToken"
           @probe-upstream-billing="handleBulkProbeUpstreamBilling"
-          @monitor-oauth="openOAuthMonitor"
           @edit-selected="openBulkEditSelected"
           @edit-filtered="openBulkEditFiltered"
           @clear="clearSelection"
@@ -290,8 +299,13 @@
           <template #cell-status="{ row }">
             <div class="flex items-center gap-1.5">
               <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
-              <span v-if="oauthMonitorStates[String(row.id)]" class="text-[11px] font-medium" :class="oauthMonitorStates[String(row.id)].last_condition_key ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'" :title="oauthMonitorStates[String(row.id)].error_message || 'OAuth 监控正常'">
-                监控<span v-if="oauthMonitorStates[String(row.id)].primary_remaining_percent != null"> {{ Math.round(oauthMonitorStates[String(row.id)].primary_remaining_percent!) }}%</span>
+              <span
+                v-if="row.platform === 'openai' && row.type === 'oauth'"
+                class="rounded px-1.5 py-0.5 text-[11px] font-medium"
+                :class="oauthMonitorRowStatus(row.id).className"
+                :title="oauthMonitorStates[String(row.id)]?.error_message || oauthMonitorRowStatus(row.id).label"
+              >
+                {{ oauthMonitorRowStatus(row.id).label }}
               </span>
             </div>
           </template>
@@ -459,7 +473,21 @@
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
-    <OAuthAccountMonitorModal :show="showOAuthMonitor" :account-ids="oauthMonitorAccountIds" :config="oauthMonitorConfig" :push-config="oauthMonitorPushConfig" :saving="savingOAuthMonitor" @close="showOAuthMonitor = false" @save="saveOAuthMonitor" />
+    <OAuthAccountMonitorModal
+      :show="showOAuthMonitor"
+      :account-ids="oauthMonitorAccountIds"
+      :overview="oauthMonitorOverview"
+      :loading="loadingOAuthMonitor"
+      :saving="savingOAuthMonitor"
+      :running="runningOAuthMonitor"
+      :error="oauthMonitorError"
+      :notice="oauthMonitorNotice"
+      @close="showOAuthMonitor = false"
+      @save="saveOAuthMonitor"
+      @refresh="refreshOAuthMonitor"
+      @retry="refreshOAuthMonitor"
+      @run="runOAuthMonitor"
+    />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
     <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
@@ -539,7 +567,8 @@ import { sanitizeUrl } from '@/utils/url'
 import { getFloatingPanelPosition } from '@/utils/floatingPanel'
 import { formatMultiplier } from '@/utils/formatters'
 import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType, AccountUsageInfo, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, UpstreamBillingProbeSnapshot } from '@/types'
-import type { OAuthAccountMonitorConfig, OAuthMonitorPushPlusConfig } from '@/api/admin/accounts'
+import type { OAuthAccountMonitorConfig, OAuthAccountMonitorOverview, OAuthMonitorPushPlusConfig } from '@/api/admin/accounts'
+import type { EmailNotificationConfig } from '@/api/admin/ops'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -603,10 +632,13 @@ const showReAuth = ref(false)
 const showTest = ref(false)
 const showStats = ref(false)
 const showOAuthMonitor = ref(false)
+const loadingOAuthMonitor = ref(false)
 const savingOAuthMonitor = ref(false)
-const oauthMonitorConfig = ref<OAuthAccountMonitorConfig | null>(null)
-const oauthMonitorPushConfig = ref<OAuthMonitorPushPlusConfig | null>(null)
-const oauthMonitorAccountIds = computed(() => accounts.value.filter(a => isSelected(a.id) && a.platform === 'openai' && a.type === 'oauth').map(a => a.id))
+const runningOAuthMonitor = ref(false)
+const oauthMonitorError = ref('')
+const oauthMonitorNotice = ref('')
+const oauthMonitorOverview = ref<OAuthAccountMonitorOverview | null>(null)
+const oauthMonitorAccountIds = computed(() => [...selIds.value])
 const oauthMonitorStates = ref<Record<string, import('@/api/admin/accounts').OAuthAccountMonitorState>>({})
 const showErrorPassthrough = ref(false)
 const showTLSFingerprintProfiles = ref(false)
@@ -1886,39 +1918,118 @@ const handleBulkProbeUpstreamBilling = async () => {
   }
 }
 const openOAuthMonitor = async () => {
-  if (oauthMonitorAccountIds.value.length === 0) {
-    appStore.showError('请选择 OpenAI/Codex OAuth 账号')
-    return
-  }
+  showOAuthMonitor.value = true
+  oauthMonitorNotice.value = ''
+  await refreshOAuthMonitor()
+}
+
+const fetchOAuthMonitorOverview = async () => {
+  const overview = await adminAPI.accounts.getOAuthAccountMonitorOverview(oauthMonitorAccountIds.value)
+  applyOAuthMonitorOverview(overview)
+}
+
+const refreshOAuthMonitor = async () => {
+  loadingOAuthMonitor.value = true
+  oauthMonitorError.value = ''
+  oauthMonitorNotice.value = ''
   try {
-    const [config, push] = await Promise.all([
-      adminAPI.accounts.getOAuthAccountMonitorConfig(),
-      adminAPI.accounts.getOAuthMonitorPushPlusConfig()
-    ])
-    oauthMonitorConfig.value = config
-    oauthMonitorPushConfig.value = push
-    showOAuthMonitor.value = true
+    await fetchOAuthMonitorOverview()
   } catch (error) {
-    appStore.showError(extractApiErrorMessage(error, '读取监控设置失败'))
+    oauthMonitorError.value = extractApiErrorMessage(error, '读取监控设置失败')
+  } finally {
+    loadingOAuthMonitor.value = false
   }
 }
-const saveOAuthMonitor = async (config: OAuthAccountMonitorConfig, push: OAuthMonitorPushPlusConfig) => {
+const saveOAuthMonitor = async (config: OAuthAccountMonitorConfig, push: OAuthMonitorPushPlusConfig, email: EmailNotificationConfig) => {
   savingOAuthMonitor.value = true
+  oauthMonitorError.value = ''
+  oauthMonitorNotice.value = ''
+  const completedSteps: string[] = []
+  let activeStep = '邮件通知配置'
   try {
-    const [savedConfig, savedPush] = await Promise.all([
-      adminAPI.accounts.updateOAuthAccountMonitorConfig(config),
-      adminAPI.accounts.updateOAuthMonitorPushPlusConfig(push)
-    ])
-    oauthMonitorConfig.value = savedConfig
-    oauthMonitorPushConfig.value = savedPush
-    showOAuthMonitor.value = false
+    await adminAPI.ops.updateEmailNotificationConfig(email)
+    completedSteps.push(activeStep)
+    activeStep = 'PushPlus 配置'
+    await adminAPI.accounts.updateOAuthMonitorPushPlusConfig(push)
+    completedSteps.push(activeStep)
+    activeStep = '监控规则与账号名单'
+    await adminAPI.accounts.updateOAuthAccountMonitorConfig(config)
+    completedSteps.push(activeStep)
+    activeStep = '重新读取服务器状态'
+    await fetchOAuthMonitorOverview()
+    oauthMonitorNotice.value = 'OAuth 监控设置已保存，并已重新读取服务器状态。'
     appStore.showSuccess('OAuth 监控设置已保存')
-    clearSelection()
   } catch (error) {
-    appStore.showError(extractApiErrorMessage(error, '保存监控设置失败'))
+    const saveMessage = `${activeStep}失败：${extractApiErrorMessage(error, '未知错误')}`
+    loadingOAuthMonitor.value = true
+    let reloadMessage = ''
+    try {
+      await fetchOAuthMonitorOverview()
+    } catch (reloadError) {
+      reloadMessage = `；重新读取服务器状态失败：${extractApiErrorMessage(reloadError, '未知错误')}`
+    } finally {
+      loadingOAuthMonitor.value = false
+    }
+    const completedMessage = completedSteps.length > 0 ? `；已保存：${completedSteps.join('、')}` : ''
+    oauthMonitorError.value = `${saveMessage}${completedMessage}${reloadMessage}`
+    appStore.showError(oauthMonitorError.value)
   } finally {
     savingOAuthMonitor.value = false
   }
+}
+
+const runOAuthMonitor = async () => {
+  runningOAuthMonitor.value = true
+  oauthMonitorError.value = ''
+  oauthMonitorNotice.value = ''
+  try {
+    const result = await adminAPI.accounts.runOAuthAccountMonitor()
+    if (result.executed) {
+      oauthMonitorNotice.value = `本次检查已完成，共检查 ${result.checked_accounts} 个账号。`
+    } else {
+      const skippedMessages: Record<string, string> = {
+        monitoring_disabled: '全局监控当前已暂停，请先启用并保存监控。',
+        no_accounts: '监控名单为空，请先添加账号并保存。',
+        leader_lock_held: '另一台服务实例正在执行检查，请稍后刷新。',
+        service_unavailable: '监控服务当前未就绪。'
+      }
+      oauthMonitorNotice.value = skippedMessages[result.skipped_reason ?? ''] ?? '本次检查未执行，请稍后重试。'
+    }
+  } catch (error) {
+    oauthMonitorError.value = extractApiErrorMessage(error, '手动检查失败')
+  } finally {
+    loadingOAuthMonitor.value = true
+    try {
+      await fetchOAuthMonitorOverview()
+    } catch (reloadError) {
+      const message = extractApiErrorMessage(reloadError, '重新读取监控状态失败')
+      oauthMonitorError.value = oauthMonitorError.value ? `${oauthMonitorError.value}；${message}` : message
+    } finally {
+      loadingOAuthMonitor.value = false
+      runningOAuthMonitor.value = false
+    }
+  }
+}
+
+const applyOAuthMonitorOverview = (overview: OAuthAccountMonitorOverview) => {
+  oauthMonitorOverview.value = overview
+  oauthMonitorStates.value = Object.fromEntries(
+    overview.accounts
+      .filter(account => account.state)
+      .map(account => [String(account.account_id), account.state!])
+  )
+}
+
+const oauthMonitorRowStatus = (accountID: number) => {
+  const monitored = oauthMonitorOverview.value?.config.account_ids.includes(accountID) ?? false
+  const globalEnabled = oauthMonitorOverview.value?.config.enabled ?? false
+  const state = oauthMonitorStates.value[String(accountID)]
+  if (!monitored) return { label: '未监控', className: 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300' }
+  if (!globalEnabled) return { label: '监控暂停', className: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' }
+  if (!state?.last_checked_at) return { label: '等待检查', className: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' }
+  if (state.last_condition_key?.includes('quota_low:')) return { label: '额度不足', className: 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' }
+  if (state.health_status === 'error' || state.last_condition_key) return { label: '监控异常', className: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300' }
+  return { label: '监控中', className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' }
 }
 const updateSchedulableInList = (accountIds: number[], schedulable: boolean) => {
   if (accountIds.length === 0) return
@@ -2485,11 +2596,12 @@ const handleClickOutside = (event: MouseEvent) => {
     showAutoRefreshDropdown.value = false
   }
 }
-const loadOAuthMonitorStates = async () => {
+const loadOAuthMonitorOverview = async () => {
   try {
-    oauthMonitorStates.value = await adminAPI.accounts.getOAuthAccountMonitorStates()
+    const overview = await adminAPI.accounts.getOAuthAccountMonitorOverview()
+    applyOAuthMonitorOverview(overview)
   } catch (error) {
-    console.debug('OAuth monitor states unavailable:', error)
+    console.debug('OAuth monitor overview unavailable:', error)
   }
 }
 
@@ -2508,7 +2620,7 @@ onMounted(async () => {
   }
 
   load()
-  loadOAuthMonitorStates()
+  loadOAuthMonitorOverview()
   loadUpstreamBillingProbeGlobalState()
   const [proxiesResult, groupsResult] = await Promise.allSettled([
     adminAPI.proxies.getAll(),

@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from '../client'
+import type { EmailNotificationConfig } from './ops'
 import type {
   Account,
   CreateAccountRequest,
@@ -98,6 +99,48 @@ export interface OAuthMonitorPushPlusConfig {
   channel?: string
 }
 
+export type OAuthAccountMonitorDisplayStatus =
+  | 'ineligible'
+  | 'not_monitored'
+  | 'paused'
+  | 'pending'
+  | 'healthy'
+  | 'error'
+  | 'quota_low'
+
+export interface OAuthAccountMonitorAccountOverview {
+  account_id: number
+  account_name: string
+  account_status: string
+  schedulable: boolean
+  selected: boolean
+  eligible: boolean
+  monitored: boolean
+  effective: boolean
+  monitor_status: OAuthAccountMonitorDisplayStatus
+  state?: OAuthAccountMonitorState | null
+}
+
+export interface OAuthAccountMonitorOverview {
+  config: OAuthAccountMonitorConfig
+  pushplus: OAuthMonitorPushPlusConfig
+  email: EmailNotificationConfig
+  accounts: OAuthAccountMonitorAccountOverview[]
+}
+
+export interface OAuthAccountMonitorRunResult {
+  executed: boolean
+  checked_accounts: number
+  skipped_reason?: 'service_unavailable' | 'monitoring_disabled' | 'no_accounts' | 'leader_lock_held' | string
+}
+
+export async function getOAuthAccountMonitorOverview(accountIds: number[] = []): Promise<OAuthAccountMonitorOverview> {
+  const { data } = await apiClient.get<OAuthAccountMonitorOverview>('/admin/accounts/monitoring/overview', {
+    params: accountIds.length > 0 ? { account_ids: accountIds.join(',') } : undefined
+  })
+  return data
+}
+
 export async function getOAuthAccountMonitorConfig(): Promise<OAuthAccountMonitorConfig> {
   const { data } = await apiClient.get<OAuthAccountMonitorConfig>('/admin/accounts/monitoring/config')
   return data
@@ -120,6 +163,11 @@ export async function removeOAuthAccountMonitorAccounts(account_ids: number[]): 
 
 export async function getOAuthAccountMonitorStates(): Promise<Record<string, OAuthAccountMonitorState>> {
   const { data } = await apiClient.get<Record<string, OAuthAccountMonitorState>>('/admin/accounts/monitoring/states')
+  return data
+}
+
+export async function runOAuthAccountMonitor(): Promise<OAuthAccountMonitorRunResult> {
+  const { data } = await apiClient.post<OAuthAccountMonitorRunResult>('/admin/accounts/monitoring/run')
   return data
 }
 
@@ -1115,11 +1163,13 @@ export const accountsAPI = {
   deleteOllamaCloudUsageSession,
   setOllamaCloudUsageAutoRefresh,
   refreshOllamaCloudUsage,
+  getOAuthAccountMonitorOverview,
   getOAuthAccountMonitorConfig,
   updateOAuthAccountMonitorConfig,
   addOAuthAccountMonitorAccounts,
   removeOAuthAccountMonitorAccounts,
   getOAuthAccountMonitorStates,
+  runOAuthAccountMonitor,
   getOAuthMonitorPushPlusConfig,
   updateOAuthMonitorPushPlusConfig
 }
