@@ -184,6 +184,7 @@
           @reset-status="handleBulkResetStatus"
           @refresh-token="handleBulkRefreshToken"
           @probe-upstream-billing="handleBulkProbeUpstreamBilling"
+          @monitor-oauth="openOAuthMonitor"
           @edit-selected="openBulkEditSelected"
           @edit-filtered="openBulkEditFiltered"
           @clear="clearSelection"
@@ -289,6 +290,9 @@
           <template #cell-status="{ row }">
             <div class="flex items-center gap-1.5">
               <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
+              <span v-if="oauthMonitorStates[String(row.id)]" class="text-[11px] font-medium" :class="oauthMonitorStates[String(row.id)].last_condition_key ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'" :title="oauthMonitorStates[String(row.id)].error_message || 'OAuth 监控正常'">
+                监控<span v-if="oauthMonitorStates[String(row.id)].primary_remaining_percent != null"> {{ Math.round(oauthMonitorStates[String(row.id)].primary_remaining_percent!) }}%</span>
+              </span>
             </div>
           </template>
           <template #cell-schedulable="{ row }">
@@ -455,6 +459,7 @@
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
+    <OAuthAccountMonitorModal :show="showOAuthMonitor" :account-ids="oauthMonitorAccountIds" :config="oauthMonitorConfig" :push-config="oauthMonitorPushConfig" :saving="savingOAuthMonitor" @close="showOAuthMonitor = false" @save="saveOAuthMonitor" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
     <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
@@ -512,6 +517,7 @@ import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vue'
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
 import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
+import OAuthAccountMonitorModal from '@/components/admin/account/OAuthAccountMonitorModal.vue'
 import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.vue'
 import type { SelectOption } from '@/components/common/Select.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
@@ -533,6 +539,7 @@ import { sanitizeUrl } from '@/utils/url'
 import { getFloatingPanelPosition } from '@/utils/floatingPanel'
 import { formatMultiplier } from '@/utils/formatters'
 import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType, AccountUsageInfo, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, UpstreamBillingProbeSnapshot } from '@/types'
+import type { OAuthAccountMonitorConfig, OAuthMonitorPushPlusConfig } from '@/api/admin/accounts'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -595,6 +602,12 @@ const showCreateShadowDialog = ref(false)
 const showReAuth = ref(false)
 const showTest = ref(false)
 const showStats = ref(false)
+const showOAuthMonitor = ref(false)
+const savingOAuthMonitor = ref(false)
+const oauthMonitorConfig = ref<OAuthAccountMonitorConfig | null>(null)
+const oauthMonitorPushConfig = ref<OAuthMonitorPushPlusConfig | null>(null)
+const oauthMonitorAccountIds = computed(() => accounts.value.filter(a => isSelected(a.id) && a.platform === 'openai' && a.type === 'oauth').map(a => a.id))
+const oauthMonitorStates = ref<Record<string, import('@/api/admin/accounts').OAuthAccountMonitorState>>({})
 const showErrorPassthrough = ref(false)
 const showTLSFingerprintProfiles = ref(false)
 const edAcc = ref<Account | null>(null)
@@ -1872,6 +1885,41 @@ const handleBulkProbeUpstreamBilling = async () => {
     accountIDs.forEach(id => probingUpstreamBilling.delete(id))
   }
 }
+const openOAuthMonitor = async () => {
+  if (oauthMonitorAccountIds.value.length === 0) {
+    appStore.showError('请选择 OpenAI/Codex OAuth 账号')
+    return
+  }
+  try {
+    const [config, push] = await Promise.all([
+      adminAPI.accounts.getOAuthAccountMonitorConfig(),
+      adminAPI.accounts.getOAuthMonitorPushPlusConfig()
+    ])
+    oauthMonitorConfig.value = config
+    oauthMonitorPushConfig.value = push
+    showOAuthMonitor.value = true
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, '读取监控设置失败'))
+  }
+}
+const saveOAuthMonitor = async (config: OAuthAccountMonitorConfig, push: OAuthMonitorPushPlusConfig) => {
+  savingOAuthMonitor.value = true
+  try {
+    const [savedConfig, savedPush] = await Promise.all([
+      adminAPI.accounts.updateOAuthAccountMonitorConfig(config),
+      adminAPI.accounts.updateOAuthMonitorPushPlusConfig(push)
+    ])
+    oauthMonitorConfig.value = savedConfig
+    oauthMonitorPushConfig.value = savedPush
+    showOAuthMonitor.value = false
+    appStore.showSuccess('OAuth 监控设置已保存')
+    clearSelection()
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, '保存监控设置失败'))
+  } finally {
+    savingOAuthMonitor.value = false
+  }
+}
 const updateSchedulableInList = (accountIds: number[], schedulable: boolean) => {
   if (accountIds.length === 0) return
   const idSet = new Set(accountIds)
@@ -2437,6 +2485,13 @@ const handleClickOutside = (event: MouseEvent) => {
     showAutoRefreshDropdown.value = false
   }
 }
+const loadOAuthMonitorStates = async () => {
+  try {
+    oauthMonitorStates.value = await adminAPI.accounts.getOAuthAccountMonitorStates()
+  } catch (error) {
+    console.debug('OAuth monitor states unavailable:', error)
+  }
+}
 
 onMounted(async () => {
   if (typeof window !== 'undefined') {
@@ -2453,6 +2508,7 @@ onMounted(async () => {
   }
 
   load()
+  loadOAuthMonitorStates()
   loadUpstreamBillingProbeGlobalState()
   const [proxiesResult, groupsResult] = await Promise.allSettled([
     adminAPI.proxies.getAll(),

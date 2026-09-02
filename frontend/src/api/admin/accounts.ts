@@ -64,6 +64,75 @@ export async function list(
   return data
 }
 
+export interface OAuthAccountMonitorConfig {
+  enabled: boolean
+  account_ids: number[]
+  quota_threshold_percent: number
+  interval_minutes: number
+  notify_on_error: boolean
+  notify_on_quota: boolean
+  notify_on_recovery: boolean
+  notify_email: boolean
+  notify_pushplus: boolean
+  repeat_every_check: boolean
+}
+
+export interface OAuthAccountMonitorState {
+  account_id: number
+  last_checked_at?: string | null
+  health_status: string
+  error_message?: string
+  primary_remaining_percent?: number | null
+  secondary_remaining_percent?: number | null
+  quota_status: string
+  last_condition_key?: string
+  last_notified_at?: string | null
+  updated_at: string
+}
+
+export interface OAuthMonitorPushPlusConfig {
+  enabled: boolean
+  token: string
+  topic?: string
+  template?: string
+  channel?: string
+}
+
+export async function getOAuthAccountMonitorConfig(): Promise<OAuthAccountMonitorConfig> {
+  const { data } = await apiClient.get<OAuthAccountMonitorConfig>('/admin/accounts/monitoring/config')
+  return data
+}
+
+export async function updateOAuthAccountMonitorConfig(config: OAuthAccountMonitorConfig): Promise<OAuthAccountMonitorConfig> {
+  const { data } = await apiClient.put<OAuthAccountMonitorConfig>('/admin/accounts/monitoring/config', config)
+  return data
+}
+
+export async function addOAuthAccountMonitorAccounts(account_ids: number[]): Promise<OAuthAccountMonitorConfig> {
+  const { data } = await apiClient.post<OAuthAccountMonitorConfig>('/admin/accounts/monitoring/accounts', { account_ids })
+  return data
+}
+
+export async function removeOAuthAccountMonitorAccounts(account_ids: number[]): Promise<OAuthAccountMonitorConfig> {
+  const { data } = await apiClient.delete<OAuthAccountMonitorConfig>('/admin/accounts/monitoring/accounts', { data: { account_ids } })
+  return data
+}
+
+export async function getOAuthAccountMonitorStates(): Promise<Record<string, OAuthAccountMonitorState>> {
+  const { data } = await apiClient.get<Record<string, OAuthAccountMonitorState>>('/admin/accounts/monitoring/states')
+  return data
+}
+
+export async function getOAuthMonitorPushPlusConfig(): Promise<OAuthMonitorPushPlusConfig> {
+  const { data } = await apiClient.get<OAuthMonitorPushPlusConfig>('/admin/accounts/monitoring/pushplus')
+  return data
+}
+
+export async function updateOAuthMonitorPushPlusConfig(config: OAuthMonitorPushPlusConfig): Promise<OAuthMonitorPushPlusConfig> {
+  const { data } = await apiClient.put<OAuthMonitorPushPlusConfig>('/admin/accounts/monitoring/pushplus', config)
+  return data
+}
+
 export interface AccountListWithEtagResult {
   notModified: boolean
   etag: string | null
@@ -1045,7 +1114,14 @@ export const accountsAPI = {
   saveOllamaCloudUsageSession,
   deleteOllamaCloudUsageSession,
   setOllamaCloudUsageAutoRefresh,
-  refreshOllamaCloudUsage
+  refreshOllamaCloudUsage,
+  getOAuthAccountMonitorConfig,
+  updateOAuthAccountMonitorConfig,
+  addOAuthAccountMonitorAccounts,
+  removeOAuthAccountMonitorAccounts,
+  getOAuthAccountMonitorStates,
+  getOAuthMonitorPushPlusConfig,
+  updateOAuthMonitorPushPlusConfig
 }
 
 export default accountsAPI

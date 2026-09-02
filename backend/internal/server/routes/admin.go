@@ -358,6 +358,13 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 	accounts := admin.Group("/accounts")
 	{
 		accounts.GET("", h.Admin.Account.List)
+		accounts.GET("/monitoring/config", h.Admin.OAuthAccountMonitor.GetConfig)
+		accounts.PUT("/monitoring/config", h.Admin.OAuthAccountMonitor.UpdateConfig)
+		accounts.POST("/monitoring/accounts", h.Admin.OAuthAccountMonitor.AddAccounts)
+		accounts.DELETE("/monitoring/accounts", h.Admin.OAuthAccountMonitor.RemoveAccounts)
+		accounts.GET("/monitoring/states", h.Admin.OAuthAccountMonitor.GetStates)
+		accounts.GET("/monitoring/pushplus", h.Admin.OAuthAccountMonitor.GetPushPlus)
+		accounts.PUT("/monitoring/pushplus", h.Admin.OAuthAccountMonitor.UpdatePushPlus)
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)
 		accounts.PUT("/upstream-billing-probe/settings", h.Admin.Account.UpdateUpstreamBillingProbeSettings)
 		accounts.POST("/upstream-billing-probe/batch", h.Admin.Account.ProbeUpstreamBillingBatch)
