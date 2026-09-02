@@ -276,12 +276,34 @@ func (s *OAuthAccountMonitorService) notify(ctx context.Context, cfg *OAuthAccou
 	isRecovery := state.LastConditionKey == "" && previous != nil && previous.LastConditionKey != ""
 	if isRecovery && !cfg.NotifyOnRecovery { return }
 	if !isRecovery && state.LastConditionKey == "" { return }
-	title := fmt.Sprintf("OAuth账号监控：%s", account.Name); var body strings.Builder
+	title := fmt.Sprintf("OAuth账号监控：%s", account.Name)
+	var body strings.Builder
 	if isRecovery { body.WriteString("账号已恢复正常。\n") } else { body.WriteString("账号监控发现异常。\n") }
-	body.WriteString(fmt.Sprintf("账号ID: %d\n账号: %s\n状态: %s\n", account.ID, account.Name, state.HealthStatus)); if state.ErrorMessage != "" { body.WriteString("错误: " + state.ErrorMessage + "\n") }; if state.PrimaryRemainingPercent != nil { body.WriteString(fmt.Sprintf("主窗口剩余: %.1f%%\n", *state.PrimaryRemainingPercent)) }; if state.SecondaryRemainingPercent != nil { body.WriteString(fmt.Sprintf("次窗口剩余: %.1f%%\n", *state.SecondaryRemainingPercent)) }; body.WriteString("检查时间: " + state.LastCheckedAt.Format(time.RFC3339))
-	if cfg.NotifyEmail && s.opsService != nil && s.emailService != nil { if emailCfg, err := s.opsService.GetEmailNotificationConfig(ctx); err == nil && emailCfg.Alert.Enabled { sent := false; for _, to := range emailCfg.Alert.Recipients { if strings.TrimSpace(to) == "" { continue }; if err := s.emailService.SendEmail(ctx, strings.TrimSpace(to), title, body.String()); err == nil { sent = true } }; _ = sent } }
-	if cfg.NotifyPushPlus { if push, err := s.GetPushPlusConfig(ctx); err == nil && push.Enabled && push.Token != "" { _ = s.sendPushPlus(ctx, push, title, body.String()) } }
-	if s.opsRepo != nil { dims := map[string]any{"account_id": account.ID, "account_name": account.Name, "platform": account.Platform, "condition": state.LastConditionKey, "recovery": isRecovery, "quota_threshold_percent": cfg.QuotaThreshold, "primary_remaining_percent": state.PrimaryRemainingPercent, "secondary_remaining_percent": state.SecondaryRemainingPercent, "checked_at": state.LastCheckedAt}; event := &OpsAlertEvent{Severity: "warning", Status: OpsAlertStatusFiring, Title: title, Description: body.String(), Dimensions: dims, FiredAt: time.Now().UTC()}; if isRecovery { event.Status = OpsAlertStatusResolved; resolvedAt := event.FiredAt; event.ResolvedAt = &resolvedAt }; _, _ = s.opsRepo.CreateAlertEvent(ctx, event) }
+	body.WriteString(fmt.Sprintf("账号ID: %d\n账号: %s\n状态: %s\n", account.ID, account.Name, state.HealthStatus))
+	if state.ErrorMessage != "" { body.WriteString("错误: " + state.ErrorMessage + "\n") }
+	if state.PrimaryRemainingPercent != nil { body.WriteString(fmt.Sprintf("主窗口剩余: %.1f%%\n", *state.PrimaryRemainingPercent)) }
+	if state.SecondaryRemainingPercent != nil { body.WriteString(fmt.Sprintf("次窗口剩余: %.1f%%\n", *state.SecondaryRemainingPercent)) }
+	body.WriteString("检查时间: " + state.LastCheckedAt.Format(time.RFC3339))
+	emailSent := false
+	if cfg.NotifyEmail && s.opsService != nil && s.emailService != nil {
+		if emailCfg, err := s.opsService.GetEmailNotificationConfig(ctx); err == nil && emailCfg.Alert.Enabled {
+			for _, to := range emailCfg.Alert.Recipients {
+				if strings.TrimSpace(to) == "" { continue }
+				if err := s.emailService.SendEmail(ctx, strings.TrimSpace(to), title, body.String()); err == nil { emailSent = true }
+			}
+		}
+	}
+	if cfg.NotifyPushPlus {
+		if push, err := s.GetPushPlusConfig(ctx); err == nil && push.Enabled && push.Token != "" {
+			if err := s.sendPushPlus(ctx, push, title, body.String()); err != nil { slog.Warn("oauth_account_monitor_pushplus_failed", "account_id", account.ID, "error", err) }
+		}
+	}
+	if s.opsRepo != nil {
+		dims := map[string]any{"account_id": account.ID, "account_name": account.Name, "platform": account.Platform, "condition": state.LastConditionKey, "recovery": isRecovery, "quota_threshold_percent": cfg.QuotaThreshold, "primary_remaining_percent": state.PrimaryRemainingPercent, "secondary_remaining_percent": state.SecondaryRemainingPercent, "checked_at": state.LastCheckedAt}
+		event := &OpsAlertEvent{Severity: "warning", Status: OpsAlertStatusFiring, Title: title, Description: body.String(), Dimensions: dims, FiredAt: time.Now().UTC(), EmailSent: emailSent}
+		if isRecovery { event.Status = OpsAlertStatusResolved; resolvedAt := event.FiredAt; event.ResolvedAt = &resolvedAt }
+		_, _ = s.opsRepo.CreateAlertEvent(ctx, event)
+	}
 }
 
 func truncateMonitorError(value string, max int) string { value = strings.TrimSpace(value); if len(value) <= max { return value }; return value[:max] }
