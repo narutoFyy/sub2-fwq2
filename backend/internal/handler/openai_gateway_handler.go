@@ -98,6 +98,72 @@ func openAIForwardSucceededForScheduling(result *service.OpenAIForwardResult) bo
 	return result.SucceededForScheduling()
 }
 
+func (h *OpenAIGatewayHandler) reportOpenAIAccountScheduleResult(c *gin.Context, account *service.Account, model string, success bool, firstTokenMs *int, observedErr ...error) bool {
+	var outcomeErr error
+	if len(observedErr) > 0 {
+		outcomeErr = observedErr[0]
+	}
+	if h != nil && h.gatewayService != nil {
+		h.observeOAuthAccountRequestOutcome(c, account, success, outcomeErr)
+		return h.gatewayService.ReportOpenAIAccountScheduleResult(account, model, success, firstTokenMs, observedErr...)
+	}
+	return false
+}
+
+const oauthMonitorRequestIDContextKey = "oauth_monitor_request_id"
+
+func (h *OpenAIGatewayHandler) observeOAuthAccountRequestOutcome(c *gin.Context, account *service.Account, success bool, observedErr error) {
+	if h == nil || h.gatewayService == nil {
+		return
+	}
+	var ctx context.Context
+	turn := 0
+	if c != nil {
+		if c.Request != nil {
+			ctx = c.Request.Context()
+		}
+		if value, ok := c.Get(securityAuditWSTurnContextKey); ok {
+			turn, _ = value.(int)
+		}
+	}
+	h.gatewayService.ObserveOAuthAccountRequestOutcome(ctx, account, oauthMonitorRequestID(c, turn), success, observedErr)
+}
+
+func oauthMonitorRequestID(c *gin.Context, turn int) string {
+	base := ""
+	if c != nil {
+		if value, ok := c.Get(oauthMonitorRequestIDContextKey); ok {
+			base, _ = value.(string)
+		}
+	}
+	if strings.TrimSpace(base) == "" {
+		var ctx context.Context
+		if c != nil && c.Request != nil {
+			ctx = c.Request.Context()
+		}
+		base = oauthMonitorContextRequestID(ctx)
+		if c != nil {
+			c.Set(oauthMonitorRequestIDContextKey, base)
+		}
+	}
+	if turn > 0 {
+		return fmt.Sprintf("%s:turn:%d", base, turn)
+	}
+	return base
+}
+
+func oauthMonitorContextRequestID(ctx context.Context) string {
+	if ctx != nil {
+		if requestID, _ := ctx.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
+			return strings.TrimSpace(requestID)
+		}
+		if requestID, _ := ctx.Value(ctxkey.ClientRequestID).(string); strings.TrimSpace(requestID) != "" {
+			return strings.TrimSpace(requestID)
+		}
+	}
+	return uuid.NewString()
+}
+
 func openAIAccountScheduleModel(c *gin.Context, account *service.Account, forwardModel string, requireCompact bool, result *service.OpenAIForwardResult) string {
 	if result != nil {
 		if actual := strings.TrimSpace(result.UpstreamModel); actual != "" {
@@ -759,6 +825,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					}
 					if !openAIForwardMayFailover(c, writerSizeBeforeForward, failoverErr) {
 						h.gatewayService.ObserveOpenAIAccountHealthFailure(c.Request.Context(), account, err)
+						h.observeOAuthAccountRequestOutcome(c, account, false, err)
 						h.handleFailoverExhausted(c, failoverErr, true)
 						return
 					}
@@ -768,7 +835,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						streamStarted = true
 					}
 					if failoverErr.ShouldReportAccountScheduleFailure() {
-						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, nil), false, nil, err)
+						h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, nil), false, nil, err)
 					}
 					if !failoverErr.ShouldRetryNextAccount() {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
@@ -830,7 +897,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					reqLog.Warn("openai.upstream_failover_switching", failoverSwitchFields...)
 					continue
 				}
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), false, nil, err)
+				h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), false, nil, err)
 				upstreamErrorAlreadyCommunicated := openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
 				wroteFallback := false
 				if !upstreamErrorAlreadyCommunicated {
@@ -856,9 +923,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			if account.Type == service.AccountTypeOAuth && !account.IsShadow() {
 				h.gatewayService.UpdateCodexUsageSnapshotFromHeaders(c.Request.Context(), account.ID, result.ResponseHeaders)
 			}
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), openAIForwardSucceededForScheduling(result), result.FirstTokenMs)
+			h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), openAIForwardSucceededForScheduling(result), result.FirstTokenMs)
 		} else {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), openAIForwardSucceededForScheduling(result), nil)
+			h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), openAIForwardSucceededForScheduling(result), nil)
 		}
 
 		// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
@@ -1323,11 +1390,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					}
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.gatewayService.ObserveOpenAIAccountHealthFailure(c.Request.Context(), account, err)
+						h.observeOAuthAccountRequestOutcome(c, account, false, err)
 						h.handleAnthropicFailoverExhausted(c, failoverErr, true)
 						return
 					}
 					if failoverErr.ShouldReportAccountScheduleFailure() {
-						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, nil), false, nil, err)
+						h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, nil), false, nil, err)
 					}
 					if !failoverErr.ShouldRetryNextAccount() {
 						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
@@ -1384,7 +1452,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					submitMessagesUsage(result)
 					return
 				}
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, result), false, nil, err)
+				h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, result), false, nil, err)
 				wroteFallback := h.ensureAnthropicErrorResponse(c, streamStarted)
 				reqLog.Warn("openai_messages.forward_failed",
 					zap.Int64("account_id", account.ID),
@@ -1396,9 +1464,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			}
 		}
 		if result != nil {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, result), true, result.FirstTokenMs)
+			h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, result), true, result.FirstTokenMs)
 		} else {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, result), true, nil)
+			h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, result), true, nil)
 		}
 
 		submitMessagesUsage(result)
@@ -2037,7 +2105,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			return false
 		}
 		if failoverErr.ShouldReportAccountScheduleFailure() {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, wsForwardModel, false, nil), false, nil, failoverErr)
+			h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, wsForwardModel, false, nil), false, nil, failoverErr)
 		}
 		releaseAccountSlot()
 		if !failoverErr.ShouldRetryNextAccount() {
@@ -2379,6 +2447,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					cyberBlockedThisConn = true
 				}
 				if turnErr != nil {
+					h.gatewayService.ObserveOAuthAccountRequestOutcome(ctx, account, oauthMonitorRequestID(c, turn), false, turnErr)
 					if result == nil || result.ImageCount <= 0 {
 						return
 					}
@@ -2411,6 +2480,12 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if scheduleModel == "" {
 					scheduleModel = turnRequestedModel
 				}
+				turnSucceeded := turnErr == nil && openAIForwardSucceededForScheduling(result)
+				outcomeErr := turnErr
+				if !turnSucceeded && outcomeErr == nil {
+					outcomeErr = errors.New("stream disconnected before completion")
+				}
+				h.gatewayService.ObserveOAuthAccountRequestOutcome(ctx, account, oauthMonitorRequestID(c, turn), turnSucceeded, outcomeErr)
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account, scheduleModel, openAIForwardSucceededForScheduling(result), result.FirstTokenMs)
 				inboundEndpoint := GetInboundEndpoint(c)
 				upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)
@@ -2495,7 +2570,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				if waitForWSSameAccountRetry(account, failoverErr) {
 					if failoverErr.ShouldReportAccountScheduleFailure() {
-						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, wsForwardModel, false, nil), false, nil, err)
+						h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, wsForwardModel, false, nil), false, nil, err)
 					}
 					if !ensureUserSlotHeld() {
 						return
@@ -2541,7 +2616,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			}
 
 			if shouldReportOpenAIWSProxyAccountFailure(err) {
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, wsForwardModel, false, nil), false, nil, err)
+				h.reportOpenAIAccountScheduleResult(c, account, openAIAccountScheduleModel(c, account, wsForwardModel, false, nil), false, nil, err)
 			}
 			closeStatus, closeReason := summarizeWSCloseErrorForLog(err)
 			proxyFailedFields := []zap.Field{

@@ -110,7 +110,7 @@ func (s *OpsService) UpdateEmailNotificationConfig(ctx context.Context, req *Ops
 func defaultOpsEmailNotificationConfig() *OpsEmailNotificationConfig {
 	return &OpsEmailNotificationConfig{
 		Alert: OpsEmailAlertConfig{
-			Enabled:               true,
+			Enabled:               false,
 			Recipients:            []string{},
 			MinSeverity:           "",
 			RateLimitPerHour:      0,
@@ -144,6 +144,8 @@ func normalizeOpsEmailNotificationConfig(cfg *OpsEmailNotificationConfig) {
 	if cfg.Report.Recipients == nil {
 		cfg.Report.Recipients = []string{}
 	}
+	// Ops events remain available in the dashboard, while realtime P0/P1 email is retired.
+	cfg.Alert.Enabled = false
 
 	cfg.Alert.MinSeverity = strings.TrimSpace(cfg.Alert.MinSeverity)
 	cfg.Report.DailySummarySchedule = strings.TrimSpace(cfg.Report.DailySummarySchedule)

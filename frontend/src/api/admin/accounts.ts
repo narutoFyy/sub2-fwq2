@@ -4,7 +4,6 @@
  */
 
 import { apiClient } from '../client'
-import type { EmailNotificationConfig } from './ops'
 import type {
   Account,
   CreateAccountRequest,
@@ -70,12 +69,16 @@ export interface OAuthAccountMonitorConfig {
   account_ids: number[]
   quota_threshold_percent: number
   interval_minutes: number
-  notify_on_error: boolean
+  notify_on_error?: boolean
   notify_on_quota: boolean
-  notify_on_recovery: boolean
+  notify_on_recovery?: boolean
   notify_email: boolean
   notify_pushplus: boolean
-  repeat_every_check: boolean
+  repeat_every_check?: boolean
+  notify_on_unavailable: boolean
+  unavailable_failure_threshold: number
+  unavailable_window_minutes: number
+  unavailable_reminder_minutes: number
 }
 
 export interface OAuthAccountMonitorState {
@@ -88,7 +91,21 @@ export interface OAuthAccountMonitorState {
   quota_status: string
   last_condition_key?: string
   last_notified_at?: string | null
+  consecutive_failures: number
+  last_success_at?: string | null
+  last_failure_at?: string | null
+  last_error_code?: string
+  failure_started_at?: string | null
+  last_unavailable_notified_at?: string | null
+  failure_sequence: number
+  last_notified_failure_sequence: number
+  quota_alert_active: boolean
   updated_at: string
+}
+
+export interface OAuthMonitorEmailConfig {
+  enabled: boolean
+  recipients: string[]
 }
 
 export interface OAuthMonitorPushPlusConfig {
@@ -124,7 +141,7 @@ export interface OAuthAccountMonitorAccountOverview {
 export interface OAuthAccountMonitorOverview {
   config: OAuthAccountMonitorConfig
   pushplus: OAuthMonitorPushPlusConfig
-  email: EmailNotificationConfig
+  email: OAuthMonitorEmailConfig
   accounts: OAuthAccountMonitorAccountOverview[]
 }
 
@@ -178,6 +195,16 @@ export async function getOAuthMonitorPushPlusConfig(): Promise<OAuthMonitorPushP
 
 export async function updateOAuthMonitorPushPlusConfig(config: OAuthMonitorPushPlusConfig): Promise<OAuthMonitorPushPlusConfig> {
   const { data } = await apiClient.put<OAuthMonitorPushPlusConfig>('/admin/accounts/monitoring/pushplus', config)
+  return data
+}
+
+export async function getOAuthMonitorEmailConfig(): Promise<OAuthMonitorEmailConfig> {
+  const { data } = await apiClient.get<OAuthMonitorEmailConfig>('/admin/accounts/monitoring/email')
+  return data
+}
+
+export async function updateOAuthMonitorEmailConfig(config: OAuthMonitorEmailConfig): Promise<OAuthMonitorEmailConfig> {
+  const { data } = await apiClient.put<OAuthMonitorEmailConfig>('/admin/accounts/monitoring/email', config)
   return data
 }
 
@@ -1171,7 +1198,9 @@ export const accountsAPI = {
   getOAuthAccountMonitorStates,
   runOAuthAccountMonitor,
   getOAuthMonitorPushPlusConfig,
-  updateOAuthMonitorPushPlusConfig
+  updateOAuthMonitorPushPlusConfig,
+  getOAuthMonitorEmailConfig,
+  updateOAuthMonitorEmailConfig
 }
 
 export default accountsAPI

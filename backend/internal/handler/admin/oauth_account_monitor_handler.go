@@ -185,6 +185,37 @@ func (h *OAuthAccountMonitorHandler) UpdatePushPlus(c *gin.Context) {
 	response.Success(c, maskedOAuthMonitorPushPlus(cfg))
 }
 
+func (h *OAuthAccountMonitorHandler) GetEmail(c *gin.Context) {
+	if h == nil || h.service == nil {
+		response.Error(c, http.StatusServiceUnavailable, "monitor service unavailable")
+		return
+	}
+	cfg, err := h.service.GetEmailConfig(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *OAuthAccountMonitorHandler) UpdateEmail(c *gin.Context) {
+	if h == nil || h.service == nil {
+		response.Error(c, http.StatusServiceUnavailable, "monitor service unavailable")
+		return
+	}
+	var req service.OAuthMonitorEmailConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request body")
+		return
+	}
+	cfg, err := h.service.UpdateEmailConfig(c.Request.Context(), &req)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(c, cfg)
+}
+
 func minInt(a, b int) int {
 	if a < b {
 		return a
