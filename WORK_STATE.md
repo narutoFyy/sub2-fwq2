@@ -1,7 +1,7 @@
 # OAuth monitor noise reduction
 
-Status: in_progress
-Current task: T-005
+Status: complete
+Current task: none
 Execution mode: state-main
 Plan topology: linear
 Baseline: origin/main@55daac165
@@ -28,18 +28,11 @@ done -> ready(next task)
 | T-002 | done | Record deduplicated real OpenAI/Codex account request outcomes | OpenAI gateway final-result paths, Redis helper, monitor service/tests | one outcome per account/request; success resets; classified failures increment; Redis failure is fail-open | T-001 |
 | T-003 | done | Implement quota-cycle and sustained-unavailability notifications | monitor service and focused tests | third failure in 15 minutes alerts once; hourly reminder requires a new failure; quota unknown is silent; no recovery notifications | T-002 |
 | T-004 | done | Simplify the OAuth drawer and separate channel settings | account API/view/drawer and frontend tests | only two event switches shown; advanced controls collapsed; independent email/PushPlus save and refresh correctly | T-003 |
-| T-005 | implementing | Whole-change verification, GitHub push, and rolling deployment | tests/build/release artifacts, .159 then .189 | backend tests, frontend typecheck/build, smoke checks and two-node health checks pass; one rollback binary retained per host | T-004 |
+| T-005 | done | Whole-change verification, GitHub push, and rolling deployment | tests/build/release artifacts, .159 then .189 | backend tests, frontend typecheck/build, smoke checks and two-node health checks pass; one rollback binary retained per host | T-004 |
 
 ## Active Task
 
-T-005
-
-- Exact work: run complete backend/frontend verification, inspect the release diff, build the production artifact, push the branch, then deploy and verify `.159` followed by `.189`.
-- Allowed read: repository-wide code needed to follow existing settings, Redis, gateway, notification, migration, and frontend patterns.
-- Allowed write: only files named by the task write scopes above plus this state file.
-- Non-goals: low-cost probing, scheduler priority, non-OpenAI platform monitoring, active upstream probes.
-- Compatibility: preserve existing monitor list, threshold, PushPlus token, SMTP settings, Ops recipients/report settings, and historical events.
-- Rollback: additive schema and application release; retain the current production binary as the single rollback artifact.
+None. All planned tasks are verified and complete.
 
 ## File Access Requests
 
@@ -56,3 +49,7 @@ None. Main-agent execution does not use delegated file-access requests.
 - 2026-09-03: frontend production build, focused Vitest, TypeScript typecheck, and scoped ESLint passed.
 - 2026-09-03: full backend `go test ./... -count=1` passed under Linux/WSL with Go 1.27.1; OAuth-focused tests also passed on Windows.
 - 2026-09-03: release diff review confirmed migration 234 and no low-cost probe implementation files.
+- 2026-09-03: commit `b589dfe85` pushed to `origin/codex/oauth-monitor-noise-reduction`; embedded Linux/amd64 release SHA-256 `e299409db6ae25ae5fa4243d3c4df3fe015f512fe678f0fdc4d457e4ea48f370`.
+- 2026-09-03: `.159` then `.189` deployed and verified active on `18080`; both source trees point to `b589dfe85`, both keep exactly one rollback binary, and both origin HTTPS checks return health `200` and unauthenticated auth `401`.
+- 2026-09-03: shared database migration 234 and all nine added monitor-state columns verified; OAuth email retained two recipients, Ops realtime alert email is disabled, and existing report state is preserved.
+- 2026-09-03: T-005 -> done; workflow complete.
