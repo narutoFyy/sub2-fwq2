@@ -1,0 +1,4 @@
+interface:
+  display_name: "Token FWQ Server Map"
+  short_description: "Record Token FWQ servers, ports, services, and shared database topology"
+  default_prompt: "Use token-fwq to check the server map, port ownership, service state, and shared database connection before deployment or migration."
