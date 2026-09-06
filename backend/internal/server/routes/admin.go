@@ -368,6 +368,8 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.GET("/monitoring/pushplus", h.Admin.OAuthAccountMonitor.GetPushPlus)
 		accounts.PUT("/monitoring/pushplus", h.Admin.OAuthAccountMonitor.UpdatePushPlus)
 		accounts.GET("/upstream-billing-rates", h.Admin.Account.GetUpstreamBillingRates)
+		accounts.GET("/monitoring/email", h.Admin.OAuthAccountMonitor.GetEmail)
+		accounts.PUT("/monitoring/email", h.Admin.OAuthAccountMonitor.UpdateEmail)
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)
 		accounts.PUT("/upstream-billing-probe/settings", h.Admin.Account.UpdateUpstreamBillingProbeSettings)
 		accounts.POST("/upstream-billing-probe/batch", h.Admin.Account.ProbeUpstreamBillingBatch)

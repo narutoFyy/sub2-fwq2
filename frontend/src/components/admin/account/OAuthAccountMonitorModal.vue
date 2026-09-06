@@ -152,6 +152,16 @@
                           <span>次窗口 {{ formatRemaining(account.state?.secondary_remaining_percent) }}</span>
                           <span>最近检查 {{ formatCheckedAt(account.state?.last_checked_at) }}</span>
                         </div>
+                        <div v-if="account.state && account.state.consecutive_failures > 0" class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-red-600 dark:text-red-400">
+                          <span>连续失败 {{ account.state.consecutive_failures }} 次</span>
+                          <span v-if="account.state.last_error_code">错误码 {{ account.state.last_error_code }}</span>
+                          <span>最近失败 {{ formatCheckedAt(account.state.last_failure_at) }}</span>
+                          <span v-if="account.state.failure_started_at">故障开始 {{ formatCheckedAt(account.state.failure_started_at) }}</span>
+                        </div>
+                        <div v-if="account.state?.last_success_at || account.state?.last_unavailable_notified_at" class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                          <span v-if="account.state.last_success_at">最近成功 {{ formatCheckedAt(account.state.last_success_at) }}</span>
+                          <span v-if="account.state.last_unavailable_notified_at">最近故障告警 {{ formatCheckedAt(account.state.last_unavailable_notified_at) }}</span>
+                        </div>
                         <p v-if="account.state?.error_message" class="mt-2 line-clamp-2 text-xs text-red-600 dark:text-red-400" :title="account.state.error_message">
                           {{ account.state.error_message }}
                         </p>
@@ -166,22 +176,53 @@
 
               <section class="border-b border-gray-200 px-5 py-5 dark:border-dark-600 sm:px-6">
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">检查与告警规则</h3>
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                  <label class="flex min-h-[88px] items-start gap-3 rounded-md border border-gray-200 p-3 dark:border-dark-600">
+                    <input v-model="form.notify_on_quota" type="checkbox" class="mt-0.5 h-4 w-4 flex-none rounded text-primary-600" />
+                    <span>
+                      <span class="block text-sm font-semibold text-gray-900 dark:text-white">低额度提醒</span>
+                      <span class="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">主窗口或次窗口首次低于阈值时提醒，恢复后再次跌破才重新提醒。</span>
+                    </span>
+                  </label>
+                  <label class="flex min-h-[88px] items-start gap-3 rounded-md border border-gray-200 p-3 dark:border-dark-600">
+                    <input v-model="form.notify_on_unavailable" type="checkbox" class="mt-0.5 h-4 w-4 flex-none rounded text-primary-600" />
+                    <span>
+                      <span class="block text-sm font-semibold text-gray-900 dark:text-white">持续不可用提醒</span>
+                      <span class="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">只统计真实请求的账号级失败；单次错误、参数错误和用户取消不提醒。</span>
+                    </span>
+                  </label>
+                </div>
                 <div class="mt-4 grid gap-4 sm:grid-cols-2">
                   <label class="input-label">
                     额度剩余阈值 (%)
                     <input v-model.number="form.quota_threshold_percent" type="number" min="0" max="100" step="1" class="input mt-1 w-full" />
                   </label>
                   <label class="input-label">
-                    检查间隔 (分钟)
+                    额度检查间隔 (分钟)
                     <input v-model.number="form.interval_minutes" type="number" min="1" max="1440" step="1" class="input mt-1 w-full" />
                   </label>
                 </div>
-                <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input v-model="form.notify_on_error" type="checkbox" class="rounded text-primary-600" />账号错误时告警</label>
-                  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input v-model="form.notify_on_quota" type="checkbox" class="rounded text-primary-600" />额度低于阈值时告警</label>
-                  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input v-model="form.notify_on_recovery" type="checkbox" class="rounded text-primary-600" />恢复时发送通知</label>
-                  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"><input v-model="form.repeat_every_check" type="checkbox" class="rounded text-primary-600" />持续异常每次检查通知</label>
-                </div>
+                <details class="mt-4 rounded-md border border-gray-200 dark:border-dark-600">
+                  <summary class="cursor-pointer px-3 py-2.5 text-sm font-medium text-gray-700 marker:text-gray-400 dark:text-gray-200">
+                    高级设置
+                    <span class="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">{{ form.unavailable_failure_threshold }} 次 / {{ form.unavailable_window_minutes }} 分钟，{{ form.unavailable_reminder_minutes }} 分钟追发</span>
+                  </summary>
+                  <div class="grid gap-4 border-t border-gray-200 px-3 py-4 dark:border-dark-600 sm:grid-cols-3">
+                    <label class="input-label">
+                      连续失败次数
+                      <input v-model.number="form.unavailable_failure_threshold" type="number" min="1" max="100" step="1" class="input mt-1 w-full" />
+                    </label>
+                    <label class="input-label">
+                      判定窗口 (分钟)
+                      <input v-model.number="form.unavailable_window_minutes" type="number" min="1" max="1440" step="1" class="input mt-1 w-full" />
+                    </label>
+                    <label class="input-label">
+                      追发间隔 (分钟)
+                      <input v-model.number="form.unavailable_reminder_minutes" type="number" min="1" max="10080" step="1" class="input mt-1 w-full" />
+                    </label>
+                  </div>
+                </details>
+                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">恢复状态只更新到账号列表，不发送恢复通知。</p>
               </section>
 
               <section class="px-5 py-5 sm:px-6">
@@ -214,8 +255,8 @@
                         <button type="button" class="btn btn-secondary px-3" @click="addRecipient">添加</button>
                       </div>
                       <p v-if="recipientError" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ recipientError }}</p>
-                      <div v-if="email.alert.recipients.length" class="mt-3 flex flex-wrap gap-2">
-                        <span v-for="recipient in email.alert.recipients" :key="recipient" class="inline-flex items-center gap-1.5 rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-dark-700 dark:text-gray-200">
+                      <div v-if="email.recipients.length" class="mt-3 flex flex-wrap gap-2">
+                        <span v-for="recipient in email.recipients" :key="recipient" class="inline-flex items-center gap-1.5 rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-dark-700 dark:text-gray-200">
                           {{ recipient }}
                           <button type="button" class="text-gray-400 hover:text-red-600" :aria-label="`移除 ${recipient}`" @click="removeRecipient(recipient)">
                             <Icon name="x" size="xs" />
@@ -296,10 +337,10 @@ import Icon from '@/components/icons/Icon.vue'
 import type {
   OAuthAccountMonitorAccountOverview,
   OAuthAccountMonitorConfig,
+  OAuthMonitorEmailConfig,
   OAuthAccountMonitorOverview,
   OAuthMonitorPushPlusConfig
 } from '@/api/admin/accounts'
-import type { EmailNotificationConfig } from '@/api/admin/ops'
 
 const props = withDefaults(defineProps<{
   show: boolean
@@ -320,7 +361,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   close: []
-  save: [config: OAuthAccountMonitorConfig, push: OAuthMonitorPushPlusConfig, email: EmailNotificationConfig]
+  save: [config: OAuthAccountMonitorConfig, push: OAuthMonitorPushPlusConfig, email: OAuthMonitorEmailConfig]
   refresh: []
   retry: []
   run: []
@@ -331,12 +372,16 @@ const defaultConfig = (): OAuthAccountMonitorConfig => ({
   account_ids: [],
   quota_threshold_percent: 20,
   interval_minutes: 5,
-  notify_on_error: true,
+  notify_on_error: false,
   notify_on_quota: true,
-  notify_on_recovery: true,
+  notify_on_recovery: false,
   notify_email: true,
   notify_pushplus: true,
-  repeat_every_check: true
+  repeat_every_check: false,
+  notify_on_unavailable: true,
+  unavailable_failure_threshold: 3,
+  unavailable_window_minutes: 15,
+  unavailable_reminder_minutes: 60
 })
 
 const defaultPush = (): OAuthMonitorPushPlusConfig => ({
@@ -347,34 +392,11 @@ const defaultPush = (): OAuthMonitorPushPlusConfig => ({
   channel: ''
 })
 
-const defaultEmail = (): EmailNotificationConfig => ({
-  alert: {
-    enabled: false,
-    recipients: [],
-    min_severity: '',
-    rate_limit_per_hour: 100,
-    batching_window_seconds: 0,
-    include_resolved_alerts: true
-  },
-  report: {
-    enabled: false,
-    recipients: [],
-    daily_summary_enabled: false,
-    daily_summary_schedule: '0 9 * * *',
-    weekly_summary_enabled: false,
-    weekly_summary_schedule: '0 9 * * 1',
-    error_digest_enabled: false,
-    error_digest_schedule: '0 * * * *',
-    error_digest_min_count: 1,
-    account_health_enabled: false,
-    account_health_schedule: '0 9 * * *',
-    account_health_error_rate_threshold: 10
-  }
-})
+const defaultEmail = (): OAuthMonitorEmailConfig => ({ enabled: false, recipients: [] })
 
 const form = reactive<OAuthAccountMonitorConfig>(defaultConfig())
 const push = reactive<OAuthMonitorPushPlusConfig>(defaultPush())
-const email = reactive<EmailNotificationConfig>(defaultEmail())
+const email = reactive<OAuthMonitorEmailConfig>(defaultEmail())
 const recipientInput = ref('')
 const recipientError = ref('')
 const drawerRef = ref<HTMLElement | null>(null)
@@ -387,10 +409,10 @@ const selectedSummary = computed(() => {
 })
 
 const emailChannelEnabled = computed({
-  get: () => form.notify_email && email.alert.enabled,
+  get: () => form.notify_email && email.enabled,
   set: (enabled: boolean) => {
     form.notify_email = enabled
-    email.alert.enabled = enabled
+    email.enabled = enabled
   }
 })
 
@@ -403,7 +425,7 @@ const pushChannelEnabled = computed({
 })
 
 const channelValidationError = computed(() => {
-  if (emailChannelEnabled.value && email.alert.recipients.length === 0) {
+  if (emailChannelEnabled.value && email.recipients.length === 0) {
     return '启用邮件通知后至少需要一个管理员收件人。'
   }
   if (pushChannelEnabled.value && !push.token.trim()) {
@@ -428,11 +450,8 @@ watch(
       .map((account) => account.account_id)
 
     Object.assign(push, defaultPush(), overview.pushplus)
-    const fallbackEmail = defaultEmail()
-    Object.assign(email.alert, fallbackEmail.alert, overview.email?.alert ?? {})
-    email.alert.recipients = [...(overview.email?.alert?.recipients ?? [])]
-    Object.assign(email.report, fallbackEmail.report, overview.email?.report ?? {})
-    email.report.recipients = [...(overview.email?.report?.recipients ?? [])]
+    Object.assign(email, defaultEmail(), overview.email)
+    email.recipients = [...(overview.email?.recipients ?? [])]
   },
   { immediate: true }
 )
@@ -511,12 +530,12 @@ function addRecipient() {
     recipientError.value = '请输入有效的邮箱地址。'
     return
   }
-  if (!email.alert.recipients.includes(value)) email.alert.recipients.push(value)
+  if (!email.recipients.includes(value)) email.recipients.push(value)
   recipientInput.value = ''
 }
 
 function removeRecipient(recipient: string) {
-  email.alert.recipients = email.alert.recipients.filter((value) => value !== recipient)
+  email.recipients = email.recipients.filter((value) => value !== recipient)
 }
 
 function submit() {
@@ -525,10 +544,7 @@ function submit() {
     'save',
     { ...form, account_ids: [...form.account_ids] },
     { ...push },
-    {
-      alert: { ...email.alert, recipients: [...email.alert.recipients] },
-      report: { ...email.report, recipients: [...email.report.recipients] }
-    }
+    { ...email, recipients: [...email.recipients] }
   )
 }
 </script>

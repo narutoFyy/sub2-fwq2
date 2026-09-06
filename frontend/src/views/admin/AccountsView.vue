@@ -567,8 +567,7 @@ import { sanitizeUrl } from '@/utils/url'
 import { getFloatingPanelPosition } from '@/utils/floatingPanel'
 import { formatMultiplier } from '@/utils/formatters'
 import type { Account, AccountListItem, AccountPlatform, AccountSchedulerGroupScore, AccountType, AccountUsageInfo, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, UpstreamBillingProbeSnapshot } from '@/types'
-import type { OAuthAccountMonitorConfig, OAuthAccountMonitorOverview, OAuthMonitorPushPlusConfig } from '@/api/admin/accounts'
-import type { EmailNotificationConfig } from '@/api/admin/ops'
+import type { OAuthAccountMonitorConfig, OAuthAccountMonitorOverview, OAuthMonitorEmailConfig, OAuthMonitorPushPlusConfig } from '@/api/admin/accounts'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -2052,14 +2051,14 @@ const refreshOAuthMonitor = async () => {
     loadingOAuthMonitor.value = false
   }
 }
-const saveOAuthMonitor = async (config: OAuthAccountMonitorConfig, push: OAuthMonitorPushPlusConfig, email: EmailNotificationConfig) => {
+const saveOAuthMonitor = async (config: OAuthAccountMonitorConfig, push: OAuthMonitorPushPlusConfig, email: OAuthMonitorEmailConfig) => {
   savingOAuthMonitor.value = true
   oauthMonitorError.value = ''
   oauthMonitorNotice.value = ''
   const completedSteps: string[] = []
   let activeStep = '邮件通知配置'
   try {
-    await adminAPI.ops.updateEmailNotificationConfig(email)
+    await adminAPI.accounts.updateOAuthMonitorEmailConfig(email)
     completedSteps.push(activeStep)
     activeStep = 'PushPlus 配置'
     await adminAPI.accounts.updateOAuthMonitorPushPlusConfig(push)
