@@ -1,0 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Noto+Serif+SC:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap');
+
+.chat-shell {
+  --chat-bg: oklch(0.975 0.012 85);
+  --chat-bg-raised: oklch(0.99 0.008 85);
+  --chat-ink: oklch(0.28 0.02 55);
+  --chat-muted: oklch(0.5 0.02 60);
+  --chat-line: oklch(0.9 0.016 80);
+  --chat-accent: oklch(0.4 0.045 55);
+  --chat-danger: oklch(0.48 0.12 25);
+  --chat-user: oklch(0.96 0.014 80);
+  --chat-ui: 'Instrument Sans', 'Segoe UI', sans-serif;
+  --chat-serif: 'Source Serif 4', 'Noto Serif SC', 'Songti SC', serif;
+  min-height: 100vh;
+  background: var(--chat-bg);
+  color: var(--chat-ink);
+  font-family: var(--chat-ui);
+}
+
+.dark .chat-shell {
+  --chat-bg: oklch(0.18 0.015 60);
+  --chat-bg-raised: oklch(0.22 0.016 60);
+  --chat-ink: oklch(0.93 0.015 85);
+  --chat-muted: oklch(0.72 0.02 80);
+  --chat-line: oklch(0.3 0.016 60);
+  --chat-accent: oklch(0.82 0.04 75);
+  --chat-danger: oklch(0.78 0.1 25);
+  --chat-user: oklch(0.24 0.018 60);
+}
+
+.chat-shell button,
+.chat-shell select,
+.chat-shell textarea {
+  font-family: inherit;
+}
+
+.chat-shell a {
+  color: var(--chat-accent);
+  text-decoration: none;
+}
+
+.chat-shell a:hover {
+  text-decoration: underline;
+}
+
+.chat-md {
+  font-family: var(--chat-serif);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.chat-md > *:first-child {
+  margin-top: 0;
+}
+
+.chat-md > *:last-child {
+  margin-bottom: 0;
+}
+
+.chat-md p,
+.chat-md ul,
+.chat-md ol,
+.chat-md pre,
+.chat-md blockquote {
+  margin: 0.85em 0;
+}
+
+.chat-md pre {
+  overflow-x: auto;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--chat-line);
+  border-radius: 0.75rem;
+  background: var(--chat-bg-raised);
+  font-family: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.chat-md code {
+  font-family: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.chat-md pre code {
+  font-size: inherit;
+}
+
+.chat-md :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border-radius: 0.3em;
+  background: color-mix(in oklch, var(--chat-line) 70%, transparent);
+}

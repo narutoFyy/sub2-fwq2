@@ -159,18 +159,22 @@ Pre-migration backup verified on `2026-08-18`:
 
 ## Sub2API Deployment State
 
-Observed and verified on `2026-08-18`:
+Observed and verified on `2026-09-07` after the in-site chat frontend release (`0.2.2`):
 
-- `.159` and `.189` run the current Sub2API replicas from `/opt/sub2api-153/bin/sub2api` on port `18080`.
-- Both replicas use the same PostgreSQL and Redis services on `.128`.
-- Both replicas remained active on `18080`; unauthenticated `/api/v1/auth/me` returned `401`. Their `/healthz` route currently returns HTTP `200` through the SPA fallback, so use service state, listener state, and the auth API check together rather than treating that route alone as a process-health proof.
-- The copied source is `/opt/sub2api-153/source` on each node.
-- Source commit is `f18451e56f15b31ef602ab238037b56c3522b19f`, plus the uncommitted launch-campaign files from `.153`.
-- Runtime binary SHA256 is `a85b3273ff3c112084108ec01a2fe2868e6d722b3a84151dbebc57c110a7761e` on the migrated application nodes `.159` and `.189`; `.153` is the legacy source/reference copy.
-- The shared database had `169` users and `105` public tables after the additive draw migration; all four `token_draw_*` tables were empty immediately after deployment.
-- `.153:8080` remained active and returned `200` from `/healthz` after migration, but it is deprecated and is not part of the current production path.
+- `.159` and `.189` run Sub2API replicas from `/opt/sub2api-153/bin/sub2api` on port `18080` via `sub2api-153.service`.
+- Both replicas use the same PostgreSQL and Redis services on `.128`. Environment remains `/opt/sub2api-153/app.env`.
+- Rolling order for binary releases: verify `.159` first, then copy the verified candidate to `.189` over private `10.0.0.0/24` and promote. Keep existing services online except the Sub2API unit restart.
+- Live binary SHA256 on both application nodes: `b10195669d0056f45fdfb526009a05c2e4574f63f7c5d931c81915bc6e831e88`.
+- Single rollback binary on both nodes: `/opt/sub2api-153/bin/sub2api.rollback`, SHA256 `fed60a722973b6284e4282c07213793754eb5e8d4e33c51c9e698c40e6ee0de6` (previous `2026-09-06` production).
+- Candidate copy is also at `/opt/sub2api-153/stage/sub2api-0.2.2-chat` with the live digest. Future releases should replace this staged file rather than accumulate extra binaries under `bin/`.
+- This release embeds the Vue chat page at `/chat`. No database migration. History is browser-local IndexedDB only.
+- Unauthenticated `/api/v1/auth/me` returns `401`. `GET /chat` returns `200` SPA HTML. The chat chunk `assets/ChatView-CU8UL5RW.js` returns `200`.
+- Public checks through Cloudflare: `https://yf-mail.com/chat` `200`, `https://yf-mail.com/assets/ChatView-CU8UL5RW.js` `200`, `https://yf-mail.com/api/v1/auth/me` `401`.
+- `/healthz` still returns HTTP `200` through the SPA fallback, so use service state, listener state, and the auth API check together rather than treating that route alone as a process-health proof.
+- The copied source tree `/opt/sub2api-153/source` on the servers was not updated in this frontend-embed binary release. Do not assume GitHub or that source tree is newer than the live binary.
+- `.153:8080` remains deprecated and is not part of the current production path.
 
-Do not assume GitHub is newer than production. For future releases, compare the current `.159`/`.189` deployment with the legacy `.153` source and runtime before replacing either replica.
+Future Sub2API binary releases: keep live `bin/sub2api` plus exactly one `bin/sub2api.rollback`. Before promoting a verified candidate, copy the current live binary to the rollback slot. After verification, delete only the previous rollback, not `app.env`, `data/`, source backups, or shared database/Redis/card-gift services.
 
 ## Recent `.153` Database Operation
 
@@ -247,6 +251,8 @@ systemctl is-active sub2api-153.service
 ss -lntp | grep ':18080'
 curl -fsS http://127.0.0.1:18080/healthz
 curl -i http://127.0.0.1:18080/api/v1/auth/me
+curl -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/chat
+grep -a -q ChatView /opt/sub2api-153/bin/sub2api && echo chat-embedded
 
 # The draw preview exists only on .159.
 systemctl is-active token-draw-preview.service

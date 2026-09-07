@@ -158,6 +158,7 @@ export default {
   // Navigation
   nav: {
     dashboard: '仪表盘',
+    chat: '聊天',
     announcements: '公告',
     apiKeys: 'API 密钥',
     batchImage: '批量生图',
