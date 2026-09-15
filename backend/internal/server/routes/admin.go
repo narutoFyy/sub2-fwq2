@@ -31,6 +31,15 @@ func RegisterAdminRoutes(
 	admin.Use(gin.HandlerFunc(auditLog))
 	admin.Use(middleware.AdminComplianceGuard(settingService))
 	{
+		// OpenAI 降智雷达配置、手动执行和 SVG 人工审核。
+		radar := admin.Group("/model-radar")
+		{
+			radar.GET("/overview", h.Admin.ModelRadar.AdminOverview)
+			radar.PUT("/configs", h.Admin.ModelRadar.UpdateConfigs)
+			radar.POST("/run", h.Admin.ModelRadar.RunNow)
+			radar.PUT("/results/:id/review", h.Admin.ModelRadar.ReviewResult)
+		}
+
 		// 部署与运营合规确认
 		registerAdminComplianceRoutes(admin, h)
 
@@ -463,6 +472,8 @@ func registerOpenAIOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		openai.GET("/accounts/:id/quota", h.Admin.OpenAIOAuth.QueryQuota)
 		openai.POST("/accounts/:id/quota/refresh", h.Admin.OpenAIOAuth.RefreshQuota)
 		openai.POST("/accounts/:id/reset-quota", h.Admin.OpenAIOAuth.ResetQuota)
+		openai.GET("/low-cost-probe/states", h.Admin.Account.GetOpenAILowCostProbeStates)
+		openai.POST("/low-cost-probe/run", h.Admin.Account.RunOpenAILowCostProbe)
 	}
 }
 
@@ -568,6 +579,8 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		adminSettings.GET("", h.Admin.Setting.GetSettings)
 		adminSettings.PUT("", h.Admin.Setting.UpdateSettings)
+		adminSettings.GET("/openai-low-cost-probe", h.Admin.Account.GetOpenAILowCostProbeSettings)
+		adminSettings.PUT("/openai-low-cost-probe", h.Admin.Account.UpdateOpenAILowCostProbeSettings)
 		adminSettings.POST("/test-smtp", h.Admin.Setting.TestSMTPConnection)
 		adminSettings.POST("/send-test-email", h.Admin.Setting.SendTestEmail)
 		adminSettings.GET("/email-templates", h.Admin.Setting.ListEmailTemplates)

@@ -686,6 +686,9 @@ func (h *openAIAccountCandidateHeap) Pop() any {
 }
 
 func isOpenAIAccountCandidateBetter(left openAIAccountCandidateScore, right openAIAccountCandidateScore) bool {
+	if preference := compareOpenAILowCostProbePreference(left.account, right.account); preference != 0 {
+		return preference < 0
+	}
 	if left.score != right.score {
 		return left.score > right.score
 	}
@@ -1076,7 +1079,7 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 			primary = buildOpenAIWeightedSelectionOrder(ranked, req)
 		}
 		if !plan.includeOverflowFallback || groupTopK >= len(pool) {
-			return primary
+			return sortOpenAILowCostProbeCandidateOrder(primary)
 		}
 
 		selected := make(map[int64]struct{}, len(primary))
@@ -1092,7 +1095,7 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 		sort.Slice(overflow, func(i, j int) bool {
 			return isOpenAIAccountCandidateBetter(overflow[i], overflow[j])
 		})
-		return append(primary, overflow...)
+		return sortOpenAILowCostProbeCandidateOrder(append(primary, overflow...))
 	}
 
 	if req.RequireCompact {
@@ -1118,6 +1121,13 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 	return buildSelectionOrder(plan.candidates)
 }
 
+func sortOpenAILowCostProbeCandidateOrder(order []openAIAccountCandidateScore) []openAIAccountCandidateScore {
+	sort.SliceStable(order, func(i, j int) bool {
+		return compareOpenAILowCostProbePreference(order[i].account, order[j].account) < 0
+	})
+	return order
+}
+
 func sortOpenAICompactRetryCandidates(pool []openAIAccountCandidateScore) []openAIAccountCandidateScore {
 	if len(pool) == 0 {
 		return nil
@@ -1125,6 +1135,9 @@ func sortOpenAICompactRetryCandidates(pool []openAIAccountCandidateScore) []open
 	ordered := append([]openAIAccountCandidateScore(nil), pool...)
 	sort.SliceStable(ordered, func(i, j int) bool {
 		a, b := ordered[i], ordered[j]
+		if preference := compareOpenAILowCostProbePreference(a.account, b.account); preference != 0 {
+			return preference < 0
+		}
 		if a.account.Priority != b.account.Priority {
 			return a.account.Priority < b.account.Priority
 		}
@@ -1474,6 +1487,14 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	}
 	if len(filtered) == 0 {
 		return nil, 0, 0, 0, noAvailableOpenAISelectionError(req.RequestedModel, false, filterStats.summary(""))
+	}
+	for _, account := range filtered {
+		if account != nil && account.openAILowCostProbePreferred {
+			// Probe priority is the outermost scheduling tier, so it supersedes
+			// the optional subscription-first partition for this request.
+			req.SubscriptionPriority = false
+			break
+		}
 	}
 
 	loadMap := map[int64]*AccountLoadInfo{}

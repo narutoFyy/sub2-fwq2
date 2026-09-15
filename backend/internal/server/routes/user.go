@@ -25,6 +25,12 @@ func RegisterUserRoutes(
 	// 用户管理面变更类操作入审计（含 TOTP 启用/禁用、step-up 验证、密码修改等安全事件）
 	authenticated.Use(gin.HandlerFunc(auditLog))
 	{
+		// 降智雷达：用户只读查看按 OpenAI 分组汇总的检测结果。
+		radar := authenticated.Group("/model-radar")
+		{
+			radar.GET("/overview", h.Admin.ModelRadar.PublicOverview)
+		}
+
 		// 用户接口
 		user := authenticated.Group("/user")
 		{

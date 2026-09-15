@@ -47,11 +47,14 @@ func ProvideAdminHandlers(
 	affiliateHandler *admin.AffiliateHandler,
 	complianceHandler *admin.ComplianceHandler,
 	auditLogHandler *admin.AuditLogHandler,
+	modelRadarHandler *admin.ModelRadarHandler,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
+	openAILowCostProbe *service.OpenAILowCostProbeService,
 	ollamaCloudUsage *service.OllamaCloudUsageService,
 	oauthAccountMonitor *admin.OAuthAccountMonitorHandler,
 ) *AdminHandlers {
 	accountHandler.SetUpstreamBillingProbeService(upstreamBillingProbe)
+	accountHandler.SetOpenAILowCostProbeService(openAILowCostProbe)
 	accountHandler.SetOllamaCloudUsageService(ollamaCloudUsage)
 	return &AdminHandlers{
 		Dashboard:              dashboardHandler,
@@ -91,6 +94,7 @@ func ProvideAdminHandlers(
 		Affiliate:              affiliateHandler,
 		Compliance:             complianceHandler,
 		AuditLog:               auditLogHandler,
+		ModelRadar:             modelRadarHandler,
 	}
 }
 
@@ -286,6 +290,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewComplianceHandler,
 	admin.NewAuditLogHandler,
 	admin.NewOAuthAccountMonitorHandler,
+	admin.NewModelRadarHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,

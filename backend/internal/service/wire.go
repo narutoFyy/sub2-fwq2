@@ -272,6 +272,12 @@ func ProvideAccountTestService(
 	return service
 }
 
+func ProvideModelRadarService(repo ModelRadarRepository, accountRepo AccountRepository, groupRepo GroupRepository, accountTest *AccountTestService) *ModelRadarService {
+	svc := NewModelRadarService(repo, accountRepo, groupRepo, accountTest)
+	svc.Start()
+	return svc
+}
+
 func ProvideGrokQuotaService(
 	accountRepo AccountRepository,
 	proxyRepo ProxyRepository,
@@ -876,7 +882,9 @@ var ProviderSet = wire.NewSet(
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
 	ProvideAccountTestService,
+	ProvideModelRadarService,
 	ProvideUpstreamBillingProbeService,
+	ProvideOpenAILowCostProbeService,
 	ProvideOAuthAccountMonitorService,
 	ProvideOllamaCloudUsageService,
 	ProvideSettingService,

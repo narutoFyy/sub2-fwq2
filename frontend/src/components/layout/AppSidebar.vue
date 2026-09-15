@@ -325,6 +325,14 @@ const KeyIcon = {
     )
 }
 
+const RadarIcon = {
+  render: () => h('svg', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' }, [
+    h('circle', { cx: '12', cy: '12', r: '8.25' }),
+    h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', d: 'M12 12l5.25-5.25M12 3.75v2.25M3.75 12H6' }),
+    h('circle', { cx: '12', cy: '12', r: '1.25', fill: 'currentColor', stroke: 'none' })
+  ])
+}
+
 const BatchImageIcon = {
   render: () =>
     h(
@@ -740,6 +748,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   items.push(
     { path: '/chat', label: t('nav.chat'), icon: ChatIcon },
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
+    { path: '/reset-radar', label: t('nav.resetRadar'), icon: RadarIcon },
     { path: '/batch-image', label: t('nav.batchImage'), icon: BatchImageIcon, hideInSimpleMode: true, featureFlag: flagBatchImageAccess },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
@@ -793,6 +802,7 @@ const customMenuItemsForAdmin = computed(() => {
 const adminNavItems = computed((): NavItem[] => {
   const baseItems: NavItem[] = [
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
+    { path: '/admin/model-radar', label: t('nav.resetRadar'), icon: RadarIcon },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
     { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon, hideInSimpleMode: true },

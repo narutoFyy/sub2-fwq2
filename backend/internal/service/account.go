@@ -83,18 +83,23 @@ type Account struct {
 	headerOverrideCacheRawPtr         uintptr
 	headerOverrideCacheRawLen         int
 	headerOverrideCacheRawSig         uint64
+
+	// Request-local low-cost probe metadata. These fields are never persisted
+	// and do not alter the account's configured priority.
+	openAILowCostProbePreferred bool
+	openAILowCostProbeRate      float64
 }
 
 // AccountProxyBinding is an optional per-account proxy route. When an account
 // has no bindings, callers must fall back to the legacy ProxyID/Concurrency
 // fields for backwards compatibility.
 type AccountProxyBinding struct {
-	AccountID   int64
-	ProxyID     int64
-	Concurrency int
-	Enabled     bool
-	SortOrder   int
-	Proxy       *Proxy
+	AccountID          int64
+	ProxyID            int64
+	Concurrency        int
+	Enabled            bool
+	SortOrder          int
+	Proxy              *Proxy
 	CurrentConcurrency int `json:"-"`
 }
 

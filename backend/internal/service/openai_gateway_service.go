@@ -233,7 +233,7 @@ type OpenAIUsage struct {
 type OpenAIForwardResult struct {
 	RequestID  string
 	ResponseID string
-	// UpstreamHeaders 是直接上游的响应头，用于按账户配置解析上游请求标识。
+	// UpstreamHeaders carries direct upstream response headers used for request attribution.
 	UpstreamHeaders http.Header
 	Usage           OpenAIUsage
 	Model           string // 原始模型（用于响应和日志显示）
@@ -255,16 +255,13 @@ type OpenAIForwardResult struct {
 	// UpstreamEndpoint is the actual upstream API path used for this request.
 	// It avoids guessing when one downstream protocol can use multiple upstream endpoints.
 	UpstreamEndpoint string
-	// ServiceTier is the final tier sent upstream after policy rewriting.
-	// The upstream response declaration remains separate above and is reconciled
-	// at usage-recording time, where the credential protocol is available.
+	// ServiceTier 优先取上游实际响应回显的 tier；缺失时回退到最终出站 body 的
+	// tier。nil 表示两者都无识别 tier。
 	ServiceTier *string
-	// ReasoningEffort is extracted from request body (reasoning.effort) or derived from model suffix
-	// after group policy rewriting and model-family remapping.
+	// ReasoningEffort is extracted from request body (reasoning.effort) or derived from model suffix.
 	// Stored for usage records display; nil means not provided / not applicable.
 	ReasoningEffort *string
-	// RequestedReasoningEffort is the client-requested effort before mapping.
-	// Empty/nil means it should fall back to ReasoningEffort at persistence.
+	// RequestedReasoningEffort is the client-requested effort before policy mapping.
 	RequestedReasoningEffort *string
 	Stream                   bool
 	OpenAIWSMode             bool
@@ -326,9 +323,7 @@ func SetActualOpenAIUpstreamEndpoint(c *gin.Context, endpoint string) {
 	}
 }
 
-// ClearActualOpenAIUpstreamEndpoint 清理当前转发尝试记录的端点。
-// Handler 会在账号 failover 尝试间复用同一个 Gin context，因此每次尝试
-// 都必须从无残留状态开始。
+// ClearActualOpenAIUpstreamEndpoint clears the endpoint between failover attempts.
 func ClearActualOpenAIUpstreamEndpoint(c *gin.Context) {
 	if c == nil {
 		return
@@ -450,8 +445,9 @@ type OpenAIGatewayService struct {
 	channelService              *ChannelService
 	balanceNotifyService        *BalanceNotifyService
 	settingService              *SettingService
-	userPlatformQuotaRepo       UserPlatformQuotaRepository
+	openAILowCostProbe          *OpenAILowCostProbeService
 	oauthAccountOutcomeRecorder OAuthAccountRequestOutcomeRecorder
+	userPlatformQuotaRepo       UserPlatformQuotaRepository
 	liveAttestation             liveattestation.Provider
 	liveAttestationCipher       SecretEncryptor
 
@@ -492,19 +488,6 @@ type OpenAIGatewayService struct {
 	// 剥离跨账号回带（openai_codex_turn_state.go）。
 	openaiCodexTurnStateOrigins sync.Map
 	openaiCodexTurnStateWrites  atomic.Uint64
-}
-
-func (s *OpenAIGatewayService) SetOAuthAccountRequestOutcomeRecorder(recorder OAuthAccountRequestOutcomeRecorder) {
-	if s != nil {
-		s.oauthAccountOutcomeRecorder = recorder
-	}
-}
-
-func (s *OpenAIGatewayService) ObserveOAuthAccountRequestOutcome(ctx context.Context, account *Account, requestID string, success bool, observedErr error) {
-	if s == nil || s.oauthAccountOutcomeRecorder == nil {
-		return
-	}
-	s.oauthAccountOutcomeRecorder.RecordRequestOutcome(ctx, account, requestID, success, observedErr)
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -583,6 +566,28 @@ func NewOpenAIGatewayService(
 	}
 	svc.logOpenAIWSModeBootstrap()
 	return svc
+}
+
+// SetOpenAILowCostProbeService attaches the group-scoped probe policy after
+// the gateway and account-test services have been constructed.
+func (s *OpenAIGatewayService) SetOpenAILowCostProbeService(probe *OpenAILowCostProbeService) {
+	if s == nil {
+		return
+	}
+	s.openAILowCostProbe = probe
+}
+
+func (s *OpenAIGatewayService) SetOAuthAccountRequestOutcomeRecorder(recorder OAuthAccountRequestOutcomeRecorder) {
+	if s != nil {
+		s.oauthAccountOutcomeRecorder = recorder
+	}
+}
+
+func (s *OpenAIGatewayService) ObserveOAuthAccountRequestOutcome(ctx context.Context, account *Account, requestID string, success bool, observedErr error) {
+	if s == nil || s.oauthAccountOutcomeRecorder == nil {
+		return
+	}
+	s.oauthAccountOutcomeRecorder.RecordRequestOutcome(ctx, account, requestID, success, observedErr)
 }
 
 // ResolveChannelMapping 解析渠道级模型映射（代理到 ChannelService）
@@ -908,10 +913,7 @@ func (s *OpenAIGatewayService) writeOpenAIWSFallbackErrorResponse(c *gin.Context
 
 	setOpsUpstreamError(c, statusCode, upstreamMessage, "")
 	if account != nil {
-		proxyID, proxyName := opsUpstreamWSProxyAttribution(account)
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-			ProxyID:            proxyID,
-			ProxyName:          proxyName,
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			AccountName:        account.Name,

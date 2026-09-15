@@ -72,6 +72,33 @@ type AccountTestOptions struct {
 	AudioDataURL string
 }
 
+type openAILowCostProbeContextKey struct{}
+type openAIRadarReasoningEffortContextKey struct{}
+
+type openAIAccountTestPayloadOptions struct {
+	Prompt          string
+	MaxOutputTokens int
+	ReasoningEffort string
+}
+
+func withOpenAILowCostProbeContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, openAILowCostProbeContextKey{}, true)
+}
+
+func isOpenAILowCostProbeContext(ctx context.Context) bool {
+	enabled, _ := ctx.Value(openAILowCostProbeContextKey{}).(bool)
+	return enabled
+}
+
+func withOpenAIRadarReasoningEffort(ctx context.Context, effort string) context.Context {
+	return context.WithValue(ctx, openAIRadarReasoningEffortContextKey{}, strings.TrimSpace(effort))
+}
+
+func openAIRadarReasoningEffort(ctx context.Context) string {
+	effort, _ := ctx.Value(openAIRadarReasoningEffortContextKey{}).(string)
+	return strings.TrimSpace(effort)
+}
+
 func firstAccountTestOptions(opts []AccountTestOptions) AccountTestOptions {
 	if len(opts) == 0 {
 		return AccountTestOptions{}
@@ -737,7 +764,14 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	if isOAuth {
 		upstreamTestModelID = normalizeOpenAIModelForUpstream(credentialAccount, testModelID)
 	}
-	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth)
+	payloadOptions := openAIAccountTestPayloadOptions{Prompt: prompt}
+	if isOpenAILowCostProbeContext(ctx) {
+		payloadOptions.MaxOutputTokens = 8
+	}
+	if effort := openAIRadarReasoningEffort(ctx); effort != "" {
+		payloadOptions.ReasoningEffort = effort
+	}
+	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth, payloadOptions)
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may
@@ -804,7 +838,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if isOAuth && s.accountRepo != nil {
+	if isOAuth && s.accountRepo != nil && !isOpenAILowCostProbeContext(ctx) {
 		if updates, err := extractOpenAICodexProbeUpdates(resp); err == nil && len(updates) > 0 {
 			_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
 			mergeAccountExtra(account, updates)
@@ -822,11 +856,11 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 			c.Request = c.Request.WithContext(markAgentIdentityTaskRecoveryTried(ctx))
 			return s.testOpenAIAccountConnection(c, account, modelID, prompt, mode)
 		}
-		if resp.StatusCode == http.StatusTooManyRequests {
+		if resp.StatusCode == http.StatusTooManyRequests && !isOpenAILowCostProbeContext(ctx) {
 			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
 		}
 		// 401 Unauthorized: 标记账号为永久错误
-		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
+		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil && !isOpenAILowCostProbeContext(ctx) {
 			errMsg := fmt.Sprintf("Authentication failed (401): %s", string(body))
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
 		}
@@ -2615,7 +2649,16 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 }
 
 // createOpenAITestPayload creates a test payload for OpenAI Responses API
-func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
+
+func createOpenAITestPayload(modelID string, isOAuth bool, options ...openAIAccountTestPayloadOptions) map[string]any {
+	prompt := "hi"
+	maxOutputTokens := 0
+	if len(options) > 0 {
+		if value := strings.TrimSpace(options[0].Prompt); value != "" {
+			prompt = value
+		}
+		maxOutputTokens = options[0].MaxOutputTokens
+	}
 	payload := map[string]any{
 		"model": modelID,
 		"input": []map[string]any{
@@ -2624,7 +2667,7 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 				"content": []map[string]any{
 					{
 						"type": "input_text",
-						"text": "hi",
+						"text": prompt,
 					},
 				},
 			},
@@ -2639,8 +2682,21 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 
 	// All accounts require instructions for Responses API
 	payload["instructions"] = openai.DefaultInstructions
+	if maxOutputTokens > 0 {
+		payload["max_output_tokens"] = maxOutputTokens
+	}
+	if effort := strings.TrimSpace(optionsValueReasoningEffort(options)); effort != "" {
+		payload["reasoning"] = map[string]any{"effort": effort}
+	}
 
 	return payload
+}
+
+func optionsValueReasoningEffort(options []openAIAccountTestPayloadOptions) string {
+	if len(options) == 0 {
+		return ""
+	}
+	return options[0].ReasoningEffort
 }
 
 func createOpenAIChatCompletionsTestPayload(modelID string, prompt string) map[string]any {
@@ -3111,13 +3167,30 @@ func (s *AccountTestService) sendErrorAndEnd(c *gin.Context, errorMsg string) er
 // RunTestBackground executes an account test in-memory (no real HTTP client),
 // capturing SSE output via httptest.NewRecorder, then parses the result.
 func (s *AccountTestService) RunTestBackground(ctx context.Context, accountID int64, modelID string) (*ScheduledTestResult, error) {
+	return s.runTestBackground(ctx, accountID, modelID, "")
+}
+
+// RunTestBackgroundWithPromptAndReasoning reuses the real account test path
+// with a request-local prompt and OpenAI reasoning effort.
+func (s *AccountTestService) RunTestBackgroundWithPromptAndReasoning(ctx context.Context, accountID int64, modelID, prompt, reasoningEffort string) (*ScheduledTestResult, error) {
+	return s.runTestBackground(withOpenAIRadarReasoningEffort(ctx, reasoningEffort), accountID, modelID, prompt)
+}
+
+// RunOpenAILowCostProbe executes the existing OpenAI connection test with a
+// tiny request budget while keeping probe failures isolated from the account's
+// manually configured enabled/schedulable state.
+func (s *AccountTestService) RunOpenAILowCostProbe(ctx context.Context, accountID int64, modelID string) (*ScheduledTestResult, error) {
+	return s.runTestBackground(withOpenAILowCostProbeContext(ctx), accountID, modelID, "ok")
+}
+
+func (s *AccountTestService) runTestBackground(ctx context.Context, accountID int64, modelID, prompt string) (*ScheduledTestResult, error) {
 	startedAt := time.Now()
 
 	w := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(w)
 	ginCtx.Request = (&http.Request{}).WithContext(ctx)
 
-	testErr := s.TestAccountConnection(ginCtx, accountID, modelID, "", AccountTestModeDefault)
+	testErr := s.TestAccountConnection(ginCtx, accountID, modelID, prompt, AccountTestModeDefault)
 
 	finishedAt := time.Now()
 	body := w.Body.String()

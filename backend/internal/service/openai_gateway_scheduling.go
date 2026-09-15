@@ -1034,6 +1034,7 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 			filterStats.exclude(reason)
 			continue
 		}
+		copyOpenAILowCostProbePreference(fresh, acc)
 		compactTier := 0
 		if requireCompact {
 			compactTier = openAICompactSupportTier(fresh)
@@ -1059,6 +1060,9 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 		a, b := eligible[i], eligible[j]
 		if requireCompact && compactTiers[a.ID] != compactTiers[b.ID] {
 			return compactTiers[a.ID] > compactTiers[b.ID]
+		}
+		if preference := compareOpenAILowCostProbePreference(a, b); preference != 0 {
+			return preference < 0
 		}
 		if rateCmp := rateOrder.compare(a, b); rateCmp != 0 {
 			return rateCmp < 0
@@ -1334,6 +1338,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 				return rateOrder.compare(available[i].account, available[j].account) < 0
 			})
 		}
+		sortOpenAILowCostProbeAccountLoads(available)
 
 		selectionOrder := make([]accountWithLoad, 0, len(available))
 		if requireCompact {
@@ -1390,6 +1395,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 				return rateOrder.compare(ordered[i], ordered[j]) < 0
 			})
 		}
+		sortOpenAILowCostProbeAccounts(ordered)
 		if requireCompact {
 			ordered = prioritizeOpenAICompactAccounts(ordered)
 		}
@@ -1440,6 +1446,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 			return rateOrder.compare(candidates[i], candidates[j]) < 0
 		})
 	}
+	sortOpenAILowCostProbeAccounts(candidates)
 	if requireCompact {
 		candidates = prioritizeOpenAICompactAccounts(candidates)
 	}
@@ -1469,6 +1476,18 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 	return nil, ErrNoAvailableAccounts
 }
 
+func sortOpenAILowCostProbeAccounts(accounts []*Account) {
+	sort.SliceStable(accounts, func(i, j int) bool {
+		return compareOpenAILowCostProbePreference(accounts[i], accounts[j]) < 0
+	})
+}
+
+func sortOpenAILowCostProbeAccountLoads(accounts []accountWithLoad) {
+	sort.SliceStable(accounts, func(i, j int) bool {
+		return compareOpenAILowCostProbePreference(accounts[i].account, accounts[j].account) < 0
+	})
+}
+
 func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, groupID *int64, platform string) ([]Account, error) {
 	platform = NormalizeOpenAICompatiblePlatform(platform)
 	if s.schedulerSnapshot != nil {
@@ -1480,6 +1499,7 @@ func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, grou
 		if platform == PlatformGrok {
 			accounts = s.filterGrokFreeQuotaAccountsForOpenAI(ctx, accounts)
 		}
+		accounts = s.applyOpenAILowCostSchedulingPolicy(ctx, groupID, platform, accounts)
 		return accounts, nil
 	}
 	var accounts []Account
@@ -1498,7 +1518,37 @@ func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, grou
 	if platform == PlatformGrok {
 		accounts = s.filterGrokFreeQuotaAccountsForOpenAI(ctx, accounts)
 	}
+	accounts = s.applyOpenAILowCostSchedulingPolicy(ctx, groupID, platform, accounts)
 	return accounts, nil
+}
+
+func (s *OpenAIGatewayService) applyOpenAILowCostSchedulingPolicy(ctx context.Context, groupID *int64, platform string, accounts []Account) []Account {
+	if s == nil || s.openAILowCostProbe == nil {
+		return accounts
+	}
+	filtered, err := s.openAILowCostProbe.ApplySchedulingPolicy(ctx, groupID, platform, accounts)
+	if err != nil {
+		slog.Warn("openai low-cost scheduling policy read failed; allowing existing candidates",
+			"group_id", derefGroupID(groupID),
+			"error", err)
+		return accounts
+	}
+	return filtered
+}
+
+func (s *OpenAIGatewayService) isOpenAILowCostSchedulingAllowed(ctx context.Context, groupID *int64, platform string, accountID int64) bool {
+	if s == nil || s.openAILowCostProbe == nil {
+		return true
+	}
+	allowed, err := s.openAILowCostProbe.IsAccountSchedulingAllowed(ctx, groupID, platform, accountID)
+	if err != nil {
+		slog.Warn("openai low-cost scheduling gate read failed; allowing account",
+			"group_id", derefGroupID(groupID),
+			"account_id", accountID,
+			"error", err)
+		return true
+	}
+	return allowed
 }
 
 func (s *OpenAIGatewayService) tryAcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int) (*AcquireResult, error) {
@@ -1598,6 +1648,9 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDBBeforeProfit(ct
 		if s.isOpenAIProxyStreamQuarantined(ctx, account) {
 			return nil
 		}
+		if !s.isOpenAILowCostSchedulingAllowed(ctx, groupID, platform, account.ID) {
+			return nil
+		}
 		return account
 	}
 
@@ -1626,6 +1679,10 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDBBeforeProfit(ct
 	if s.isOpenAIProxyStreamQuarantined(ctx, latest) {
 		return nil
 	}
+	if !s.isOpenAILowCostSchedulingAllowed(ctx, groupID, platform, latest.ID) {
+		return nil
+	}
+	copyOpenAILowCostProbePreference(latest, account)
 	return latest
 }
 
@@ -1743,11 +1800,11 @@ func (s *OpenAIGatewayService) newSelectionResult(ctx context.Context, account *
 		}
 	}
 	return attachSelectionProfitGate(ctx, &AccountSelectionResult{
-		Account:     hydrated,
+		Account:      hydrated,
 		ProxyBinding: selectedBinding,
-		Acquired:    acquired,
-		ReleaseFunc: release,
-		WaitPlan:    waitPlan,
+		Acquired:     acquired,
+		ReleaseFunc:  release,
+		WaitPlan:     waitPlan,
 	}), nil
 }
 

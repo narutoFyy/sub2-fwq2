@@ -123,6 +123,8 @@ func provideCleanup(
 	channelMonitorV2Aggregator *service.ChannelMonitorV2Aggregator,
 	quotaFlusher *service.UserPlatformQuotaUsageFlusher,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
+	openAILowCostProbe *service.OpenAILowCostProbeService,
+	modelRadar *service.ModelRadarService,
 	ollamaCloudUsage *service.OllamaCloudUsageService,
 	auditLog *service.AuditLogService,
 	openAIAutoReset *service.OpenAIQuotaAutoResetService,
@@ -141,6 +143,18 @@ func provideCleanup(
 
 		// 应用层清理步骤可并行执行，基础设施资源（Redis/Ent）最后按顺序关闭。
 		parallelSteps := []cleanupStep{
+			{"ModelRadarService", func() error {
+				if modelRadar != nil {
+					modelRadar.Stop()
+				}
+				return nil
+			}},
+			{"OpenAILowCostProbeService", func() error {
+				if openAILowCostProbe != nil {
+					openAILowCostProbe.Stop()
+				}
+				return nil
+			}},
 			{"OAuthAccountMonitorService", func() error {
 				if oauthAccountMonitor != nil {
 					oauthAccountMonitor.Stop()

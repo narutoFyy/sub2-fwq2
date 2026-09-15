@@ -252,6 +252,12 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/reset-radar',
+    name: 'ResetRadar',
+    component: () => import('@/views/user/ResetRadarView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: false, title: 'Reset Radar', titleKey: 'nav.resetRadar' }
+  },
+  {
     path: '/redeem',
     name: 'Redeem',
     component: () => import('@/views/user/RedeemView.vue'),
@@ -459,6 +465,12 @@ const routes: RouteRecordRaw[] = [
       titleKey: 'admin.ops.title',
       descriptionKey: 'admin.ops.description'
     }
+  },
+  {
+    path: '/admin/model-radar',
+    name: 'AdminModelRadar',
+    component: () => import('@/views/admin/ModelRadarView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Reset Radar', titleKey: 'nav.resetRadar' }
   },
   {
     path: '/admin/audit-logs',

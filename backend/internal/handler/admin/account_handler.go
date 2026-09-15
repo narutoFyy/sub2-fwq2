@@ -63,12 +63,17 @@ type AccountHandler struct {
 	tokenCacheInvalidator   service.TokenCacheInvalidator
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
+	openAILowCostProbe      *service.OpenAILowCostProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
 func (h *AccountHandler) SetUpstreamBillingProbeService(probe *service.UpstreamBillingProbeService) {
 	h.upstreamBillingProbe = probe
+}
+
+func (h *AccountHandler) SetOpenAILowCostProbeService(probe *service.OpenAILowCostProbeService) {
+	h.openAILowCostProbe = probe
 }
 
 func (h *AccountHandler) SetOllamaCloudUsageService(usage *service.OllamaCloudUsageService) {
@@ -112,46 +117,46 @@ func NewAccountHandler(
 
 // CreateAccountRequest represents create account request
 type CreateAccountRequest struct {
-	Name                    string         `json:"name" binding:"required"`
-	Notes                   *string        `json:"notes"`
-	Platform                string         `json:"platform" binding:"required"`
-	Type                    string         `json:"type" binding:"required,oneof=oauth setup-token apikey upstream bedrock service_account"`
-	Credentials             map[string]any `json:"credentials" binding:"required"`
-	Extra                   map[string]any `json:"extra"`
-	ProxyID                 *int64         `json:"proxy_id"`
+	Name                    string                    `json:"name" binding:"required"`
+	Notes                   *string                   `json:"notes"`
+	Platform                string                    `json:"platform" binding:"required"`
+	Type                    string                    `json:"type" binding:"required,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Credentials             map[string]any            `json:"credentials" binding:"required"`
+	Extra                   map[string]any            `json:"extra"`
+	ProxyID                 *int64                    `json:"proxy_id"`
 	ProxyBindings           []dto.AccountProxyBinding `json:"proxy_bindings"`
-	Concurrency             int            `json:"concurrency"`
-	Priority                int            `json:"priority"`
-	RateMultiplier          *float64       `json:"rate_multiplier"`
-	LoadFactor              *int           `json:"load_factor"`
-	GroupIDs                []int64        `json:"group_ids"`
-	ExpiresAt               *int64         `json:"expires_at"`
-	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
-	ProbeEnabled            *bool          `json:"upstream_billing_probe_enabled"`
-	ConfirmMixedChannelRisk *bool          `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
+	Concurrency             int                       `json:"concurrency"`
+	Priority                int                       `json:"priority"`
+	RateMultiplier          *float64                  `json:"rate_multiplier"`
+	LoadFactor              *int                      `json:"load_factor"`
+	GroupIDs                []int64                   `json:"group_ids"`
+	ExpiresAt               *int64                    `json:"expires_at"`
+	AutoPauseOnExpired      *bool                     `json:"auto_pause_on_expired"`
+	ProbeEnabled            *bool                     `json:"upstream_billing_probe_enabled"`
+	ConfirmMixedChannelRisk *bool                     `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
 }
 
 // UpdateAccountRequest represents update account request
 // 使用指针类型来区分"未提供"和"设置为0"
 type UpdateAccountRequest struct {
-	Name                    string         `json:"name"`
-	Notes                   *string        `json:"notes"`
-	Type                    string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account"`
-	Credentials             map[string]any `json:"credentials"`
-	Extra                   map[string]any `json:"extra"`
-	ProxyID                 *int64         `json:"proxy_id"`
+	Name                    string                     `json:"name"`
+	Notes                   *string                    `json:"notes"`
+	Type                    string                     `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Credentials             map[string]any             `json:"credentials"`
+	Extra                   map[string]any             `json:"extra"`
+	ProxyID                 *int64                     `json:"proxy_id"`
 	ProxyBindings           *[]dto.AccountProxyBinding `json:"proxy_bindings"`
-	Concurrency             *int           `json:"concurrency"`
-	Priority                *int           `json:"priority"`
-	RateMultiplier          *float64       `json:"rate_multiplier"`
-	LoadFactor              *int           `json:"load_factor"`
-	Status                  string         `json:"status" binding:"omitempty,oneof=active inactive error"`
-	GroupIDs                *[]int64       `json:"group_ids"`
-	ExpiresAt               *int64         `json:"expires_at"`
-	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
-	ProbeEnabled            *bool          `json:"upstream_billing_probe_enabled"`
-	RateSyncEnabled         *bool          `json:"upstream_billing_rate_sync_enabled"`
-	ConfirmMixedChannelRisk *bool          `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
+	Concurrency             *int                       `json:"concurrency"`
+	Priority                *int                       `json:"priority"`
+	RateMultiplier          *float64                   `json:"rate_multiplier"`
+	LoadFactor              *int                       `json:"load_factor"`
+	Status                  string                     `json:"status" binding:"omitempty,oneof=active inactive error"`
+	GroupIDs                *[]int64                   `json:"group_ids"`
+	ExpiresAt               *int64                     `json:"expires_at"`
+	AutoPauseOnExpired      *bool                      `json:"auto_pause_on_expired"`
+	ProbeEnabled            *bool                      `json:"upstream_billing_probe_enabled"`
+	RateSyncEnabled         *bool                      `json:"upstream_billing_rate_sync_enabled"`
+	ConfirmMixedChannelRisk *bool                      `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
 }
 
 // BulkUpdateAccountsRequest represents the payload for bulk editing accounts
