@@ -843,6 +843,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 			_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
 			mergeAccountExtra(account, updates)
 		}
+		if ts := extractOpenAICodexTurnState(resp.Header); ts != "" {
+			RecordGlobalPinnedTurnState(account.ID, ts)
+		}
 	}
 
 	if resp.StatusCode != http.StatusOK {

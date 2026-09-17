@@ -74,6 +74,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	// OpenAI 首个语义输出前只暂存，溯源在 applyAttemptResponseHeaders 真正提交时记录。
 	if stageFirstOutput {
 		stageOpenAICodexTurnState(&attemptResponseHeaders, resp.Header)
+		if ts := extractOpenAICodexTurnState(resp.Header); ts != "" && account != nil {
+			RecordGlobalPinnedTurnState(account.ID, ts)
+		}
 	} else {
 		s.relayOpenAICodexTurnState(c, account, resp.Header)
 	}

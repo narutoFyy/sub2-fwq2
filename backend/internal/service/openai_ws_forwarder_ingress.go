@@ -729,6 +729,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				if stateStore != nil && sessionHash != "" {
 					stateStore.BindSessionTurnState(groupID, sessionHash, bridgeTurnState, s.openAIWSSessionStickyTTL())
 				}
+				if account != nil && account.ID > 0 {
+					s.RecordPinnedTurnState(account.ID, bridgeTurnState)
+				}
 			}
 			responseID := strings.TrimSpace(result.RequestID)
 			if responseID != "" && stateStore != nil {

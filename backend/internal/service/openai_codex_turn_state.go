@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,6 +58,9 @@ func (s *OpenAIGatewayService) relayOpenAICodexTurnState(c *gin.Context, account
 	}
 	c.Writer.Header().Set(canonical, state)
 	s.noteOpenAICodexTurnStateProvenance(c, account)
+	if account != nil && account.ID > 0 {
+		s.RecordPinnedTurnState(account.ID, state)
+	}
 }
 
 // stageOpenAICodexTurnState 将上游 turn-state 暂存到延迟提交的响应头集合
@@ -90,6 +94,9 @@ func (s *OpenAIGatewayService) noteStagedOpenAICodexTurnStateCommitted(c *gin.Co
 		return
 	}
 	s.noteOpenAICodexTurnStateProvenance(c, account)
+	if account != nil && account.ID > 0 {
+		s.RecordPinnedTurnState(account.ID, strings.TrimSpace(staged.Get(openAICodexTurnStateHeader)))
+	}
 }
 
 func extractOpenAICodexTurnState(upstream http.Header) string {
@@ -145,6 +152,73 @@ func (s *OpenAIGatewayService) guardOpenAICodexTurnStateEcho(c *gin.Context, acc
 	}
 	if origin.accountID != account.ID {
 		h.Del(openAICodexTurnStateHeader)
+	}
+}
+
+// 存储每个账号已钉住的最新满血 turn-state (accountID -> string) 全局快照，方便管理端展示
+var globalAccountPinnedTurnStates sync.Map
+
+// RecordPinnedTurnState 缓存该账号成功获得的合法满血 turn-state
+func (s *OpenAIGatewayService) RecordPinnedTurnState(accountID int64, state string) {
+	if accountID <= 0 || strings.TrimSpace(state) == "" {
+		return
+	}
+	if s != nil {
+		s.openaiAccountPinnedTurnStates.Store(accountID, strings.TrimSpace(state))
+	}
+	globalAccountPinnedTurnStates.Store(accountID, strings.TrimSpace(state))
+}
+
+// RecordGlobalPinnedTurnState 跨服务记录已钉住的满血 turn-state
+func RecordGlobalPinnedTurnState(accountID int64, state string) {
+	if accountID <= 0 || strings.TrimSpace(state) == "" {
+		return
+	}
+	globalAccountPinnedTurnStates.Store(accountID, strings.TrimSpace(state))
+}
+
+// GetPinnedTurnState 获取该账号钉住的最新满血 turn-state
+func (s *OpenAIGatewayService) GetPinnedTurnState(accountID int64) string {
+	if s == nil || accountID <= 0 {
+		return ""
+	}
+	if val, ok := s.openaiAccountPinnedTurnStates.Load(accountID); ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	if val, ok := globalAccountPinnedTurnStates.Load(accountID); ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
+}
+
+// HasGlobalPinnedTurnState 判断账号是否已成功钉住满血 turn-state
+func HasGlobalPinnedTurnState(accountID int64) bool {
+	if accountID <= 0 {
+		return false
+	}
+	if val, ok := globalAccountPinnedTurnStates.Load(accountID); ok {
+		if str, ok := val.(string); ok && strings.TrimSpace(str) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// InjectPinnedTurnStateIfMissing 若出站请求未携带 turn-state（如新会话首轮），
+// 且该账号已钉住有效的满血 turn-state，则自动注入，模拟长会话避免冷启动 overload 降载。
+func (s *OpenAIGatewayService) InjectPinnedTurnStateIfMissing(account *Account, h http.Header) {
+	if s == nil || account == nil || h == nil || account.ID <= 0 {
+		return
+	}
+	if strings.TrimSpace(h.Get(openAICodexTurnStateHeader)) != "" {
+		return
+	}
+	if pinned := s.GetPinnedTurnState(account.ID); pinned != "" {
+		h.Set(openAICodexTurnStateHeader, pinned)
 	}
 }
 

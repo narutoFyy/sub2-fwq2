@@ -316,6 +316,7 @@ type Account struct {
 	ParentPrivacyMode           string `json:"parent_privacy_mode,omitempty"`
 	ParentSubscriptionExpiresAt string `json:"parent_subscription_expires_at,omitempty"`
 	ParentChatGPTAccountID      string `json:"parent_chatgpt_account_id,omitempty"`
+	PinnedTurnStateLive         bool   `json:"pinned_turn_state_live"`
 
 	Proxy         *Proxy         `json:"proxy,omitempty"`
 	ProxyBindings []AccountProxyBinding `json:"proxy_bindings,omitempty"`
@@ -426,6 +427,7 @@ type AccountListItem struct {
 	ParentPrivacyMode           string `json:"parent_privacy_mode,omitempty"`
 	ParentSubscriptionExpiresAt string `json:"parent_subscription_expires_at,omitempty"`
 	ParentChatGPTAccountID      string `json:"parent_chatgpt_account_id,omitempty"`
+	PinnedTurnStateLive         bool   `json:"pinned_turn_state_live"`
 
 	Proxy    *Proxy  `json:"proxy,omitempty"`
 	GroupIDs []int64 `json:"group_ids,omitempty"`

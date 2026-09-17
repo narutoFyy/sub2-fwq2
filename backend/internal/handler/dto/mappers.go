@@ -277,6 +277,7 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		GroupIDs:                a.GroupIDs,
 		ParentAccountID:         a.ParentAccountID,
 		QuotaDimension:          a.QuotaDimension,
+		PinnedTurnStateLive:     service.HasGlobalPinnedTurnState(a.ID),
 	}
 	if len(a.ProxyBindings) > 0 {
 		out.ProxyBindings = make([]AccountProxyBinding, 0, len(a.ProxyBindings))
@@ -497,6 +498,7 @@ func AccountListItemFromAccount(a *Account) *AccountListItem {
 		QuotaDimension: a.QuotaDimension, ParentEmail: a.ParentEmail, ParentPlanType: a.ParentPlanType,
 		ParentPrivacyMode: a.ParentPrivacyMode, ParentSubscriptionExpiresAt: a.ParentSubscriptionExpiresAt,
 		ParentChatGPTAccountID: a.ParentChatGPTAccountID, Proxy: a.Proxy, GroupIDs: a.GroupIDs,
+		PinnedTurnStateLive: a.PinnedTurnStateLive,
 	}
 }
 

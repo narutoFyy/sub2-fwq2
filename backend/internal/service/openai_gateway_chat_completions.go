@@ -384,6 +384,12 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	}
 
 	// 9. Handle normal response
+	if resp != nil && account != nil && account.ID > 0 {
+		if ts := extractOpenAICodexTurnState(resp.Header); ts != "" {
+			s.RecordPinnedTurnState(account.ID, ts)
+		}
+		s.relayOpenAICodexTurnState(c, account, resp.Header)
+	}
 	var result *OpenAIForwardResult
 	var handleErr error
 	if clientStream {

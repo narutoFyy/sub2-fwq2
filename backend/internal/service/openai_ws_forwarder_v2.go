@@ -313,6 +313,9 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		if stateStore != nil && sessionHash != "" {
 			stateStore.BindSessionTurnState(groupID, sessionHash, handshakeTurnState, s.openAIWSSessionStickyTTL())
 		}
+		if account != nil && account.ID > 0 {
+			s.RecordPinnedTurnState(account.ID, handshakeTurnState)
+		}
 		if c != nil {
 			c.Header(http.CanonicalHeaderKey(openAIWSTurnStateHeader), handshakeTurnState)
 		}

@@ -61,7 +61,8 @@ const (
 	// 陈旧版本会被优先丢弃（HTTP 200 + 流内 server_is_overloaded）；非官方客户端配不出
 	// 官方身份时整体回退到本常量，因此它必须跟随官方 CLI 的当前发布版本，
 	// 落后多个版本会让这些请求稳定落在被优先丢弃的一侧。
-	codexCLIVersion = "0.146.0"
+	// 已更新至官方最新 Release 版本 (0.154.0)，支持 GPT-6-Astra 等新模型拉取与分发。
+	codexCLIVersion = "0.154.0"
 	// Codex 限额快照仅用于后台展示/诊断，不需要每个成功请求都立即落库。
 	openAICodexSnapshotPersistMinInterval = 30 * time.Second
 	// 配额自动暂停时，超过该时长仍未刷新的 used% 快照视为陈旧，不再据此暂停账号。
@@ -488,6 +489,8 @@ type OpenAIGatewayService struct {
 	// 剥离跨账号回带（openai_codex_turn_state.go）。
 	openaiCodexTurnStateOrigins sync.Map
 	openaiCodexTurnStateWrites  atomic.Uint64
+	// openaiAccountPinnedTurnStates: 账号 ID (int64) → string (最近一次成功捕获的高优先级满血 turn-state)
+	openaiAccountPinnedTurnStates sync.Map
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService

@@ -43,6 +43,30 @@ func TestOpenAICodexTurnStateSeed(t *testing.T) {
 	require.Empty(t, openAICodexTurnStateSeed(nil))
 }
 
+func TestPinnedTurnStateRecordAndInject(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	account := &Account{ID: 123}
+
+	// 初始状态：未钉住
+	reqHeader := http.Header{}
+	svc.InjectPinnedTurnStateIfMissing(account, reqHeader)
+	require.Empty(t, reqHeader.Get(openAICodexTurnStateHeader))
+
+	// 记录钉住状态
+	svc.RecordPinnedTurnState(123, "pinned-blob-for-account-123")
+	require.Equal(t, "pinned-blob-for-account-123", svc.GetPinnedTurnState(123))
+
+	// 缺失时自动注入
+	svc.InjectPinnedTurnStateIfMissing(account, reqHeader)
+	require.Equal(t, "pinned-blob-for-account-123", reqHeader.Get(openAICodexTurnStateHeader))
+
+	// 客户端已有 turn-state 时不覆盖
+	customHeader := http.Header{}
+	customHeader.Set(openAICodexTurnStateHeader, "client-custom-turn-state")
+	svc.InjectPinnedTurnStateIfMissing(account, customHeader)
+	require.Equal(t, "client-custom-turn-state", customHeader.Get(openAICodexTurnStateHeader))
+}
+
 func TestRelayOpenAICodexTurnState_SetsHeaderAndRecordsProvenance(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	account := &Account{ID: 42}
