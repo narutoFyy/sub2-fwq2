@@ -35,9 +35,9 @@
               <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="group.enabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'">{{ group.enabled ? t('common.enabled') : t('common.disabled') }}</span>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <RadarTestResult :label="t('modelRadar.logic')" :result="group.logic" />
-              <RadarTestResult :label="t('modelRadar.drawing')" :result="group.drawing" />
+            <div class="mt-5 space-y-5">
+              <ModelRadarResultPanel :label="t('modelRadar.logic')" :result="group.logic" :fallback-prompt="logicPrompt" />
+              <ModelRadarResultPanel :label="t('modelRadar.drawing')" :result="group.drawing" :fallback-prompt="drawingPrompt" />
             </div>
 
             <div class="mt-5 border-t border-gray-100 pt-4 dark:border-dark-700">
@@ -65,17 +65,20 @@
 </template>
 
 <script setup lang="ts">
-import { defineComponent, h, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Icon from '@/components/icons/Icon.vue'
+import ModelRadarResultPanel from '@/components/model-radar/ModelRadarResultPanel.vue'
 import { modelRadarAPI, type ModelRadarOverview, type ModelRadarResult } from '@/api/modelRadar'
 
 const { t } = useI18n()
 const overview = ref<ModelRadarOverview | null>(null)
 const loading = ref(false)
 const error = ref(false)
+const logicPrompt = 'Solve this logic question. What is the next number in the sequence 1, 3, 6, 10, 15, ? Explain briefly, then finish with exactly "Answer: 21".'
+const drawingPrompt = '创建一个HTML，内容是SVG绘制一个鹈鹕骑自行车的2D动画'
 
 const load = async () => {
   loading.value = true
@@ -86,22 +89,9 @@ const load = async () => {
 const formatTime = (value?: string) => value ? new Date(value).toLocaleString() : t('modelRadar.noData')
 const resultLabel = (result?: ModelRadarResult) => {
   if (!result) return t('modelRadar.noData')
-  return result.status === 'passed' ? t('modelRadar.passed') : result.status === 'failed' ? t('modelRadar.failed') : result.status === 'request_failed' ? t('modelRadar.requestFailed') : t('modelRadar.pendingReview')
+  return result.status === 'passed' || result.status === 'pending_review' ? t('modelRadar.passed') : result.status === 'failed' ? t('modelRadar.failed') : t('modelRadar.requestFailed')
 }
-const slotClass = (status: string) => status === 'passed' ? 'bg-emerald-500' : status === 'failed' ? 'bg-red-500' : status === 'pending_review' ? 'bg-amber-400' : status === 'request_failed' ? 'bg-gray-400' : 'bg-gray-200 dark:bg-dark-600'
+const slotClass = (status: string) => status === 'passed' || status === 'pending_review' ? 'bg-emerald-500' : status === 'failed' ? 'bg-red-500' : status === 'request_failed' ? 'bg-gray-400' : 'bg-gray-200 dark:bg-dark-600'
 const timeline = (items: ModelRadarResult[]) => Array.from({ length: 16 }, (_, index) => { const item = items[index]; return { key: item?.id ?? `empty-${index}`, status: item?.status ?? 'empty', title: item ? `${resultLabel(item)} · ${formatTime(item.detected_at)}` : t('modelRadar.noData') } })
-const RadarTestResult = defineComponent({
-  props: { label: { type: String, required: true }, result: { type: Object as () => ModelRadarResult | undefined, default: undefined } },
-  setup(props) {
-    const { t: childT } = useI18n()
-    return () => h('div', { class: 'rounded-xl border border-gray-100 p-3 dark:border-dark-700' }, [
-      h('p', { class: 'text-xs text-gray-500 dark:text-gray-400' }, props.label),
-      h('div', { class: 'mt-2 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'text-sm font-semibold text-gray-900 dark:text-white' }, props.result ? (props.result.status === 'passed' ? childT('modelRadar.passed') : props.result.status === 'failed' ? childT('modelRadar.failed') : props.result.status === 'pending_review' ? childT('modelRadar.pendingReview') : childT('modelRadar.requestFailed')) : childT('modelRadar.noData')),
-        props.result ? h('span', { class: 'text-xs text-gray-500 dark:text-gray-400' }, t('modelRadar.latency', { ms: props.result.latency_ms })) : null
-      ])
-    ])
-  }
-})
 onMounted(load)
 </script>

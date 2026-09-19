@@ -7,6 +7,7 @@ export interface ModelRadarResult {
   group_id: number
   model_id: string
   test_type: 'logic' | 'drawing'
+  prompt: string
   status: RadarStatus
   response_text?: string
   error_message?: string

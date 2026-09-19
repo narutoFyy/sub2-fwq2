@@ -47,6 +47,7 @@ type ModelRadarResult struct {
 	GroupID      int64      `json:"group_id"`
 	ModelID      string     `json:"model_id"`
 	TestType     string     `json:"test_type"`
+	Prompt       string     `json:"prompt"`
 	Status       string     `json:"status"`
 	ResponseText string     `json:"response_text,omitempty"`
 	ErrorMessage string     `json:"error_message,omitempty"`
@@ -178,16 +179,23 @@ func (s *ModelRadarService) GetOverview(ctx context.Context, admin bool) (*Model
 			}
 		}
 		for _, result := range resultByGroup[group.ID] {
-			copy := *result
-			if !admin {
-				copy.ResponseText, copy.ErrorMessage, copy.ReviewedBy = "", "", nil
+			current := *result
+			current.Prompt = modelRadarPrompt(result.TestType)
+			if current.TestType == ModelRadarTestTypeDrawing && current.Status == ModelRadarStatusPending && containsRadarSVG(current.ResponseText) {
+				current.Status = ModelRadarStatusPassed
+				current.ReviewStatus = ""
 			}
-			item.Timeline = append(item.Timeline, copy)
+			if !admin {
+				current.ErrorMessage, current.ReviewedBy = "", nil
+			}
+			timeline := current
+			timeline.ResponseText, timeline.ErrorMessage, timeline.ReviewedBy = "", "", nil
+			item.Timeline = append(item.Timeline, timeline)
 			if result.TestType == ModelRadarTestTypeLogic && item.Logic == nil {
-				item.Logic = &copy
+				item.Logic = &current
 			}
 			if result.TestType == ModelRadarTestTypeDrawing && item.Drawing == nil {
-				item.Drawing = &copy
+				item.Drawing = &current
 			}
 		}
 		out.Groups = append(out.Groups, item)
@@ -329,7 +337,7 @@ func (s *ModelRadarService) runGroup(ctx context.Context, groupID int64) error {
 	probes := []struct{ typ, prompt string }{{ModelRadarTestTypeLogic, radarLogicPrompt}, {ModelRadarTestTypeDrawing, radarDrawingPrompt}}
 	for _, probe := range probes {
 		result, callErr := s.accountTest.RunTestBackgroundWithPromptAndReasoning(ctx, accountID, cfg.ModelID, probe.prompt, cfg.ReasoningEffort)
-		stored := &ModelRadarResult{GroupID: groupID, ModelID: cfg.ModelID, TestType: probe.typ, DetectedAt: s.now()}
+		stored := &ModelRadarResult{GroupID: groupID, ModelID: cfg.ModelID, TestType: probe.typ, Prompt: probe.prompt, DetectedAt: s.now()}
 		if callErr != nil || result == nil || result.Status != "success" {
 			stored.Status = ModelRadarStatusRequest
 			if callErr != nil {
@@ -347,9 +355,8 @@ func (s *ModelRadarService) runGroup(ctx context.Context, groupID int64) error {
 					stored.Status = ModelRadarStatusFailed
 				}
 			} else {
-				if strings.Contains(strings.ToLower(result.ResponseText), "<svg") {
-					stored.Status = ModelRadarStatusPending
-					stored.ReviewStatus = "pending"
+				if containsRadarSVG(result.ResponseText) {
+					stored.Status = ModelRadarStatusPassed
 				} else {
 					stored.Status = ModelRadarStatusFailed
 				}
@@ -367,6 +374,17 @@ func truncateRadarResponse(value string) string {
 		return value
 	}
 	return value[:modelRadarMaxResponseBytes]
+}
+
+func containsRadarSVG(value string) bool {
+	return strings.Contains(strings.ToLower(value), "<svg")
+}
+
+func modelRadarPrompt(testType string) string {
+	if testType == ModelRadarTestTypeDrawing {
+		return radarDrawingPrompt
+	}
+	return radarLogicPrompt
 }
 
 func (s *ModelRadarService) finishRun(ctx context.Context, cfg *ModelRadarConfig) error {
@@ -391,7 +409,7 @@ func (s *ModelRadarService) ReviewResult(ctx context.Context, resultID int64, st
 }
 
 const radarLogicPrompt = `Solve this logic question. What is the next number in the sequence 1, 3, 6, 10, 15, ? Explain briefly, then finish with exactly "Answer: 21".`
-const radarDrawingPrompt = `Return a complete standalone SVG document only. Draw a simple animated radar sweep: a circular radar grid, one green sweep line, and a pulsing dot. Use valid SVG with a short CSS or SMIL animation. Do not use markdown fences.`
+const radarDrawingPrompt = `创建一个HTML，内容是SVG绘制一个鹈鹕骑自行车的2D动画`
 
 func (s *ModelRadarService) PublicOverview(ctx context.Context) (*ModelRadarOverview, error) {
 	return s.GetOverview(ctx, false)
