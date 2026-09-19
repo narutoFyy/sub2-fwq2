@@ -171,11 +171,12 @@ func (s *ModelRadarService) GetOverview(ctx context.Context, admin bool) (*Model
 	}
 	out := &ModelRadarOverview{Groups: make([]ModelRadarGroupOverview, 0, len(groups)), IntervalMins: 30, IQStatus: "未开发", RecommendStatus: "未开发"}
 	for _, group := range groups {
-		if !admin && group.IsExclusive {
+		cfg := configByGroup[group.ID]
+		if !admin && (group.IsExclusive || cfg == nil || !cfg.Enabled) {
 			continue
 		}
 		item := ModelRadarGroupOverview{GroupID: group.ID, GroupName: group.Name, ModelID: DefaultRadarModel(&group), ReasoningEffort: "medium", Timeline: []ModelRadarResult{}}
-		if cfg := configByGroup[group.ID]; cfg != nil {
+		if cfg != nil {
 			item.ModelID, item.ReasoningEffort, item.Enabled, item.NextRunAt, item.LastRunAt = cfg.ModelID, cfg.ReasoningEffort, cfg.Enabled, cfg.NextRunAt, cfg.LastRunAt
 			if item.ModelID == "" {
 				item.ModelID = DefaultRadarModel(&group)
