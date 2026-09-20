@@ -295,7 +295,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	oAuthAccountMonitorService := service.ProvideOAuthAccountMonitorService(accountRepository, oAuthAccountMonitorStateRepository, settingRepository, openAIQuotaService, opsRepository, opsService, emailService, leaderLockCache, db)
 	oAuthAccountMonitorHandler := admin.NewOAuthAccountMonitorHandler(oAuthAccountMonitorService)
 	modelRadarHandler := admin.NewModelRadarHandler(modelRadarService)
-	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, cnProviderHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, pluginHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, promptAdminHandler, paymentHandler, affiliateHandler, complianceHandler, auditLogHandler, modelRadarHandler, upstreamBillingProbeService, openAILowCostProbeService, ollamaCloudUsageService, oAuthAccountMonitorHandler)
+	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, cnProviderHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, pluginHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, promptAdminHandler, paymentHandler, affiliateHandler, complianceHandler, auditLogHandler, modelRadarHandler, upstreamBillingProbeService, settingService, openAILowCostProbeService, ollamaCloudUsageService, oAuthAccountMonitorHandler)
 	usageRecordWorkerPool := service.NewUsageRecordWorkerPool(configConfig)
 	userMsgQueueCache := repository.NewUserMsgQueueCache(redisClient)
 	userMessageQueueService := service.ProvideUserMessageQueueService(userMsgQueueCache, rpmCache, configConfig)
@@ -663,6 +663,12 @@ func provideCleanup(
 			{"OpenAIWSPool", func() error {
 				if openAIGateway != nil {
 					openAIGateway.CloseOpenAIWSPool()
+				}
+				return nil
+			}},
+			{"OpenAICodexTicketHarvester", func() error {
+				if openAIGateway != nil {
+					openAIGateway.StopOpenAICodexTicketHarvester()
 				}
 				return nil
 			}},

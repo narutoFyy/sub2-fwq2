@@ -49,6 +49,7 @@ func ProvideAdminHandlers(
 	auditLogHandler *admin.AuditLogHandler,
 	modelRadarHandler *admin.ModelRadarHandler,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
+	settingService *service.SettingService,
 	openAILowCostProbe *service.OpenAILowCostProbeService,
 	ollamaCloudUsage *service.OllamaCloudUsageService,
 	oauthAccountMonitor *admin.OAuthAccountMonitorHandler,
@@ -56,6 +57,7 @@ func ProvideAdminHandlers(
 	accountHandler.SetUpstreamBillingProbeService(upstreamBillingProbe)
 	accountHandler.SetOpenAILowCostProbeService(openAILowCostProbe)
 	accountHandler.SetOllamaCloudUsageService(ollamaCloudUsage)
+	accountHandler.SetCodexTicketSettings(settingService)
 	return &AdminHandlers{
 		Dashboard:              dashboardHandler,
 		User:                   userHandler,
