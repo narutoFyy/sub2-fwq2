@@ -4,6 +4,9 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -308,4 +311,31 @@ func TestSettingService_GetPublicSettings_PaymentBalanceDisabledStrictTrue(t *te
 			require.Equal(t, tc.want, payload.PaymentBalanceDisabled)
 		})
 	}
+}
+
+func TestSettingService_GetFrameSrcOrigins_ResolvesRedirects(t *testing.T) {
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer targetServer.Close()
+
+	redirectServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, targetServer.URL+"/shop/plan", http.StatusMovedPermanently)
+	}))
+	defer redirectServer.Close()
+
+	customMenuJSON := fmt.Sprintf(`[{"id":"buy-plan","url":%q}]`, redirectServer.URL+"/shop/redirect")
+	repo := &settingPublicRepoStub{
+		values: map[string]string{
+			SettingKeyCustomMenuItems: customMenuJSON,
+		},
+	}
+	svc := NewSettingService(repo, &config.Config{})
+
+	origins, err := svc.GetFrameSrcOrigins(context.Background())
+	require.NoError(t, err)
+
+	require.Contains(t, origins, redirectServer.URL)
+	require.Contains(t, origins, targetServer.URL)
 }

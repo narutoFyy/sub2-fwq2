@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 )
@@ -811,7 +813,84 @@ func (s *SettingService) GetFrameSrcOrigins(ctx context.Context) ([]string, erro
 		addOrigin(item)
 	}
 
+	// Proactively probe external URLs for HTTP redirects (301/302) to whitelist redirected origins
+	for _, rawURL := range collectURLsToResolve(settings) {
+		for _, redirectedOrigin := range resolveRedirectOrigins(ctx, rawURL) {
+			if _, ok := seen[redirectedOrigin]; !ok && redirectedOrigin != "" {
+				seen[redirectedOrigin] = struct{}{}
+				origins = append(origins, redirectedOrigin)
+			}
+		}
+	}
+
 	return origins, nil
+}
+
+func collectURLsToResolve(settings *PublicSettings) []string {
+	var urls []string
+	if settings.HomeContent != "" {
+		urls = append(urls, settings.HomeContent)
+	}
+	if settings.PurchaseSubscriptionEnabled && settings.PurchaseSubscriptionURL != "" {
+		urls = append(urls, settings.PurchaseSubscriptionURL)
+	}
+	urls = append(urls, parseCustomMenuItemURLs(settings.CustomMenuItems)...)
+	return urls
+}
+
+func resolveRedirectOrigins(ctx context.Context, rawURL string) []string {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	var origins []string
+	seen := make(map[string]struct{})
+
+	recordOrigin := func(targetURL string) {
+		if o := extractOriginFromURL(targetURL); o != "" {
+			if _, exists := seen[o]; !exists {
+				seen[o] = struct{}{}
+				origins = append(origins, o)
+			}
+		}
+	}
+
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return http.ErrUseLastResponse
+			}
+			recordOrigin(req.URL.String())
+			return nil
+		},
+	}
+
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return origins
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return origins
+	}
+	defer resp.Body.Close()
+
+	if resp.Request != nil && resp.Request.URL != nil {
+		recordOrigin(resp.Request.URL.String())
+	}
+
+	return origins
 }
 
 // extractOriginFromURL returns the scheme+host origin from rawURL.

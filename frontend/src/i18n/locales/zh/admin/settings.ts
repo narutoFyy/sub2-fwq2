@@ -696,6 +696,7 @@ export default {
         url: '页面 URL',
         urlPlaceholder: 'https://example.com/page',
         hideOpenButton: '隐藏“新窗口打开”按钮',
+        openInNewTab: '在侧边栏直接新窗口打开（外部链接）',
         iconSvg: 'SVG 图标',
         iconSvgPlaceholder: '<svg>...</svg>',
         iconPreview: '图标预览',

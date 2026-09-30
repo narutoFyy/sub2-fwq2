@@ -701,6 +701,7 @@ export default {
         url: 'Page URL',
         urlPlaceholder: 'https://example.com/page',
         hideOpenButton: 'Hide the “Open in new tab” button',
+        openInNewTab: 'Open directly in new tab from sidebar (External link)',
         iconSvg: 'SVG Icon',
         iconSvgPlaceholder: '<svg>...</svg>',
         iconPreview: 'Icon Preview',

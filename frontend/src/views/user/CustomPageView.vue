@@ -117,6 +117,7 @@
           <iframe
             :src="embeddedUrl"
             class="custom-embed-frame"
+            allow="payment; camera; microphone; clipboard-read; clipboard-write; fullscreen"
             allowfullscreen
           ></iframe>
         </div>

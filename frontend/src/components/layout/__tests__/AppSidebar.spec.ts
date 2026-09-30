@@ -80,3 +80,12 @@ describe('AppSidebar subscription feature flag', () => {
     expect(componentSource).toMatch(/path: '\/purchase'[^\n]*label: purchaseNavLabel\.value/)
   })
 })
+
+describe('AppSidebar custom menu openInNewTab', () => {
+  it('supports opening external links directly in new tab', () => {
+    expect(componentSource).toContain('item.openInNewTab && item.externalUrl')
+    expect(componentSource).toContain('target="_blank"')
+    expect(componentSource).toContain('rel="noopener noreferrer"')
+    expect(componentSource).toContain('openInNewTab: Boolean(item.open_in_new_tab)')
+  })
+})

@@ -6811,6 +6811,17 @@
                     </span>
                   </label>
 
+                  <label class="flex items-center gap-2 sm:col-span-2">
+                    <input
+                      v-model="item.open_in_new_tab"
+                      type="checkbox"
+                      data-testid="custom-menu-open-in-new-tab"
+                    />
+                    <span class="text-sm text-gray-700 dark:text-gray-300">
+                      {{ t("admin.settings.customMenu.openInNewTab") }}
+                    </span>
+                  </label>
+
                   <!-- SVG Icon (full width) -->
                   <div class="sm:col-span-2">
                     <label
@@ -9703,6 +9714,7 @@ const form = reactive<SettingsForm>({
     visibility: "user" | "admin";
     sort_order: number;
     hide_open_button?: boolean;
+    open_in_new_tab?: boolean;
   }>,
   custom_endpoints: [] as Array<{
     name: string;
@@ -10682,6 +10694,8 @@ function addMenuItem() {
     url: "",
     visibility: "user",
     sort_order: form.custom_menu_items.length,
+    hide_open_button: false,
+    open_in_new_tab: false,
   });
 }
 

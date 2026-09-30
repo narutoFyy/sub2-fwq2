@@ -222,6 +222,7 @@ export interface CustomMenuItem {
   url: string
   page_slug?: string
   hide_open_button?: boolean
+  open_in_new_tab?: boolean
   visibility: 'user' | 'admin'
   sort_order: number
 }
