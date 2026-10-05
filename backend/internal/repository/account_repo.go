@@ -57,10 +57,6 @@ var schedulerNeutralExtraKeyPrefixes = []string{
 	"codex_5h_",
 	"codex_7d_",
 	"codex_reset_credit_",
-	// 292 门票是纯运行态凭据：它不在 filterSchedulerExtra 的投影白名单里，
-	// 因此 bucket 重建事件永远搬不动门票状态，续期时开事务+发 outbox 是白干。
-	// 归为观测型后仍会同步单账号快照（见 UpdateExtra），不丢任何新鲜度。
-	"codex_turn_ticket:",
 	"passive_usage_",
 	"upstream_billing_probe",
 	"upstream_billing_rate_sync",
@@ -674,8 +670,7 @@ func lockAndMergeAccountProbeExtra(
 				false
 			),
 			extra -> 'opencode_go_usage_auto_refresh',
-			extra -> 'opencode_go_usage_snapshot',
-			COALESCE(extra, '{}'::jsonb)
+			extra -> 'opencode_go_usage_snapshot'
 		FROM accounts
 		WHERE id = $1 AND deleted_at IS NULL
 		FOR NO KEY UPDATE
@@ -695,16 +690,15 @@ func lockAndMergeAccountProbeExtra(
 		identityUnchanged              bool
 		ollamaGroupIdentityUnchanged   bool
 		ollamaProxyIdentityUnchanged   bool
+		opencodeGroupIdentityUnchanged bool
 		currentEnabled                 []byte
 		currentRateSyncEnabled         []byte
 		currentSnapshot                []byte
 		currentOllamaSession           []byte
 		currentOllamaAutoRefresh       []byte
 		currentOllamaSnapshot          []byte
-		opencodeGroupIdentityUnchanged bool
 		currentOpenCodeAutoRefresh     []byte
 		currentOpenCodeSnapshot        []byte
-		currentExtraJSON               []byte
 	)
 	if err := rows.Scan(
 		&identityUnchanged,
@@ -719,7 +713,6 @@ func lockAndMergeAccountProbeExtra(
 		&opencodeGroupIdentityUnchanged,
 		&currentOpenCodeAutoRefresh,
 		&currentOpenCodeSnapshot,
-		&currentExtraJSON,
 	); err != nil {
 		return nil, err
 	}
@@ -727,20 +720,7 @@ func lockAndMergeAccountProbeExtra(
 		return nil, err
 	}
 
-	// extra 理论上恒为 JSON 对象，但历史数据若存成非对象（数组/标量），在此硬失败
-	// 会让该账号的任何编辑都保存不了——而这条路径覆盖所有平台的账号更新。
-	// 门票是 1 小时 TTL 的临时凭据，下个打票周期会自动补回，因此解析失败时降级为
-	// 「无门票可保留」继续完成编辑，不要把整个账号更新拖垮。
-	var currentExtra map[string]any
-	if len(currentExtraJSON) > 0 {
-		if err := json.Unmarshal(currentExtraJSON, &currentExtra); err != nil {
-			logger.LegacyPrintf("repository.account",
-				"[Account] current extra unmarshal failed, codex ticket preservation skipped: id=%d err=%v",
-				account.ID, err)
-			currentExtra = nil
-		}
-	}
-	extra := service.MergeOpenAICodexTicketExtra(copyJSONMap(normalizeJSONMap(account.Extra)), currentExtra)
+	extra := copyJSONMap(normalizeJSONMap(account.Extra))
 	for _, key := range []string{
 		service.UpstreamBillingProbeEnabledExtraKey,
 		service.UpstreamBillingRateSyncEnabledExtraKey,
@@ -3403,11 +3383,6 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 			proxyIDs = append(proxyIDs, *acc.ProxyFallbackOriginID)
 		}
 	}
-	bindingsByAccount, bindingProxyIDs, err := r.loadAccountProxyBindings(ctx, accountIDs)
-	if err != nil {
-		return nil, err
-	}
-	proxyIDs = append(proxyIDs, bindingProxyIDs...)
 
 	proxyMap, err := r.loadProxies(ctx, proxyIDs)
 	if err != nil {
@@ -3427,21 +3402,6 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 		if acc.ProxyID != nil {
 			if proxy, ok := proxyMap[*acc.ProxyID]; ok {
 				out.Proxy = proxy
-			}
-		}
-		for _, binding := range bindingsByAccount[acc.ID] {
-			binding.Proxy = proxyMap[binding.ProxyID]
-			out.ProxyBindings = append(out.ProxyBindings, binding)
-		}
-		if len(out.ProxyBindings) > 0 {
-			total := 0
-			for _, binding := range out.ProxyBindings {
-				if binding.Enabled && binding.Concurrency > 0 {
-					total += binding.Concurrency
-				}
-			}
-			if total > 0 {
-				out.Concurrency = total
 			}
 		}
 		out.ProxyFallbackOriginID = acc.ProxyFallbackOriginID
@@ -3464,87 +3424,6 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 	}
 
 	return outAccounts, nil
-}
-
-// loadAccountProxyBindings reads the optional multi-proxy configuration using
-// raw SQL so the feature remains backwards-compatible with binaries started
-// before migration 231. An absent table is treated as an empty configuration.
-func (r *accountRepository) loadAccountProxyBindings(ctx context.Context, accountIDs []int64) (map[int64][]service.AccountProxyBinding, []int64, error) {
-	result := make(map[int64][]service.AccountProxyBinding)
-	if r == nil || r.sql == nil || len(accountIDs) == 0 {
-		return result, nil, nil
-	}
-	rows, err := r.sql.QueryContext(ctx, `
-		SELECT account_id, proxy_id, concurrency, enabled, sort_order
-		FROM account_proxies
-		WHERE account_id = ANY($1)
-		ORDER BY account_id, sort_order, proxy_id
-	`, pq.Array(accountIDs))
-	if err != nil {
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "42P01" {
-			return result, nil, nil
-		}
-		return nil, nil, err
-	}
-	defer rows.Close()
-	proxyIDs := make([]int64, 0)
-	for rows.Next() {
-		var binding service.AccountProxyBinding
-		if err := rows.Scan(&binding.AccountID, &binding.ProxyID, &binding.Concurrency, &binding.Enabled, &binding.SortOrder); err != nil {
-			return nil, nil, err
-		}
-		result[binding.AccountID] = append(result[binding.AccountID], binding)
-		proxyIDs = append(proxyIDs, binding.ProxyID)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	return result, proxyIDs, nil
-}
-
-// ReplaceAccountProxyBindings replaces the complete optional routing list for
-// one account. Legacy proxy_id/concurrency columns are intentionally untouched.
-func (r *accountRepository) ReplaceAccountProxyBindings(ctx context.Context, accountID int64, bindings []service.AccountProxyBinding) error {
-	if r == nil || r.client == nil {
-		return errors.New("account repository is unavailable")
-	}
-	if accountID <= 0 {
-		return errors.New("account_id must be positive")
-	}
-	seen := make(map[int64]struct{}, len(bindings))
-	for i := range bindings {
-		b := bindings[i]
-		if b.ProxyID <= 0 || b.Concurrency < 1 {
-			return errors.New("proxy_id must be positive and concurrency must be >= 1")
-		}
-		if _, ok := seen[b.ProxyID]; ok {
-			return errors.New("duplicate proxy_id in account bindings")
-		}
-		seen[b.ProxyID] = struct{}{}
-	}
-	tx, err := r.client.Tx(ctx)
-	if err != nil {
-		return err
-	}
-	txCtx := dbent.NewTxContext(ctx, tx)
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.Client().ExecContext(txCtx, `DELETE FROM account_proxies WHERE account_id = $1`, accountID); err != nil {
-		return err
-	}
-	for i := range bindings {
-		b := bindings[i]
-		if _, err := tx.Client().ExecContext(txCtx, `
-			INSERT INTO account_proxies (account_id, proxy_id, concurrency, enabled, sort_order)
-			VALUES ($1, $2, $3, $4, $5)
-		`, accountID, b.ProxyID, b.Concurrency, b.Enabled, b.SortOrder); err != nil {
-			return err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	r.syncSchedulerAccountSnapshotDetached(ctx, accountID)
-	return nil
 }
 
 func tempUnschedulablePredicate() dbpredicate.Account {

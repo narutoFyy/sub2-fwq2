@@ -635,9 +635,6 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// 剥离后再出站（openai_codex_turn_state.go）。
 	s.guardOpenAICodexTurnStateEcho(c, account, req.Header)
 	// 若配置开启了官方 292 门票体系，优先应用门票（含 fail-closed 拦截）
-	if err := s.applyOpenAICodexTicket(ctx, account, extractOpenAICodexTicketModel(body), req.Header); err != nil {
-		return nil, err
-	}
 	// 若当前请求仍未携带 turn-state，注入该账号已钉住的满血 turn-state，防冷启动 overload
 	s.InjectPinnedTurnStateIfMissing(account, req.Header)
 
