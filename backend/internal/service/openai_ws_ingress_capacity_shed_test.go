@@ -15,15 +15,21 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// openAIWSIngressCapacityShedRepo 补齐 SetError，避免非容量类错误（如
-// workspace_suspended）走到账号状态副作用时打空指针。
+// openAIWSIngressCapacityShedRepo 提供入口测试需要的账号状态写入接口。
 type openAIWSIngressCapacityShedRepo struct {
 	stubOpenAIAccountRepo
+	overloadScope string
+	overloadUntil time.Time
 }
 
 func (r *openAIWSIngressCapacityShedRepo) SetError(context.Context, int64, string) error { return nil }
 
 func (r *openAIWSIngressCapacityShedRepo) SetRateLimited(context.Context, int64, time.Time) error {
+	return nil
+}
+
+func (r *openAIWSIngressCapacityShedRepo) SetModelRateLimit(_ context.Context, _ int64, scope string, until time.Time, _ ...string) error {
+	r.overloadScope, r.overloadUntil = scope, until
 	return nil
 }
 
@@ -180,6 +186,12 @@ func TestProxyResponsesWebSocketFromClient_RewritesCapacityShedCodeForClient(t *
 			case <-serverDone:
 			case <-time.After(5 * time.Second):
 				t.Fatal("等待 ingress websocket 结束超时")
+			}
+			if tt.name == "capacity_shed_error_and_failed_are_rewritten" {
+				require.Equal(t, "openai:overload:gpt-5.1", repo.overloadScope)
+				require.WithinDuration(t, time.Now().Add(5*time.Minute), repo.overloadUntil, time.Second)
+			} else {
+				require.Empty(t, repo.overloadScope)
 			}
 		})
 	}

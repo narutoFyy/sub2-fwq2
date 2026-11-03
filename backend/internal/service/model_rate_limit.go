@@ -84,6 +84,9 @@ func (a *Account) modelRateLimitKeysForRequest(ctx context.Context, requestedMod
 			keys = append(keys, antigravityGeminiModelRateLimitKey)
 		}
 	case PlatformOpenAI:
+		if scope := openAIOverloadScope(canonicalOpenAIAccountSchedulingModel(a, requestedModel)); scope != "" {
+			keys = append(keys, scope)
+		}
 		if openAIImageGenerationRateLimitApplies(ctx, requestedModel, modelKey) && modelKey != openAIImageGenerationRateLimitKey {
 			keys = append(keys, openAIImageGenerationRateLimitKey)
 		}

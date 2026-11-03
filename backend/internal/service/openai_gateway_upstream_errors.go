@@ -459,6 +459,13 @@ func (s *OpenAIGatewayService) newOpenAIAccountFailoverErrorWithClassificationHe
 		failoverErr.SameAccountRetryDeadline = s.openAIOAuth429RetryDeadline(account)
 		failoverErr.SameAccountRetryDelay = openAIOAuth429SameAccountRetryDelay(responseHeaders, failoverErr.SameAccountRetryDeadline)
 	}
+	if shouldDisable && account != nil && account.Platform == PlatformOpenAI && failoverErr.IsOpenAICapacityShed() {
+		// The account/model was cooled down by the side-effect handler. Keep the
+		// capacity error envelope, but fail over without another local retry.
+		failoverErr.RetryableOnSameAccount = false
+		failoverErr.SameAccountRetryDelay = 0
+		failoverErr.SameAccountRetryDeadline = time.Time{}
+	}
 	return failoverErr
 }
 

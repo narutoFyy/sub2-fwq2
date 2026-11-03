@@ -101,10 +101,10 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		scheduleOllamaCloudUsageActivity(s.deferredService, account)
 		scheduleOpenCodeGoUsageActivity(s.deferredService, account)
 	}
-	// Capacity shedding describes this request, not account health. Keep the
-	// account schedulable while the request-local retry budget handles recovery.
+	// Capacity shedding is recoverable, but repeated selection of the same
+	// account/model should wait for the shared overload cooldown.
 	if account != nil && account.Platform == PlatformOpenAI && isOpenAIRequestScopedCapacityShed("", responseBody) {
-		return false
+		return s.coolDownOpenAIOverload(ctx, account, firstNonEmpty(canonicalModel...))
 	}
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
