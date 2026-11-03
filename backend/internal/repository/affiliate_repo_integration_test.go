@@ -109,6 +109,8 @@ func TestAffiliateRepository_AccrueLaunchCampaignCredit_CreditsBalanceImmediatel
 	txCtx := dbent.NewTxContext(ctx, tx)
 	client := tx.Client()
 	repo := NewAffiliateRepository(client, integrationDB)
+	campaignRepo, ok := repo.(service.LaunchCampaignRepository)
+	require.True(t, ok, "affiliate repository must retain launch campaign support")
 
 	inviter := mustCreateUser(t, client, &service.User{
 		Email:        fmt.Sprintf("campaign-inviter-%d@example.com", time.Now().UnixNano()),
@@ -156,7 +158,7 @@ SET starts_at = EXCLUDED.starts_at,
 		Save(txCtx)
 	require.NoError(t, err)
 
-	creditedInviterID, applied, err := repo.AccrueLaunchCampaignCredit(txCtx, invitee.ID, redeemCode.ID, 10)
+	creditedInviterID, applied, err := campaignRepo.AccrueLaunchCampaignCredit(txCtx, invitee.ID, redeemCode.ID, 10)
 	require.NoError(t, err)
 	require.True(t, applied)
 	require.Equal(t, inviter.ID, creditedInviterID)
@@ -175,7 +177,7 @@ SET starts_at = EXCLUDED.starts_at,
 		"SELECT COUNT(*) FROM user_affiliate_ledger WHERE user_id = $1 AND action = 'campaign_balance_credit'", inviter.ID)
 	require.Equal(t, 1, ledgerCount)
 
-	creditedInviterID, applied, err = repo.AccrueLaunchCampaignCredit(txCtx, invitee.ID, redeemCode.ID, 10)
+	creditedInviterID, applied, err = campaignRepo.AccrueLaunchCampaignCredit(txCtx, invitee.ID, redeemCode.ID, 10)
 	require.NoError(t, err)
 	require.False(t, applied)
 	require.Zero(t, creditedInviterID)
