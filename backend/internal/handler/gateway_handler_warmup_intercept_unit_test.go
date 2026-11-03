@@ -126,8 +126,12 @@ func (f *fakeConcurrencyCache) GetAccountConcurrency(context.Context, int64) (in
 func (f *fakeConcurrencyCache) AcquireAccountProxySlot(context.Context, int64, int64, int, string) (bool, error) {
 	return true, nil
 }
-func (f *fakeConcurrencyCache) ReleaseAccountProxySlot(context.Context, int64, int64, string) error { return nil }
-func (f *fakeConcurrencyCache) GetAccountProxyConcurrency(context.Context, int64, int64) (int, error) { return 0, nil }
+func (f *fakeConcurrencyCache) ReleaseAccountProxySlot(context.Context, int64, int64, string) error {
+	return nil
+}
+func (f *fakeConcurrencyCache) GetAccountProxyConcurrency(context.Context, int64, int64) (int, error) {
+	return 0, nil
+}
 func (f *fakeConcurrencyCache) IncrementAccountWaitCount(context.Context, int64, int) (bool, error) {
 	return true, nil
 }
@@ -163,8 +167,12 @@ func (f *fakeConcurrencyCache) CleanupStaleProcessSlots(context.Context, string)
 
 func newTestGatewayHandler(t *testing.T, group *service.Group, accounts []*service.Account) (*GatewayHandler, func()) {
 	t.Helper()
+	return newTestGatewayHandlerWithSchedulerCache(t, group, &fakeSchedulerCache{accounts: accounts})
+}
 
-	schedulerCache := &fakeSchedulerCache{accounts: accounts}
+func newTestGatewayHandlerWithSchedulerCache(t *testing.T, group *service.Group, schedulerCache service.SchedulerCache) (*GatewayHandler, func()) {
+	t.Helper()
+
 	schedulerSnapshot := service.NewSchedulerSnapshotService(schedulerCache, nil, nil, nil, nil)
 
 	gwSvc := service.NewGatewayService(

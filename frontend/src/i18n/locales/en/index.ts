@@ -1,3 +1,5 @@
+import adminAccessKeys from './adminAccessKeys'
+import mcp from './mcp'
 import landing from './landing'
 import activity from './activity'
 import common from './common'
@@ -9,6 +11,8 @@ import admin from './admin'
 import misc from './misc'
 
 export default {
+  adminAccessKeys,
+  mcp,
   ...landing,
   ...activity,
   ...common,

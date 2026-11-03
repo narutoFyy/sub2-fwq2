@@ -45,13 +45,13 @@ func (f *monitorOutcomeStoreFake) GetAvailabilityState(context.Context, int64) (
 
 func TestOAuthMonitorConfigValidation(t *testing.T) {
 	svc := NewOAuthAccountMonitorService(nil, nil, nil, nil, nil, nil, nil)
-	if _, err := svc.UpdateConfig(nil, &OAuthAccountMonitorConfig{QuotaThreshold: 101, IntervalMinutes: 5}); err == nil {
+	if _, err := svc.UpdateConfig(context.Background(), &OAuthAccountMonitorConfig{QuotaThreshold: 101, IntervalMinutes: 5}); err == nil {
 		t.Fatal("expected quota threshold validation error")
 	}
-	if _, err := svc.UpdateConfig(nil, &OAuthAccountMonitorConfig{QuotaThreshold: 20, IntervalMinutes: 1441}); err == nil {
+	if _, err := svc.UpdateConfig(context.Background(), &OAuthAccountMonitorConfig{QuotaThreshold: 20, IntervalMinutes: 1441}); err == nil {
 		t.Fatal("expected interval validation error")
 	}
-	if _, err := svc.UpdateConfig(nil, &OAuthAccountMonitorConfig{QuotaThreshold: 20, IntervalMinutes: 0}); err == nil {
+	if _, err := svc.UpdateConfig(context.Background(), &OAuthAccountMonitorConfig{QuotaThreshold: 20, IntervalMinutes: 0}); err == nil {
 		t.Fatal("expected zero interval validation error")
 	}
 }
@@ -60,7 +60,9 @@ func TestOAuthMonitorCheckAccountTracksQuotaEvenWhenNotificationsDisabled(t *tes
 	stateRepo := &monitorStateRepoFake{}
 	remaining := 12.0
 	svc := NewOAuthAccountMonitorService(nil, stateRepo, nil, monitorQuotaFake{usage: &OpenAIQuotaUsage{RateLimit: &OpenAIRateLimit{PrimaryWindow: &OpenAIRateLimitWindow{UsedPercent: 88}}}}, nil, nil, nil)
-	svc.checkAccount(context.Background(), &OAuthAccountMonitorConfig{QuotaThreshold: 20, NotifyOnQuota: false}, &Account{ID: 7, Name: "test", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true})
+	if err := svc.checkAccount(context.Background(), &OAuthAccountMonitorConfig{QuotaThreshold: 20, NotifyOnQuota: false}, &Account{ID: 7, Name: "test", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true}); err != nil {
+		t.Fatalf("check account failed: %v", err)
+	}
 	if stateRepo.state == nil || stateRepo.state.QuotaStatus != "ok" || stateRepo.state.PrimaryRemainingPercent == nil || *stateRepo.state.PrimaryRemainingPercent != remaining {
 		t.Fatalf("quota state not recorded: %+v", stateRepo.state)
 	}
@@ -70,7 +72,9 @@ func TestOAuthMonitorDoesNotTreatUnknownQuotaAsRecovery(t *testing.T) {
 	previous := &OAuthAccountMonitorState{AccountID: 7, LastConditionKey: "quota_low:primary", LastCheckedAt: monitorPtrTime(time.Now()), QuotaAlertActive: true}
 	stateRepo := &monitorStateRepoFake{state: previous}
 	svc := NewOAuthAccountMonitorService(nil, stateRepo, nil, monitorQuotaFake{err: context.DeadlineExceeded}, nil, nil, nil)
-	svc.checkAccount(context.Background(), &OAuthAccountMonitorConfig{QuotaThreshold: 20, NotifyOnQuota: true, NotifyOnRecovery: true}, &Account{ID: 7, Name: "test", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true})
+	if err := svc.checkAccount(context.Background(), &OAuthAccountMonitorConfig{QuotaThreshold: 20, NotifyOnQuota: true, NotifyOnRecovery: true}, &Account{ID: 7, Name: "test", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true}); err != nil {
+		t.Fatalf("check account failed: %v", err)
+	}
 	if stateRepo.state.LastConditionKey != "" || stateRepo.state.QuotaStatus != "unknown" {
 		t.Fatalf("unexpected state: %+v", stateRepo.state)
 	}

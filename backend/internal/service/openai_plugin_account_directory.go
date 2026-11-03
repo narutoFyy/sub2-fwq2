@@ -111,6 +111,7 @@ func accountReadableSnapshotJSON(account *Account) []byte {
 	clone.Credentials = nil
 	clone.Groups = nil
 	clone.AccountGroups = nil
+	clone.ProxyBindings = nil
 	data, err := json.Marshal(&clone)
 	if err != nil {
 		return nil

@@ -93,7 +93,7 @@ func TestSecurityHeaders(t *testing.T) {
 		middleware(c)
 
 		assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
-		assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
+		assert.Empty(t, w.Header().Get("X-Frame-Options"))
 		assert.Equal(t, "strict-origin-when-cross-origin", w.Header().Get("Referrer-Policy"))
 	})
 
@@ -148,7 +148,8 @@ func TestSecurityHeaders(t *testing.T) {
 		csp := w.Header().Get("Content-Security-Policy")
 		assert.Equal(t, 1, countDirectiveValue(csp, "frame-src", "'self'"))
 		assert.Equal(t, 1, countDirectiveValue(csp, "frame-src", "https://checkout.example.com"))
-		assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
+		assert.Equal(t, 1, countDirectiveValue(csp, "frame-ancestors", "*"))
+		assert.Empty(t, w.Header().Get("X-Frame-Options"))
 	})
 
 	t.Run("api_route_skips_csp_nonce_generation", func(t *testing.T) {
@@ -165,7 +166,7 @@ func TestSecurityHeaders(t *testing.T) {
 		middleware(c)
 
 		assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
-		assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
+		assert.Empty(t, w.Header().Get("X-Frame-Options"))
 		assert.Equal(t, "strict-origin-when-cross-origin", w.Header().Get("Referrer-Policy"))
 		assert.Empty(t, w.Header().Get("Content-Security-Policy"))
 		assert.Empty(t, GetNonceFromContext(c))

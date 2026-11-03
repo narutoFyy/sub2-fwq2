@@ -206,7 +206,17 @@ func (s *OAuthAccountMonitorService) SetLeaderLock(lockCache LeaderLockCache, db
 }
 
 func defaultOAuthAccountMonitorConfig() *OAuthAccountMonitorConfig {
-	return &OAuthAccountMonitorConfig{IntervalMinutes: defaultOAuthMonitorIntervalMinutes, QuotaThreshold: 20, NotifyOnError: true, NotifyOnQuota: true, NotifyOnRecovery: true, NotifyEmail: true, NotifyPushPlus: true, RepeatEveryCheck: true}
+	return &OAuthAccountMonitorConfig{
+		IntervalMinutes:             defaultOAuthMonitorIntervalMinutes,
+		QuotaThreshold:              20,
+		NotifyOnQuota:               true,
+		NotifyOnUnavailable:         true,
+		UnavailableFailureThreshold: 3,
+		UnavailableWindowMinutes:    15,
+		UnavailableReminderMinutes:  60,
+		NotifyEmail:                 true,
+		NotifyPushPlus:              true,
+	}
 }
 
 func normalizeOAuthMonitorConfig(cfg *OAuthAccountMonitorConfig) {
@@ -220,6 +230,19 @@ func normalizeOAuthMonitorConfig(cfg *OAuthAccountMonitorConfig) {
 	if cfg.QuotaThreshold > 100 {
 		cfg.QuotaThreshold = 100
 	}
+	if cfg.UnavailableFailureThreshold <= 0 {
+		cfg.UnavailableFailureThreshold = defaults.UnavailableFailureThreshold
+	}
+	if cfg.UnavailableWindowMinutes <= 0 {
+		cfg.UnavailableWindowMinutes = defaults.UnavailableWindowMinutes
+	}
+	if cfg.UnavailableReminderMinutes <= 0 {
+		cfg.UnavailableReminderMinutes = defaults.UnavailableReminderMinutes
+	}
+	// Kept in the wire format for older clients, but these noisy policies are retired.
+	cfg.NotifyOnError = false
+	cfg.NotifyOnRecovery = false
+	cfg.RepeatEveryCheck = false
 	seen := make(map[int64]struct{}, len(cfg.AccountIDs))
 	ids := cfg.AccountIDs[:0]
 	for _, id := range cfg.AccountIDs {
@@ -773,6 +796,13 @@ func (s *OAuthAccountMonitorService) RunCycle(ctx context.Context) (*OAuthAccoun
 }
 
 func (s *OAuthAccountMonitorService) checkAccount(ctx context.Context, cfg *OAuthAccountMonitorConfig, account *Account) error {
+	if cfg == nil {
+		return errors.New("oauth account monitor config is required")
+	}
+	effectiveConfig := *cfg
+	normalizeOAuthMonitorConfig(&effectiveConfig)
+	cfg = &effectiveConfig
+
 	now := time.Now().UTC()
 	var previous *OAuthAccountMonitorState
 	if s.stateRepo != nil {
@@ -786,7 +816,24 @@ func (s *OAuthAccountMonitorService) checkAccount(ctx context.Context, cfg *OAut
 	}
 	health := "ok"
 	errorMessage := ""
-	if account.Status != StatusActive || !account.Schedulable || strings.TrimSpace(account.ErrorMessage) != "" || (account.AutoPauseOnExpired && account.ExpiresAt != nil && !now.Before(*account.ExpiresAt)) || (account.RateLimitResetAt != nil && account.RateLimitResetAt.After(now)) || (account.OverloadUntil != nil && account.OverloadUntil.After(now)) || (account.TempUnschedulableUntil != nil && account.TempUnschedulableUntil.After(now)) {
+	availability := &OAuthAccountAvailabilityState{}
+	if s.outcomeStore != nil {
+		loaded, err := s.outcomeStore.GetAvailabilityState(ctx, account.ID)
+		if err != nil {
+			slog.Warn("oauth_account_monitor_availability_load_failed", "account_id", account.ID, "error", err)
+		} else if loaded != nil {
+			availability = loaded
+		}
+	}
+	unavailable := availability.ConsecutiveFailures >= cfg.UnavailableFailureThreshold
+	if unavailable {
+		health = "error"
+		errorMessage = strings.TrimSpace(availability.LastError)
+		if errorMessage == "" {
+			errorMessage = "account requests are continuously failing"
+		}
+	} else if account.Status != StatusActive || !account.Schedulable || strings.TrimSpace(account.ErrorMessage) != "" || (account.AutoPauseOnExpired && account.ExpiresAt != nil && !now.Before(*account.ExpiresAt)) || (account.RateLimitResetAt != nil && account.RateLimitResetAt.After(now)) || (account.OverloadUntil != nil && account.OverloadUntil.After(now)) || (account.TempUnschedulableUntil != nil && account.TempUnschedulableUntil.After(now)) {
+		// Runtime state remains visible in the drawer, but never sends an alert by itself.
 		health = "error"
 		errorMessage = strings.TrimSpace(account.ErrorMessage)
 		if errorMessage == "" {
@@ -821,37 +868,64 @@ func (s *OAuthAccountMonitorService) checkAccount(ctx context.Context, cfg *OAut
 					}
 				}
 			}
-		} else if err != nil {
-			quotaStatus = "unknown"
-			if health == "ok" {
-				health = "error"
-				errorMessage = "quota check failed: " + truncateMonitorError(err.Error(), 240)
-			}
 		}
 	}
 	condition := ""
-	if cfg.NotifyOnError && health == "error" {
-		condition = "error:" + errorMessage
-	}
-	if cfg.NotifyOnQuota && quotaLow {
+	if quotaLow {
 		if condition != "" {
 			condition += ";"
 		}
 		condition += "quota_low:" + quotaWindow
 	}
-	state := &OAuthAccountMonitorState{AccountID: account.ID, LastCheckedAt: &now, HealthStatus: health, ErrorMessage: errorMessage, PrimaryRemainingPercent: primary, SecondaryRemainingPercent: secondary, QuotaStatus: quotaStatus, LastConditionKey: condition, UpdatedAt: now}
+	if unavailable {
+		if condition != "" {
+			condition += ";"
+		}
+		condition += "unavailable"
+	}
+	state := &OAuthAccountMonitorState{
+		AccountID: account.ID, LastCheckedAt: &now, HealthStatus: health, ErrorMessage: errorMessage,
+		PrimaryRemainingPercent: primary, SecondaryRemainingPercent: secondary, QuotaStatus: quotaStatus,
+		LastConditionKey: condition, ConsecutiveFailures: availability.ConsecutiveFailures,
+		LastSuccessAt: availability.LastSuccessAt, LastFailureAt: availability.LastFailureAt,
+		LastErrorCode: availability.LastErrorCode, FailureStartedAt: availability.FailureStartedAt,
+		LastUnavailableNotifiedAt:   availability.LastUnavailableNotifiedAt,
+		FailureSequence:             availability.FailureSequence,
+		LastNotifiedFailureSequence: availability.LastNotifiedFailureSequence,
+		QuotaAlertActive:            quotaLow,
+		UpdatedAt:                   now,
+	}
 	if previous != nil {
 		state.LastNotifiedAt = previous.LastNotifiedAt
+		if state.LastUnavailableNotifiedAt == nil {
+			state.LastUnavailableNotifiedAt = previous.LastUnavailableNotifiedAt
+		}
+		if state.LastNotifiedFailureSequence == 0 {
+			state.LastNotifiedFailureSequence = previous.LastNotifiedFailureSequence
+		}
+		if quotaStatus == "unknown" {
+			state.QuotaAlertActive = previous.QuotaAlertActive
+		}
 	}
-	shouldNotify := condition != "" || (previous != nil && previous.LastConditionKey != "" && cfg.NotifyOnRecovery && quotaStatus != "unknown")
-	if shouldNotify && !cfg.RepeatEveryCheck && previous != nil && previous.LastConditionKey == condition && previous.LastNotifiedAt != nil {
-		shouldNotify = false
+	quotaNotification := cfg.NotifyOnQuota && quotaLow && (previous == nil || !previous.QuotaAlertActive)
+	unavailableNotification := cfg.NotifyOnUnavailable && unavailable && availability.FailureSequence > state.LastNotifiedFailureSequence
+	if unavailableNotification && state.LastUnavailableNotifiedAt != nil && now.Sub(*state.LastUnavailableNotifiedAt) < time.Duration(cfg.UnavailableReminderMinutes)*time.Minute {
+		unavailableNotification = false
 	}
 	var resultErrors []error
-	if shouldNotify {
-		delivered, notifyErr := s.notify(ctx, cfg, account, state, previous)
-		if delivered {
-			state.LastNotifiedAt = &now
+	if quotaNotification || unavailableNotification {
+		alertKinds := make([]string, 0, 2)
+		if quotaNotification {
+			alertKinds = append(alertKinds, "quota_low")
+		}
+		if unavailableNotification {
+			alertKinds = append(alertKinds, "unavailable")
+		}
+		_, notifyErr := s.notify(ctx, cfg, account, state, alertKinds)
+		state.LastNotifiedAt = &now
+		if unavailableNotification {
+			state.LastUnavailableNotifiedAt = &now
+			state.LastNotifiedFailureSequence = availability.FailureSequence
 		}
 		if notifyErr != nil {
 			resultErrors = append(resultErrors, notifyErr)
@@ -865,65 +939,58 @@ func (s *OAuthAccountMonitorService) checkAccount(ctx context.Context, cfg *OAut
 	return errors.Join(resultErrors...)
 }
 
-func (s *OAuthAccountMonitorService) notify(ctx context.Context, cfg *OAuthAccountMonitorConfig, account *Account, state, previous *OAuthAccountMonitorState) (bool, error) {
-	isRecovery := state.LastConditionKey == "" && previous != nil && previous.LastConditionKey != ""
-	if isRecovery && !cfg.NotifyOnRecovery {
-		return false, nil
-	}
-	if !isRecovery && state.LastConditionKey == "" {
+func (s *OAuthAccountMonitorService) notify(ctx context.Context, cfg *OAuthAccountMonitorConfig, account *Account, state *OAuthAccountMonitorState, alertKinds []string) (bool, error) {
+	if len(alertKinds) == 0 {
 		return false, nil
 	}
 	title := fmt.Sprintf("OAuth账号监控：%s", account.Name)
 	var body strings.Builder
-	if isRecovery {
-		body.WriteString("账号已恢复正常。\n")
-	} else {
-		body.WriteString("账号监控发现异常。\n")
+	if hasString(alertKinds, "quota_low") {
+		_, _ = body.WriteString("账号额度低于预警阈值。\n")
 	}
-	body.WriteString(fmt.Sprintf("账号ID: %d\n账号: %s\n状态: %s\n", account.ID, account.Name, state.HealthStatus))
+	if hasString(alertKinds, "unavailable") {
+		fmt.Fprintf(&body, "账号在 %d 分钟内连续失败 %d 次。\n", cfg.UnavailableWindowMinutes, state.ConsecutiveFailures)
+	}
+	fmt.Fprintf(&body, "账号ID: %d\n账号: %s\n状态: %s\n", account.ID, account.Name, state.HealthStatus)
 	if state.ErrorMessage != "" {
-		body.WriteString("错误: " + state.ErrorMessage + "\n")
+		_, _ = body.WriteString("错误: " + state.ErrorMessage + "\n")
 	}
 	if state.PrimaryRemainingPercent != nil {
-		body.WriteString(fmt.Sprintf("主窗口剩余: %.1f%%\n", *state.PrimaryRemainingPercent))
+		fmt.Fprintf(&body, "主窗口剩余: %.1f%%\n", *state.PrimaryRemainingPercent)
 	}
 	if state.SecondaryRemainingPercent != nil {
-		body.WriteString(fmt.Sprintf("次窗口剩余: %.1f%%\n", *state.SecondaryRemainingPercent))
+		fmt.Fprintf(&body, "次窗口剩余: %.1f%%\n", *state.SecondaryRemainingPercent)
 	}
-	body.WriteString("检查时间: " + state.LastCheckedAt.Format(time.RFC3339))
+	_, _ = body.WriteString("检查时间: " + state.LastCheckedAt.Format(time.RFC3339))
 	var deliveryErrors []error
 	delivered := false
 	emailSent := false
 	if cfg.NotifyEmail {
-		if s.opsService == nil {
-			deliveryErrors = append(deliveryErrors, errors.New("email notification config service unavailable"))
-		} else {
-			emailCfg, err := s.opsService.GetEmailNotificationConfig(ctx)
-			if err != nil {
-				deliveryErrors = append(deliveryErrors, fmt.Errorf("load email notification config: %w", err))
-			} else if emailCfg.Alert.Enabled {
+		emailCfg, err := s.GetEmailConfig(ctx)
+		if err != nil {
+			deliveryErrors = append(deliveryErrors, fmt.Errorf("load email notification config: %w", err))
+		} else if emailCfg.Enabled {
+			if s.emailService == nil {
+				deliveryErrors = append(deliveryErrors, errors.New("email notification service unavailable"))
+			}
+			recipients := 0
+			for _, to := range emailCfg.Recipients {
+				if strings.TrimSpace(to) == "" {
+					continue
+				}
+				recipients++
 				if s.emailService == nil {
-					deliveryErrors = append(deliveryErrors, errors.New("email notification service unavailable"))
+					continue
 				}
-				recipients := 0
-				for _, to := range emailCfg.Alert.Recipients {
-					if strings.TrimSpace(to) == "" {
-						continue
-					}
-					recipients++
-					if s.emailService == nil {
-						continue
-					}
-					if err := s.emailService.SendEmail(ctx, strings.TrimSpace(to), title, body.String()); err != nil {
-						deliveryErrors = append(deliveryErrors, fmt.Errorf("send email notification to %s: %w", strings.TrimSpace(to), err))
-					} else {
-						emailSent = true
-						delivered = true
-					}
+				if err := s.emailService.SendEmail(ctx, strings.TrimSpace(to), title, body.String()); err != nil {
+					deliveryErrors = append(deliveryErrors, fmt.Errorf("send email notification to %s: %w", strings.TrimSpace(to), err))
+				} else {
+					emailSent = true
+					delivered = true
 				}
-				if recipients == 0 {
-					deliveryErrors = append(deliveryErrors, errors.New("email notification has no recipients"))
-				}
+			}
+			if recipients == 0 {
+				deliveryErrors = append(deliveryErrors, errors.New("email notification has no recipients"))
 			}
 		}
 	}
@@ -940,26 +1007,13 @@ func (s *OAuthAccountMonitorService) notify(ctx context.Context, cfg *OAuthAccou
 		}
 	}
 	if s.opsRepo != nil {
-		dims := map[string]any{"account_id": account.ID, "account_name": account.Name, "platform": account.Platform, "condition": state.LastConditionKey, "recovery": isRecovery, "quota_threshold_percent": cfg.QuotaThreshold, "primary_remaining_percent": state.PrimaryRemainingPercent, "secondary_remaining_percent": state.SecondaryRemainingPercent, "checked_at": state.LastCheckedAt}
+		dims := map[string]any{"account_id": account.ID, "account_name": account.Name, "platform": account.Platform, "alert_kinds": alertKinds, "condition": state.LastConditionKey, "quota_threshold_percent": cfg.QuotaThreshold, "primary_remaining_percent": state.PrimaryRemainingPercent, "secondary_remaining_percent": state.SecondaryRemainingPercent, "consecutive_failures": state.ConsecutiveFailures, "last_error_code": state.LastErrorCode, "failure_started_at": state.FailureStartedAt, "checked_at": state.LastCheckedAt}
 		event := &OpsAlertEvent{Severity: "warning", Status: OpsAlertStatusFiring, Title: title, Description: body.String(), Dimensions: dims, FiredAt: time.Now().UTC(), EmailSent: emailSent}
-		if isRecovery {
-			event.Status = OpsAlertStatusResolved
-			resolvedAt := event.FiredAt
-			event.ResolvedAt = &resolvedAt
-		}
 		if _, err := s.opsRepo.CreateAlertEvent(ctx, event); err != nil {
 			deliveryErrors = append(deliveryErrors, fmt.Errorf("persist ops alert event: %w", err))
 		}
 	}
 	return delivered, errors.Join(deliveryErrors...)
-}
-
-func truncateMonitorError(value string, max int) string {
-	value = strings.TrimSpace(value)
-	if len(value) <= max {
-		return value
-	}
-	return value[:max]
 }
 
 func (s *OAuthAccountMonitorService) sendPushPlus(ctx context.Context, cfg *OAuthMonitorPushPlusConfig, title, content string) error {
@@ -1024,4 +1078,13 @@ func (s *OAuthAccountMonitorService) sendPushPlus(ctx context.Context, cfg *OAut
 		}
 	}
 	return lastErr
+}
+
+func hasString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }

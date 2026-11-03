@@ -146,8 +146,8 @@ describe('ChatView', () => {
 
   it('sends users without a key to create one', async () => {
     const wrapper = await mountChat()
-    expect(wrapper.text()).toContain('chat.noKey')
-    expect(wrapper.get('a[href="/keys"]').text()).toContain('chat.createKey')
+    expect(wrapper.text()).toContain('还没有可用的 API 密钥。')
+    expect(wrapper.get('a[href="/keys"]').text()).toContain('去创建密钥')
   })
 
   it('shows the quiet greeting when a key exists and the thread is empty', async () => {
@@ -156,7 +156,7 @@ describe('ChatView', () => {
     session.selectedModel.value = 'claude-sonnet-4'
     session.models.value = ['claude-sonnet-4']
     const wrapper = await mountChat()
-    expect(wrapper.text()).toContain('chat.greeting')
+    expect(wrapper.text()).toContain('今天想聊什么')
     expect(wrapper.get('button.chat-send').attributes('disabled')).toBeDefined()
   })
 
@@ -166,6 +166,7 @@ describe('ChatView', () => {
     session.selectedModel.value = 'claude-sonnet-4'
     session.sendError.value = { code: 'billing', message: 'insufficient balance' }
     const wrapper = await mountChat()
-    expect(wrapper.text()).toContain('insufficient balance')
+    expect(wrapper.text()).toContain('余额或配额不足。')
+    expect(wrapper.text()).not.toContain('insufficient balance')
   })
 })

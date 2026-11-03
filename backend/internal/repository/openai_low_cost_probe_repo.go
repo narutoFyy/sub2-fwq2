@@ -66,7 +66,7 @@ JOIN accounts a ON a.id = s.account_id`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	states := make([]service.OpenAILowCostProbeState, 0)
 	for rows.Next() {
 		var state service.OpenAILowCostProbeState

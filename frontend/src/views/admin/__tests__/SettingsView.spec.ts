@@ -724,34 +724,6 @@ describe("admin SettingsView payment visible method controls", () => {
     adminSettingsFetch.mockResolvedValue(undefined);
   });
 
-  it("submits the Codex ticket harvest toggle", async () => {
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
-    });
-    const wrapper = mountView();
-    await flushPromises();
-    const toggle = wrapper.get("#codex-ticket-enabled");
-    await toggle.setValue(true);
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-    wrapper.unmount();
-  });
-
-  it("loads the masked Codex harvest proxy and submits a replacement URL", async () => {
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
-    });
-    const wrapper = mountView();
-    await flushPromises();
-    const input = wrapper.get<HTMLInputElement>("#codex-ticket-harvest-proxy");
-    expect(input.element.value).toBe("http://user:***@old.example.com:8080");
-    await input.setValue("socks5h://user:new-secret@new.example.com:1080");
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-      .toBe("socks5h://user:new-secret@new.example.com:1080");
-    wrapper.unmount();
-  });
-
   it("loads and saves the open button visibility for each custom menu", async () => {
     const menuItems = [
       { id: "docs", label: "Docs", url: "https://example.com/docs", icon_svg: "", visibility: "user", sort_order: 0 },

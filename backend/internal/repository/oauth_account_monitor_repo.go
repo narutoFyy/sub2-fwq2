@@ -23,7 +23,7 @@ func (r *oauthAccountMonitorRepository) GetStates(ctx context.Context, accountID
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		state := &service.OAuthAccountMonitorState{}
 		var checked, notified, lastSuccess, lastFailure, failureStarted, unavailableNotified sql.NullTime

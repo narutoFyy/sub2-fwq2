@@ -43,28 +43,36 @@ func TestOpenAICodexTurnStateSeed(t *testing.T) {
 	require.Empty(t, openAICodexTurnStateSeed(nil))
 }
 
-func TestPinnedTurnStateRecordAndInject(t *testing.T) {
-	svc := &OpenAIGatewayService{}
-	account := &Account{ID: 123}
+func TestOpenAICodexTurnStateDoesNotInjectPreviouslyRelayedAccountState(t *testing.T) {
+	for _, passthrough := range []bool{false, true} {
+		name := "converted"
+		if passthrough {
+			name = "passthrough"
+		}
+		t.Run(name, func(t *testing.T) {
+			svc := &OpenAIGatewayService{}
+			account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+			previous, _ := newTurnStateTestContext(t, 7, "previous-session")
+			svc.relayOpenAICodexTurnState(previous, account, http.Header{"X-Codex-Turn-State": {"previous-state"}})
 
-	// 初始状态：未钉住
-	reqHeader := http.Header{}
-	svc.InjectPinnedTurnStateIfMissing(account, reqHeader)
-	require.Empty(t, reqHeader.Get(openAICodexTurnStateHeader))
-
-	// 记录钉住状态
-	svc.RecordPinnedTurnState(123, "pinned-blob-for-account-123")
-	require.Equal(t, "pinned-blob-for-account-123", svc.GetPinnedTurnState(123))
-
-	// 缺失时自动注入
-	svc.InjectPinnedTurnStateIfMissing(account, reqHeader)
-	require.Equal(t, "pinned-blob-for-account-123", reqHeader.Get(openAICodexTurnStateHeader))
-
-	// 客户端已有 turn-state 时不覆盖
-	customHeader := http.Header{}
-	customHeader.Set(openAICodexTurnStateHeader, "client-custom-turn-state")
-	svc.InjectPinnedTurnStateIfMissing(account, customHeader)
-	require.Equal(t, "client-custom-turn-state", customHeader.Get(openAICodexTurnStateHeader))
+			for _, clientState := range []string{"", "client-owned-state"} {
+				current, _ := newTurnStateTestContext(t, 7, "current-session")
+				if clientState != "" {
+					current.Request.Header.Set(openAICodexTurnStateHeader, clientState)
+				}
+				body := []byte(`{"model":"gpt-6.1-sol","input":"hello"}`)
+				var req *http.Request
+				var err error
+				if passthrough {
+					req, err = svc.buildUpstreamRequestOpenAIPassthrough(current.Request.Context(), current, account, body, "test-token")
+				} else {
+					req, err = svc.buildUpstreamRequest(current.Request.Context(), current, account, body, "test-token", true, "", false)
+				}
+				require.NoError(t, err)
+				require.Equal(t, clientState, req.Header.Get(openAICodexTurnStateHeader))
+			}
+		})
+	}
 }
 
 func TestRelayOpenAICodexTurnState_SetsHeaderAndRecordsProvenance(t *testing.T) {

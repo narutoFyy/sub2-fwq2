@@ -31,11 +31,11 @@ func (s *modelRadarRepoStub) ListResults(context.Context, *int64, string, int) (
 	return s.results, nil
 }
 
-func TestModelRadarPublicOverviewRedactsResponseDetails(t *testing.T) {
+func TestModelRadarPublicOverviewExposesResultsAndRedactsInternalDetails(t *testing.T) {
 	reviewedBy := int64(77)
-	repo := &modelRadarRepoStub{results: []*ModelRadarResult{{
+	repo := &modelRadarRepoStub{configs: []*ModelRadarConfig{{GroupID: 10, Enabled: true}}, results: []*ModelRadarResult{{
 		ID: 1, GroupID: 10, ModelID: "gpt-5.4", TestType: ModelRadarTestTypeLogic,
-		Status: ModelRadarStatusPassed, ResponseText: "secret upstream answer", ErrorMessage: "secret error",
+		Status: ModelRadarStatusPassed, ResponseText: "Answer: 21", ErrorMessage: "secret error",
 		LatencyMS: 120, DetectedAt: time.Now(), ReviewedBy: &reviewedBy,
 	}}}
 	groups := &modelRadarGroupRepoStub{groups: []Group{{ID: 10, Name: "OpenAI", Platform: PlatformOpenAI, Status: StatusActive}}}
@@ -45,7 +45,7 @@ func TestModelRadarPublicOverviewRedactsResponseDetails(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, overview.Groups, 1)
 	require.NotNil(t, overview.Groups[0].Logic)
-	require.Empty(t, overview.Groups[0].Logic.ResponseText)
+	require.Equal(t, "Answer: 21", overview.Groups[0].Logic.ResponseText)
 	require.Empty(t, overview.Groups[0].Logic.ErrorMessage)
 	require.Nil(t, overview.Groups[0].Logic.ReviewedBy)
 }

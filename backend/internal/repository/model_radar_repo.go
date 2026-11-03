@@ -23,7 +23,7 @@ func (r *modelRadarRepository) ListConfigs(ctx context.Context) ([]*service.Mode
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]*service.ModelRadarConfig, 0)
 	for rows.Next() {
 		item := &service.ModelRadarConfig{}
@@ -84,7 +84,7 @@ func (r *modelRadarRepository) ListResults(ctx context.Context, groupID *int64, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]*service.ModelRadarResult, 0)
 	for rows.Next() {
 		item := &service.ModelRadarResult{}

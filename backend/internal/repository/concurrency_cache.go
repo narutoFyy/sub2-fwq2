@@ -25,8 +25,8 @@ import (
 const (
 	// 并发槽位键前缀（有序集合）
 	// 格式: concurrency:account:{accountID}
-	accountSlotKeyPrefix = "concurrency:account:"
-	accountProxySlotKeyPrefix = "concurrency:account_proxy:"
+	accountSlotKeyPrefix          = "concurrency:account:"
+	accountProxySlotKeyPrefix     = "concurrency:account_proxy:"
 	accountProxyLiveSlotKeyPrefix = "concurrency:live:account_proxy:"
 	// 格式: concurrency:user:{userID}
 	userSlotKeyPrefix = "concurrency:user:"

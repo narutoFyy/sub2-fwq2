@@ -182,6 +182,7 @@ func groupFromServiceBase(g *service.Group) Group {
 		ID:                              g.ID,
 		Name:                            g.Name,
 		Description:                     g.Description,
+		I18n:                            g.I18n,
 		Platform:                        g.Platform,
 		RateMultiplier:                  g.RateMultiplier,
 		IsExclusive:                     g.IsExclusive,
@@ -193,6 +194,7 @@ func groupFromServiceBase(g *service.Group) Group {
 		LongContextPricingEnabled:       g.LongContextPricingEnabled,
 		AllowImageGeneration:            g.AllowImageGeneration,
 		AllowBatchImageGeneration:       g.AllowBatchImageGeneration,
+		ImageCountBilling:               g.ImageCountBilling,
 		ImageRateIndependent:            g.ImageRateIndependent,
 		ImageRateMultiplier:             g.ImageRateMultiplier,
 		BatchImageDiscountMultiplier:    g.BatchImageDiscountMultiplier,
@@ -282,7 +284,6 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		GroupIDs:                a.GroupIDs,
 		ParentAccountID:         a.ParentAccountID,
 		QuotaDimension:          a.QuotaDimension,
-		PinnedTurnStateLive:     service.HasGlobalPinnedTurnState(a.ID),
 	}
 	if len(a.ProxyBindings) > 0 {
 		out.ProxyBindings = make([]AccountProxyBinding, 0, len(a.ProxyBindings))
@@ -291,7 +292,7 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 				ProxyID: binding.ProxyID, Concurrency: binding.Concurrency,
 				Enabled: binding.Enabled, SortOrder: binding.SortOrder,
 				CurrentConcurrency: binding.CurrentConcurrency,
-				Proxy: ProxyFromService(binding.Proxy),
+				Proxy:              ProxyFromService(binding.Proxy),
 			})
 		}
 	}
@@ -352,8 +353,8 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		}
 	}
 
-	// 提取账号配额限制（apikey / bedrock 类型有效）
-	if a.IsAPIKeyOrBedrock() {
+	// 提取账号配额限制（apikey / bedrock / service_account 类型有效）
+	if a.SupportsAccountQuota() {
 		if limit := a.GetQuotaLimit(); limit > 0 {
 			out.QuotaLimit = &limit
 			used := a.GetQuotaUsed()
@@ -431,13 +432,12 @@ func redactAccountManagedExtra(extra map[string]any) map[string]any {
 	}
 	redacted := make(map[string]any, len(extra))
 	for key, value := range extra {
-		switch {
-		case key == service.OllamaCloudUsageSessionExtraKey,
-			key == service.OllamaCloudUsageAutoRefreshExtraKey,
-			key == service.OllamaCloudUsageSnapshotExtraKey,
-			key == service.OpenCodeGoUsageAutoRefreshExtraKey,
-			key == service.OpenCodeGoUsageSnapshotExtraKey:
-			continue
+		switch key {
+		case service.OllamaCloudUsageSessionExtraKey,
+			service.OllamaCloudUsageAutoRefreshExtraKey,
+			service.OllamaCloudUsageSnapshotExtraKey,
+			service.OpenCodeGoUsageAutoRefreshExtraKey,
+			service.OpenCodeGoUsageSnapshotExtraKey:
 			continue
 		default:
 			redacted[key] = value
@@ -506,7 +506,6 @@ func AccountListItemFromAccount(a *Account) *AccountListItem {
 		QuotaDimension: a.QuotaDimension, ParentEmail: a.ParentEmail, ParentPlanType: a.ParentPlanType,
 		ParentPrivacyMode: a.ParentPrivacyMode, ParentSubscriptionExpiresAt: a.ParentSubscriptionExpiresAt,
 		ParentChatGPTAccountID: a.ParentChatGPTAccountID, Proxy: a.Proxy, GroupIDs: a.GroupIDs,
-		PinnedTurnStateLive: a.PinnedTurnStateLive,
 	}
 }
 
