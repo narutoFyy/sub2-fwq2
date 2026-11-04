@@ -2058,3 +2058,36 @@ func TestGPT61SolCacheOptionsAndBreakpointsSurviveChatBridge(t *testing.T) {
 		require.Contains(t, string(out.Input), "prompt_cache_breakpoint")
 	}
 }
+
+func TestResponsesToAnthropicRequest_NormalizesTrailingAssistantRole(t *testing.T) {
+	// 1. Assistant message with text on Opus 5.5 (does not support prefill): appends user "Continue"
+	inputWithText := json.RawMessage(`[
+		{"role":"user","content":"Hi"},
+		{"role":"assistant","content":"I am thinking"}
+	]`)
+	out, err := ResponsesToAnthropicRequest(&ResponsesRequest{Model: "claude-opus-5-5", Input: inputWithText})
+	require.NoError(t, err)
+	require.Len(t, out.Messages, 3)
+	require.Equal(t, "user", out.Messages[0].Role)
+	require.Equal(t, "assistant", out.Messages[1].Role)
+	require.Equal(t, "user", out.Messages[2].Role)
+	var lastBlocks []AnthropicContentBlock
+	require.NoError(t, json.Unmarshal(out.Messages[2].Content, &lastBlocks))
+	require.Equal(t, "Continue", lastBlocks[0].Text)
+
+	// 2. Trailing assistant message with only unanswered tool_use on Opus 5.5: tool_use dropped, ends with user
+	inputWithTool := json.RawMessage(`[
+		{"role":"user","content":"List files"},
+		{"type":"function_call","call_id":"call_1","name":"bash","arguments":"{\"command\":\"ls\"}"}
+	]`)
+	out, err = ResponsesToAnthropicRequest(&ResponsesRequest{Model: "claude-opus-5-5", Input: inputWithTool})
+	require.NoError(t, err)
+	require.Len(t, out.Messages, 1)
+	require.Equal(t, "user", out.Messages[0].Role)
+
+	// 3. Legacy model supporting prefill (e.g. claude-3-5-sonnet-20241022): prefill preserved
+	out, err = ResponsesToAnthropicRequest(&ResponsesRequest{Model: "claude-3-5-sonnet-20241022", Input: inputWithText})
+	require.NoError(t, err)
+	require.Len(t, out.Messages, 2)
+	require.Equal(t, "assistant", out.Messages[1].Role)
+}

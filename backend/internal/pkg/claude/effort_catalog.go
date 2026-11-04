@@ -57,6 +57,29 @@ func IsHaiku55(model string) bool {
 	return normalizeEffortModelID(model) == "claude-haiku-5-5"
 }
 
+// SupportsAssistantPrefill reports whether the Claude model supports assistant
+// message prefill (i.e. having the conversation end with a role="assistant" message).
+//
+// Starting with Opus 4.6, Sonnet 4.6, and all 5.x models (Opus 5.5, Sonnet 5.5,
+// Haiku 5.5, Fable 5, Mythos, etc.), Anthropic disabled assistant prefill and
+// returns HTTP 400 if the conversation does not end with a user message.
+func SupportsAssistantPrefill(model string) bool {
+	id := normalizeEffortModelID(model)
+	if !strings.HasPrefix(id, "claude-") {
+		return true
+	}
+	if strings.HasPrefix(id, "claude-3-") ||
+		strings.HasPrefix(id, "claude-sonnet-4-5") ||
+		strings.HasPrefix(id, "claude-opus-4-5") ||
+		strings.HasPrefix(id, "claude-haiku-4-5") ||
+		id == "claude-sonnet-4" ||
+		id == "claude-opus-4" ||
+		id == "claude-opus-4-1" {
+		return true
+	}
+	return false
+}
+
 func normalizeEffortModelID(model string) string {
 	id := strings.ToLower(strings.TrimSpace(model))
 	id = strings.TrimPrefix(id, "models/")

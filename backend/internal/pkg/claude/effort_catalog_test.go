@@ -76,3 +76,43 @@ func TestIsHaiku55(t *testing.T) {
 		require.False(t, IsHaiku55(model), model)
 	}
 }
+
+func TestSupportsAssistantPrefill(t *testing.T) {
+	t.Parallel()
+	supported := []string{
+		"claude-3-5-sonnet-20241022",
+		"claude-3-5-haiku-20241022",
+		"claude-3-opus-20240229",
+		"claude-sonnet-4-5-20250929",
+		"claude-opus-4-5-20251101",
+		"claude-haiku-4-5-20251001",
+		"claude-sonnet-4-20250514",
+		"claude-opus-4-20250514",
+		"claude-opus-4-1-20250805",
+		"gpt-6.1-sol",
+		"deepseek-v4",
+	}
+	for _, m := range supported {
+		require.True(t, SupportsAssistantPrefill(m), m)
+	}
+
+	unsupported := []string{
+		"claude-opus-5-5",
+		"claude-opus-5-5-high",
+		"anthropic/claude-opus-5.5",
+		"claude-sonnet-5-5",
+		"claude-sonnet-5-5-high",
+		"claude-haiku-5-5",
+		"claude-opus-5",
+		"claude-sonnet-5",
+		"claude-opus-4-6",
+		"claude-opus-4-7",
+		"claude-opus-4-8",
+		"claude-sonnet-4-6",
+		"claude-fable-5",
+		"claude-fable-5-1",
+	}
+	for _, m := range unsupported {
+		require.False(t, SupportsAssistantPrefill(m), m)
+	}
+}

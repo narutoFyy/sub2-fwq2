@@ -21,6 +21,9 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
 	if err != nil {
 		return nil, err
 	}
+	if !claude.SupportsAssistantPrefill(req.Model) {
+		messages = normalizeAnthropicTrailingRole(messages)
+	}
 
 	out := &AnthropicRequest{
 		Model:       req.Model,
@@ -841,4 +844,37 @@ func convertResponsesToAnthropicToolChoice(raw json.RawMessage) (json.RawMessage
 
 	// Pass through unknown
 	return raw, nil
+}
+
+// normalizeAnthropicTrailingRole ensures that for models that do not support assistant
+// message prefill, the conversation does not end with an assistant message.
+func normalizeAnthropicTrailingRole(messages []AnthropicMessage) []AnthropicMessage {
+	if len(messages) == 0 {
+		return messages
+	}
+	for len(messages) > 0 && messages[len(messages)-1].Role == "assistant" {
+		lastIdx := len(messages) - 1
+		blocks := parseContentBlocks(messages[lastIdx].Content)
+		var nonToolBlocks []AnthropicContentBlock
+		for _, b := range blocks {
+			if b.Type != "tool_use" && (b.Type != "text" || strings.TrimSpace(b.Text) != "") {
+				nonToolBlocks = append(nonToolBlocks, b)
+			}
+		}
+		if len(nonToolBlocks) == 0 {
+			// Drop trailing assistant message that has no remaining non-tool content
+			messages = messages[:lastIdx]
+			continue
+		}
+		// Non-empty assistant content: update content without dangling tool_use and append user Continue
+		messages[lastIdx] = anthropicMessageFromBlocks("assistant", nonToolBlocks)
+		userMsg := anthropicMessageFromBlocks("user", []AnthropicContentBlock{{Type: "text", Text: "Continue"}})
+		messages = append(messages, userMsg)
+		break
+	}
+	if len(messages) == 0 {
+		userMsg := anthropicMessageFromBlocks("user", []AnthropicContentBlock{{Type: "text", Text: "Hello"}})
+		messages = append(messages, userMsg)
+	}
+	return messages
 }

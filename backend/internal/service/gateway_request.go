@@ -567,6 +567,114 @@ func StripEmptyTextBlocks(body []byte) []byte {
 	return out
 }
 
+// NormalizeTrailingAssistantMessage ensures that requests to models that do not
+// support assistant message prefill (e.g. Claude Opus 5.5, Sonnet 5.5, Opus 4.6+, etc.)
+// do not end with an assistant message.
+//
+// Returns the original body unchanged if the model supports prefill or if messages
+// already ends with a user message.
+func NormalizeTrailingAssistantMessage(body []byte, reqModel string) []byte {
+	if claude.SupportsAssistantPrefill(reqModel) {
+		return body
+	}
+	if !bytes.Contains(body, []byte(`"assistant"`)) {
+		return body
+	}
+
+	jsonStr := *(*string)(unsafe.Pointer(&body))
+	msgsRes := gjson.Get(jsonStr, "messages")
+	if !msgsRes.Exists() || !msgsRes.IsArray() {
+		return body
+	}
+	msgsArray := msgsRes.Array()
+	if len(msgsArray) == 0 {
+		return body
+	}
+	if msgsArray[len(msgsArray)-1].Get("role").String() != "assistant" {
+		return body
+	}
+
+	var messages []map[string]any
+	if err := json.Unmarshal(sliceRawFromBody(body, msgsRes), &messages); err != nil {
+		return body
+	}
+
+	modified := false
+	for len(messages) > 0 && messages[len(messages)-1]["role"] == "assistant" {
+		lastIdx := len(messages) - 1
+		content := messages[lastIdx]["content"]
+		hasText := false
+		var cleanBlocks []any
+
+		switch v := content.(type) {
+		case string:
+			if strings.TrimSpace(v) != "" {
+				hasText = true
+			}
+		case []any:
+			for _, item := range v {
+				itemMap, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				itemType, _ := itemMap["type"].(string)
+				if itemType == "tool_use" {
+					// Drop dangling tool_use without subsequent tool_result
+					continue
+				}
+				if itemType == "text" {
+					text, _ := itemMap["text"].(string)
+					if strings.TrimSpace(text) == "" {
+						continue
+					}
+					hasText = true
+				}
+				cleanBlocks = append(cleanBlocks, item)
+			}
+		}
+
+		if !hasText && len(cleanBlocks) == 0 {
+			// Drop trailing assistant message that has no remaining non-tool content
+			messages = messages[:lastIdx]
+			modified = true
+			continue
+		}
+
+		if len(cleanBlocks) > 0 {
+			messages[lastIdx]["content"] = cleanBlocks
+		}
+		// Append user "Continue" turn so the conversation ends with user role
+		messages = append(messages, map[string]any{
+			"role":    "user",
+			"content": "Continue",
+		})
+		modified = true
+		break
+	}
+
+	if len(messages) == 0 {
+		messages = append(messages, map[string]any{
+			"role":    "user",
+			"content": "Hello",
+		})
+		modified = true
+	}
+
+	if !modified {
+		return body
+	}
+
+	msgsBytes, err := json.Marshal(messages)
+	if err != nil {
+		return body
+	}
+	out, err := sjson.SetRawBytes(body, "messages", msgsBytes)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
 // isClaude55SignedThinkingModel identifies models whose default thinking mode
 // requires signed history to survive protocol conversion and request filtering.
 func isClaude55SignedThinkingModel(model string) bool {

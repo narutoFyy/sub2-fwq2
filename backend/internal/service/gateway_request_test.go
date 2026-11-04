@@ -1697,3 +1697,50 @@ func TestNormalizeGLMOpenAIReasoningEffort(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeTrailingAssistantMessage(t *testing.T) {
+	// Case 1: Opus 5.5 trailing assistant string text -> append user "Continue"
+	input1 := []byte(`{"model":"claude-opus-5-5","messages":[{"role":"user","content":"Hi"},{"role":"assistant","content":"Thinking..."}]}`)
+	out1 := NormalizeTrailingAssistantMessage(input1, "claude-opus-5-5")
+	require.Equal(t, 3, int(gjson.GetBytes(out1, "messages.#").Int()))
+	require.Equal(t, "user", gjson.GetBytes(out1, "messages.0.role").String())
+	require.Equal(t, "assistant", gjson.GetBytes(out1, "messages.1.role").String())
+	require.Equal(t, "user", gjson.GetBytes(out1, "messages.2.role").String())
+	require.Equal(t, "Continue", gjson.GetBytes(out1, "messages.2.content").String())
+
+	// Case 2: Opus 5.5 trailing assistant with only tool_use -> dropped, ends with user
+	input2 := []byte(`{"model":"claude-opus-5-5","messages":[{"role":"user","content":"Hi"},{"role":"assistant","content":[{"type":"tool_use","id":"tu_1","name":"bash","input":{}}]}]}`)
+	out2 := NormalizeTrailingAssistantMessage(input2, "claude-opus-5-5")
+	require.Equal(t, 1, int(gjson.GetBytes(out2, "messages.#").Int()))
+	require.Equal(t, "user", gjson.GetBytes(out2, "messages.0.role").String())
+
+	// Case 3: Opus 5.5 trailing assistant with text + tool_use -> tool_use stripped, user Continue appended
+	input3 := []byte(`{"model":"claude-opus-5-5","messages":[{"role":"user","content":"Hi"},{"role":"assistant","content":[{"type":"text","text":"I will check"},{"type":"tool_use","id":"tu_1","name":"bash","input":{}}]}]}`)
+	out3 := NormalizeTrailingAssistantMessage(input3, "claude-opus-5-5")
+	require.Equal(t, 3, int(gjson.GetBytes(out3, "messages.#").Int()))
+	require.Equal(t, "user", gjson.GetBytes(out3, "messages.2.role").String())
+	require.Equal(t, "Continue", gjson.GetBytes(out3, "messages.2.content").String())
+	require.Equal(t, 1, int(gjson.GetBytes(out3, "messages.1.content.#").Int()))
+	require.Equal(t, "I will check", gjson.GetBytes(out3, "messages.1.content.0.text").String())
+
+	// Case 4: Opus 5.5 trailing empty assistant -> dropped, ends with user
+	input4 := []byte(`{"model":"claude-opus-5-5","messages":[{"role":"user","content":"Hi"},{"role":"assistant","content":""}]}`)
+	out4 := NormalizeTrailingAssistantMessage(input4, "claude-opus-5-5")
+	require.Equal(t, 1, int(gjson.GetBytes(out4, "messages.#").Int()))
+	require.Equal(t, "user", gjson.GetBytes(out4, "messages.0.role").String())
+
+	// Case 5: Opus 5.5 already ending with user -> unchanged
+	input5 := []byte(`{"model":"claude-opus-5-5","messages":[{"role":"user","content":"Hi"}]}`)
+	out5 := NormalizeTrailingAssistantMessage(input5, "claude-opus-5-5")
+	require.Equal(t, string(input5), string(out5))
+
+	// Case 6: Legacy model supporting prefill (Claude 3.5 Sonnet) -> unchanged
+	input6 := []byte(`{"model":"claude-3-5-sonnet-20241022","messages":[{"role":"user","content":"Hi"},{"role":"assistant","content":"{"}]}`)
+	out6 := NormalizeTrailingAssistantMessage(input6, "claude-3-5-sonnet-20241022")
+	require.Equal(t, string(input6), string(out6))
+
+	// Case 7: Non-Claude model (gpt-6.1-sol) -> unchanged
+	input7 := []byte(`{"model":"gpt-6.1-sol","messages":[{"role":"user","content":"Hi"},{"role":"assistant","content":"Hello"}]}`)
+	out7 := NormalizeTrailingAssistantMessage(input7, "gpt-6.1-sol")
+	require.Equal(t, string(input7), string(out7))
+}
