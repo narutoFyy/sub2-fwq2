@@ -247,6 +247,18 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 			})
 
 		case item.Type == "reasoning":
+			if strings.HasPrefix(item.EncryptedContent, anthropicFallbackEnvelopePrefix) {
+				block, err := decodeAnthropicFallback(item.EncryptedContent)
+				if err != nil {
+					return nil, nil, err
+				}
+				content, err := json.Marshal([]AnthropicContentBlock{block})
+				if err != nil {
+					return nil, nil, err
+				}
+				messages = append(messages, AnthropicMessage{Role: "assistant", Content: content})
+				continue
+			}
 			// Only decode marked Anthropic bridge envelopes, not arbitrary
 			// OpenAI ciphertext. The upstream remains responsible for signature validation.
 			if preserveThinking && strings.HasPrefix(item.EncryptedContent, anthropicThinkingEnvelopePrefix) {
@@ -273,9 +285,8 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 			if err != nil {
 				return nil, nil, err
 			}
-			// 内容里只有网关不认识的分片时，sanitize 会得到空串。Anthropic 拒收
-			// 空内容消息（"all messages must have non-empty content"），整条丢掉
-			// 比发一条必然 400 的消息更可用。
+			// Unknown-only content sanitizes to an empty string. Skip it because
+			// Anthropic rejects messages with empty content.
 			if anthropicContentIsEmpty(content) {
 				continue
 			}
@@ -289,8 +300,8 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 			if err != nil {
 				return nil, nil, err
 			}
-			// 同上：分片全不认识时会退化成单个空 text 块，而 Anthropic 拒收
-			// 空文本块（"text content blocks must contain non-whitespace text"）。
+			// Unknown-only parts likewise become a blank text block, which
+			// Anthropic rejects.
 			if anthropicContentIsEmpty(content) || anthropicContentIsOnlyBlankText(content) {
 				continue
 			}
@@ -300,10 +311,9 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 			})
 
 		default:
-			// 未知 role/type —— 尽量当作 user 消息保留其中的文本/图片。
-			// 必须走与真实 user 消息同一套白名单转换：直接透传 item.Content 会把
-			// Responses 专有的分片类型（reasoning_text、web_search_call 的载荷等）
-			// 原样发给 Anthropic，上游只会回 400 把整轮打挂。
+			// Preserve text/images from unknown roles or types as user content.
+			// Apply the same allowlist as for user messages so Responses-only
+			// content parts cannot reach Anthropic and cause a 400 response.
 			if item.Content == nil {
 				continue
 			}
@@ -336,6 +346,26 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 	}
 
 	return system, messages, nil
+}
+
+func decodeAnthropicFallback(encrypted string) (AnthropicContentBlock, error) {
+	raw, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(encrypted, anthropicFallbackEnvelopePrefix))
+	if err != nil {
+		return AnthropicContentBlock{}, fmt.Errorf("invalid Anthropic fallback envelope: %w", err)
+	}
+	var block AnthropicContentBlock
+	if err := json.Unmarshal(raw, &block); err != nil {
+		return block, fmt.Errorf("invalid Anthropic fallback block: %w", err)
+	}
+	var marker struct {
+		From struct{ Model string } `json:"from"`
+		To   struct{ Model string } `json:"to"`
+	}
+	if err := json.Unmarshal(raw, &marker); err != nil || block.Type != "fallback" ||
+		strings.TrimSpace(marker.From.Model) == "" || strings.TrimSpace(marker.To.Model) == "" {
+		return block, fmt.Errorf("invalid Anthropic fallback block")
+	}
+	return block, nil
 }
 
 func responsesFunctionOutputToAnthropicContent(item ResponsesInputItem) json.RawMessage {
@@ -519,9 +549,9 @@ func extractTextFromContent(raw json.RawMessage) string {
 
 // convertResponsesUserToAnthropicContent converts a Responses user message
 // content field into Anthropic content blocks JSON.
-// anthropicContentIsEmpty 判断转换结果是否为"空内容"。
-// convertResponsesUserToAnthropicContent 在没有任何可识别分片时返回 JSON 空串，
-// 而 Anthropic 拒收空内容消息。
+// anthropicContentIsEmpty detects empty converted content. The user-content
+// converter returns a JSON empty string for unknown-only parts, which Anthropic
+// rejects.
 func anthropicContentIsEmpty(content json.RawMessage) bool {
 	trimmed := strings.TrimSpace(string(content))
 	switch trimmed {
@@ -531,7 +561,7 @@ func anthropicContentIsEmpty(content json.RawMessage) bool {
 	return false
 }
 
-// anthropicContentIsOnlyBlankText 判断内容是否只由空白 text 块组成。
+// anthropicContentIsOnlyBlankText reports whether all content is blank text.
 func anthropicContentIsOnlyBlankText(content json.RawMessage) bool {
 	blocks := parseContentBlocks(content)
 	if len(blocks) == 0 {
@@ -757,9 +787,8 @@ func convertResponsesToAnthropicTools(tools []ResponsesTool) []AnthropicTool {
 }
 
 // normalizeAnthropicInputSchema ensures input_schema is a valid object schema.
-// Codex 会把部分内置工具（例如 codex_app 的 automation_update）的 parameters
-// 根节点声明成对象分支的 oneOf/anyOf，Anthropic 只接受 object 根节点，这里把
-// 顶层联合摊平成单个 object schema。
+// Codex declares some built-in tools with oneOf/anyOf object branches at the
+// parameters root. Flatten these unions into the object schema Anthropic accepts.
 func normalizeAnthropicInputSchema(schema json.RawMessage) json.RawMessage {
 	const emptyObjectSchema = `{"type":"object","properties":{}}`
 

@@ -26,11 +26,9 @@ type AnthropicRequest struct {
 	StopSeqs    []string           `json:"stop_sequences,omitempty"`
 	Thinking    *AnthropicThinking `json:"thinking,omitempty"`
 	ToolChoice  json.RawMessage    `json:"tool_choice,omitempty"`
-	// Metadata 会被原样透传给上游。OAuth/Claude-Code 路径依赖 metadata.user_id
-	// 参与上游的"是否为官方 Claude Code 请求"判定；如果经由本结构体重新序列化
-	// 时丢弃该字段，网关侧后续的 metadata 重写(ensureClaudeOAuthMetadataUserID/
-	// RewriteUserIDWithMasking) 在 body 里拿不到起点，就无法重建一个合法的
-	// user_id，进而导致请求被归类为第三方 app。
+	// Preserve upstream metadata. OAuth/Claude Code requests need metadata.user_id
+	// as the starting point for ensureClaudeOAuthMetadataUserID and
+	// RewriteUserIDWithMasking; dropping it can classify the request as a third-party app.
 	Metadata     json.RawMessage        `json:"metadata,omitempty"`
 	OutputConfig *AnthropicOutputConfig `json:"output_config,omitempty"`
 }
@@ -68,6 +66,10 @@ type AnthropicContentBlock struct {
 	Signature string `json:"signature,omitempty"`
 	Data      string `json:"data,omitempty"` // redacted_thinking
 
+	// FallbackRaw preserves the complete model-switch marker, including unknown
+	// metadata, across typed parsing and opaque Responses history replay.
+	FallbackRaw json.RawMessage `json:"-"`
+
 	// type=image
 	Source *AnthropicImageSource `json:"source,omitempty"`
 
@@ -82,7 +84,23 @@ type AnthropicContentBlock struct {
 	IsError   bool            `json:"is_error,omitempty"`
 }
 
+func (b *AnthropicContentBlock) UnmarshalJSON(data []byte) error {
+	type contentBlock AnthropicContentBlock
+	var block contentBlock
+	if err := json.Unmarshal(data, &block); err != nil {
+		return err
+	}
+	*b = AnthropicContentBlock(block)
+	if b.Type == "fallback" {
+		b.FallbackRaw = append(json.RawMessage(nil), data...)
+	}
+	return nil
+}
+
 func (b AnthropicContentBlock) MarshalJSON() ([]byte, error) {
+	if b.Type == "fallback" && len(b.FallbackRaw) > 0 {
+		return b.FallbackRaw, nil
+	}
 	type anthropicContentBlock AnthropicContentBlock
 	base := struct {
 		anthropicContentBlock
@@ -124,11 +142,11 @@ type AnthropicTool struct {
 	CacheControl *AnthropicCacheControl `json:"cache_control,omitempty"`
 }
 
-// AnthropicCacheControl 对应 Anthropic API 的 cache_control 字段。
-// ttl 默认由调用方决定；本项目策略见 claude.DefaultCacheControlTTL。
+// AnthropicCacheControl represents the Anthropic cache_control field.
+// Callers choose the TTL; see claude.DefaultCacheControlTTL for project policy.
 type AnthropicCacheControl struct {
 	Type string `json:"type"`          // "ephemeral"
-	TTL  string `json:"ttl,omitempty"` // "5m" / "1h" / 省略=默认 5m（由 Anthropic 判定）
+	TTL  string `json:"ttl,omitempty"` // "5m" / "1h"; Anthropic defaults to 5m when omitted
 }
 
 // AnthropicResponse is the non-streaming response from POST /v1/messages.
@@ -335,7 +353,7 @@ type ResponsesTool struct {
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
 	Strict      *bool           `json:"strict,omitempty"`
 
-	// type=namespace 的子工具列表（tools 与 children 二选一，语义相同）。
+	// Child tools for type=namespace; tools and children are equivalent alternatives.
 	Tools    []ResponsesTool `json:"tools,omitempty"`
 	Children []ResponsesTool `json:"children,omitempty"`
 
@@ -348,7 +366,7 @@ type ResponsesTool struct {
 	EnableVideoUnderstanding *bool    `json:"enable_video_understanding,omitempty"`
 }
 
-// UnmarshalJSON 容忍字符串形式的工具声明：codex 会以 "name" 简写声明 custom 工具，
+// UnmarshalJSON accepts Codex's string shorthand for custom tools.
 func (t *ResponsesTool) UnmarshalJSON(data []byte) error {
 	var name string
 	if err := json.Unmarshal(data, &name); err == nil {
@@ -415,20 +433,19 @@ type ResponsesOutput struct {
 	CallID    string `json:"call_id,omitempty"`
 	Name      string `json:"name,omitempty"`
 	Arguments string `json:"arguments,omitempty"`
-	// 来源为 namespace 子工具时的归属命名空间（codex 按 namespace+name 路由该调用）。
+	// Codex routes namespace child-tool calls by namespace and name.
 	Namespace string `json:"namespace,omitempty"`
 
-	// type=custom_tool_call（custom/freeform 工具，input 为自由文本）
+	// type=custom_tool_call: input is freeform text.
 	Input string `json:"input,omitempty"`
 
 	// type=web_search_call
 	Action *WebSearchAction `json:"action,omitempty"`
 }
 
-// MarshalJSON 处理 tool_search_call 项的线上形态（复用 CallID/Arguments 字段）：
-// execution 固定为 "client"（codex 的必填字段，非 client 的调用会被静默忽略），
-// arguments 是 JSON 对象而非 function_call 语义下的字符串。其余类型走默认结构体
-// 序列化，输出逐字节不变。
+// MarshalJSON encodes tool_search_call using CallID/Arguments. Codex requires
+// execution="client" and object-valued arguments, rather than the string used
+// for function calls. Other types retain their default struct serialization.
 func (o ResponsesOutput) MarshalJSON() ([]byte, error) {
 	type responsesOutputAlias ResponsesOutput
 	if o.Type != "tool_search_call" {
@@ -617,7 +634,7 @@ type ResponsesStreamEvent struct {
 
 	// response.created / response.completed / response.done / response.failed / response.incomplete
 	Response *ResponsesResponse `json:"response,omitempty"`
-	// 部分 OpenAI 兼容上游会把 usage 放在终止事件顶层，而不是 response.usage。
+	// Some OpenAI-compatible upstreams put terminal usage here instead of response.usage.
 	Usage *ResponsesUsage `json:"usage,omitempty"`
 
 	// response.output_item.added / response.output_item.done

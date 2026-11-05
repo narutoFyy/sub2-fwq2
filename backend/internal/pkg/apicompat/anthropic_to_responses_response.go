@@ -17,6 +17,12 @@ import (
 // ---------------------------------------------------------------------------
 
 const anthropicThinkingEnvelopePrefix = "anthropic-thinking-v1:"
+const anthropicFallbackEnvelopePrefix = "anthropic-fallback-v1:"
+
+func encodeAnthropicFallback(block AnthropicContentBlock) string {
+	payload, _ := json.Marshal(block)
+	return anthropicFallbackEnvelopePrefix + base64.RawStdEncoding.EncodeToString(payload)
+}
 
 func encodeAnthropicThinking(block AnthropicContentBlock) string {
 	// Only fields belonging to the signed thinking block are retained.
@@ -49,11 +55,39 @@ func AnthropicToResponsesResponse(resp *AnthropicResponse) *ResponsesResponse {
 
 	var outputs []ResponsesOutput
 	var msgParts []ResponsesContentPart
+	preserveThinking := claude.IsOpus55(resp.Model) || claude.IsSonnet55(resp.Model) || claude.IsHaiku55(resp.Model)
+	for _, block := range resp.Content {
+		if block.Type == "fallback" {
+			// The terminal model can be older than the model that produced the
+			// first signed segment in this same assistant message.
+			preserveThinking = true
+			break
+		}
+	}
+	flushText := func() {
+		if len(msgParts) == 0 {
+			return
+		}
+		outputs = append(outputs, ResponsesOutput{
+			Type: "message", ID: generateItemID(), Role: "assistant",
+			Content: msgParts, Status: "completed",
+		})
+		msgParts = nil
+	}
 
 	for _, block := range resp.Content {
 		switch block.Type {
+		case "fallback":
+			// A model switch separates signed thinking segments. Keep its exact
+			// position even when a buffered response reports the fallback model.
+			flushText()
+			outputs = append(outputs, ResponsesOutput{
+				Type: "reasoning", ID: generateItemID(),
+				EncryptedContent: encodeAnthropicFallback(block),
+			})
 		case "thinking", "redacted_thinking":
-			if (claude.IsOpus55(resp.Model) || claude.IsSonnet55(resp.Model) || claude.IsHaiku55(resp.Model)) && (block.Signature != "" || block.Data != "") {
+			if preserveThinking && (block.Signature != "" || block.Data != "") {
+				flushText()
 				item := ResponsesOutput{Type: "reasoning", ID: generateItemID(), EncryptedContent: encodeAnthropicThinking(block)}
 				if block.Thinking != "" {
 					item.Summary = []ResponsesSummary{{Type: "summary_text", Text: block.Thinking}}
@@ -72,7 +106,7 @@ func AnthropicToResponsesResponse(resp *AnthropicResponse) *ResponsesResponse {
 				})
 			}
 		case "text":
-			if (claude.IsOpus55(resp.Model) || claude.IsSonnet55(resp.Model) || claude.IsHaiku55(resp.Model)) && block.Text != "" {
+			if preserveThinking && block.Text != "" {
 				outputs = append(outputs, ResponsesOutput{Type: "message", ID: generateItemID(), Role: "assistant", Status: "completed", Content: []ResponsesContentPart{{Type: "output_text", Text: block.Text}}})
 				continue
 			}
@@ -83,6 +117,9 @@ func AnthropicToResponsesResponse(resp *AnthropicResponse) *ResponsesResponse {
 				})
 			}
 		case "tool_use":
+			if preserveThinking {
+				flushText()
+			}
 			args := "{}"
 			if len(block.Input) > 0 {
 				args = string(block.Input)
@@ -317,15 +354,11 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 	var events []ResponsesStreamEvent
 
 	switch evt.ContentBlock.Type {
-	case "thinking", "redacted_thinking":
-		// 开新 item 前必须先关掉在开的那个，与下面的 tool_use 分支一致。
-		// 一个 message item 在它的 text 块 content_block_stop 时是刻意保持打开的
-		// （同一 item 里可能还有后续 text 块），所以 thinking 块到来时它仍然开着：
-		// 不关就直接被 CurrentItemType/CurrentItemID 覆盖，累积在 CurrentContent
-		// 里的助手文本既不会进 state.Outputs，也拿不到 output_item.done，
-		// response.completed 于是只带 reasoning——客户端看到的是「成功但无输出」。
-		// 交错思考（interleaved-thinking，本仓库在 anthropic-beta 透传里明确支持）
-		// 会稳定产生 text → thinking 这个顺序。
+	case "thinking", "redacted_thinking", "fallback":
+		// Close the preceding item before opening another, as for tool_use.
+		// Message items stay open after text content_block_stop to accept more
+		// text parts. Interleaved thinking can follow text, so overwriting the
+		// current item here would discard its text and output_item.done event.
 		events = append(events, closeCurrentResponsesItem(state)...)
 
 		state.CurrentItemID = generateItemID()
@@ -345,9 +378,8 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 	case "text":
 		// If we don't have an open message item, open one
 		if state.CurrentItemType != "message" {
-			// 走到这里时 CurrentItemType 只可能是 ""（前一个 reasoning/function_call
-			// 已在自己的 content_block_stop 里关闭）；保留这次关闭是为了让三个分支
-			// 的「开新 item 前先关旧的」保持同一条不变式，而不是留一个仅 text 例外。
+			// Reasoning and function-call items normally close at their own
+			// content_block_stop. Keep the close-before-open invariant here too.
 			events = append(events, closeCurrentResponsesItem(state)...)
 
 			state.CurrentItemID = generateItemID()
@@ -523,12 +555,9 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 		state.TextAccum = ""
 		contentIndex := state.ContentIndex
 		state.CurrentContent = append(state.CurrentContent, ResponsesContentPart{Type: "output_text", Text: text})
-		// 关掉一个 part 就推进 content_index：上面那句注释说的「item 保持打开，
-		// 因为后面可能还有块」正是这里的触发条件。不推进的话，同一 item 里第二个
-		// text 块会再发一次 content_part.added(content_index=0)，与第一个 part 撞在
-		// 同一下标上——SDK 的累积式 stream helper 按 content[content_index] 写入，
-		// 后一个 part 直接覆盖前一个，可见文本丢失。
-		// 只在这里推进：新 item 的 content_index 由 closeCurrentResponsesItem 归 0。
+		// Advance after each part so SDK stream accumulators do not overwrite
+		// earlier text at the same index. closeCurrentResponsesItem resets the
+		// index when the next item opens.
 		state.ContentIndex++
 		return []ResponsesStreamEvent{
 			makeResponsesEvent(state, "response.output_text.done", &ResponsesStreamEvent{
@@ -631,7 +660,9 @@ func closeCurrentResponsesItem(state *AnthropicEventToResponsesState) []Response
 		}
 		item.Arguments = args
 	case "reasoning":
-		if state.PreserveThinkingSignatures && (state.CurrentThinking.Signature != "" || state.CurrentThinking.Data != "") {
+		if state.CurrentThinking.Type == "fallback" {
+			item.EncryptedContent = encodeAnthropicFallback(state.CurrentThinking)
+		} else if state.PreserveThinkingSignatures && (state.CurrentThinking.Signature != "" || state.CurrentThinking.Data != "") {
 			state.CurrentThinking.Thinking = state.CurrentSummary
 			item.EncryptedContent = encodeAnthropicThinking(state.CurrentThinking)
 		}
