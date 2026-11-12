@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
+import { useTutorialWelcomeStore } from '@/features/tutorials/welcomeStore'
 
 // Mock authAPI
 const mockLogin = vi.fn()
@@ -55,6 +56,7 @@ describe('useAuthStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    sessionStorage.clear()
     vi.useFakeTimers()
     vi.clearAllMocks()
   })
@@ -64,6 +66,21 @@ describe('useAuthStore', () => {
   })
 
   // --- login ---
+  it('queues the tutorial only after successful registration', async () => {
+    const store = useAuthStore()
+    mockRegister.mockRejectedValueOnce(new Error('registration failed'))
+    await expect(store.register({ email: 'new@example.com', password: 'example-password' })).rejects.toThrow()
+    expect(useTutorialWelcomeStore().pendingUserId).toBeNull()
+    mockRegister.mockResolvedValueOnce(fakeAuthResponse)
+    await store.register({ email: 'new@example.com', password: 'example-password' })
+    expect(useTutorialWelcomeStore().pendingUserId).toBe(fakeUser.id)
+  })
+
+  it('does not prompt an existing user on ordinary login', async () => {
+    mockLogin.mockResolvedValue(fakeAuthResponse)
+    await useAuthStore().login({ email: 'test@example.com', password: 'example-password' })
+    expect(useTutorialWelcomeStore().pendingUserId).toBeNull()
+  })
 
   describe('login', () => {
     it('成功登录后设置 token 和 user', async () => {

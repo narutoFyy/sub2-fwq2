@@ -11,6 +11,7 @@ import admin from './admin'
 import misc from './misc'
 
 export default {
+  tutorials: { title: '接入教程' },
   adminAccessKeys,
   mcp,
   ...landing,

@@ -29,6 +29,7 @@
           <span class="min-w-0 truncate text-base font-semibold">{{ siteName }}</span>
         </div>
         <div class="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+          <router-link to="/tutorials" class="px-2 py-2 text-sm">{{ tutorialCopy.nav }}</router-link>
           <LocaleSwitcher />
           <a
             v-if="docUrl"
@@ -84,6 +85,7 @@
         </router-link>
       </div>
     </main>
+    <TutorialEntry />
 
     <footer class="min-w-0 border-t border-gray-200 px-4 py-5 text-center text-sm text-gray-500 [overflow-wrap:anywhere] sm:px-6 dark:border-dark-800 dark:text-dark-400">
       &copy; {{ currentYear }} {{ siteName }}
@@ -101,6 +103,8 @@ import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import LandingHome from '@/views/home/LandingHome.vue'
+import TutorialEntry from '@/features/tutorials/TutorialEntry.vue'
+import { useTutorialCopy } from '@/features/tutorials/content'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
@@ -108,6 +112,7 @@ const { t } = useI18n()
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
+const tutorialCopy = useTutorialCopy()
 
 // Site settings - directly from appStore (already initialized from injected config)
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')

@@ -6,6 +6,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { authAPI, isTotp2FARequired, passkeyAPI, type LoginResponse } from '@/api'
+import { useTutorialWelcomeStore } from '@/features/tutorials/welcomeStore'
 import type {
   User,
   LoginRequest,
@@ -340,6 +341,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       // Use the common helper to set auth state
       setAuthFromResponse(response)
+      useTutorialWelcomeStore().queue(response.user)
 
       return user.value!
     } catch (error) {
@@ -378,6 +380,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const userData = await refreshUser()
+      useTutorialWelcomeStore().queueNewOAuthUser(userData)
       startAutoRefresh()
 
       // Start proactive token refresh if we have refresh token and expiry info

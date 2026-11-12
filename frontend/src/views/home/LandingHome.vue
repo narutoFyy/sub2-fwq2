@@ -12,6 +12,7 @@
         <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3">
           <BrandLogo to="/home" :name="siteName" />
           <div class="flex shrink-0 items-center gap-1">
+            <span class="hidden sm:inline-flex"><RollLink to="/tutorials" :label="tutorialCopy.nav" variant="plain" class="mr-1" /></span>
             <RollLink
               v-if="showModelPlazaEntry"
               to="/model-plaza"
@@ -32,6 +33,7 @@
         </h1>
         <p class="mt-6 max-w-md text-[17px] leading-relaxed text-muted">{{ t('home.landing.hero.subtitle') }}</p>
         <div class="mt-10 flex flex-wrap items-center gap-4">
+          <span class="sm:hidden"><RollLink to="/tutorials" :label="tutorialCopy.nav" size="lg" variant="plain" arrow /></span>
           <RollLink
             :to="isAuthenticated ? dashboardPath : '/login'"
             :label="isAuthenticated ? t('home.goToDashboard') : t('home.getStarted')"
@@ -59,6 +61,8 @@
         </li>
       </ul>
     </section>
+
+    <TutorialEntry />
 
     <!-- ============ 接入 ============ -->
     <section class="mx-auto grid max-w-7xl items-center gap-12 px-5 py-20 sm:px-8 sm:py-28 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-12">
@@ -119,7 +123,8 @@
 
     <footer class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-5 py-10 text-sm text-muted sm:flex-row sm:px-8 lg:px-12">
       <BrandLogo :name="siteName" :size="22" />
-      <div class="flex items-center gap-7">
+      <div class="flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
+        <router-link to="/tutorials" class="footer-link">{{ tutorialCopy.nav }}</router-link>
         <router-link v-if="showModelPlazaEntry" to="/model-plaza" class="footer-link">{{ t('nav.modelPlaza') }}</router-link>
         <router-link to="/key-usage" class="footer-link">{{ t('home.landing.footer.keyUsage') }}</router-link>
         <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer" class="footer-link">{{ t('home.docs') }}</a>
@@ -141,12 +146,15 @@ import ThemeToggleIcon from '@/components/common/ThemeToggleIcon.vue'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
 import GlowDots from '@/components/visual/GlowDots.vue'
+import TutorialEntry from '@/features/tutorials/TutorialEntry.vue'
+import { useTutorialCopy } from '@/features/tutorials/content'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 const appStore = useAppStore()
+const tutorialCopy = useTutorialCopy()
 
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))

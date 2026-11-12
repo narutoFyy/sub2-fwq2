@@ -31,6 +31,12 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== Public Routes ====================
   {
+    path: '/tutorials/:client(claude-code|codex)?',
+    name: 'Tutorials',
+    component: () => import('@/features/tutorials/TutorialView.vue'),
+    meta: { requiresAuth: false, title: 'Setup guides', titleKey: 'tutorials.title' }
+  },
+  {
     path: '/home',
     name: 'Home',
     component: () => import('@/views/HomeView.vue'),
@@ -802,10 +808,13 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
-  scrollBehavior(_to, _from, savedPosition) {
+  scrollBehavior(to, _from, savedPosition) {
     // Scroll to saved position when using browser back/forward
     if (savedPosition) {
       return savedPosition
+    }
+    if (to.name === 'Tutorials' && to.hash) {
+      return { el: to.hash, top: window.innerWidth <= 700 ? 80 : 28 }
     }
     // Scroll to top for new routes
     return { top: 0 }
