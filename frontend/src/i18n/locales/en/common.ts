@@ -259,6 +259,10 @@ export default {
 
   // Auth
   auth: {
+    layout: {
+      headlineLine1: 'One key.',
+      headlineLine2: 'Every top model.'
+    },
     welcomeBack: 'Welcome Back',
     signInToAccount: 'Sign in to your account to continue',
     signIn: 'Sign In',

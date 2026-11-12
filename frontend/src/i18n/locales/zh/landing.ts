@@ -109,6 +109,36 @@ export default {
       description: '注册即可获得免费试用额度，体验一站式 AI 服务',
       button: '免费注册'
     },
+    // 柔光点阵新版首页（尽量少字）
+    switchLanguage: '切换语言',
+    landing: {
+      hero: {
+        titleLine1: '一个 Key',
+        titleLine2: '畅用顶级大模型',
+        subtitle: 'Claude、GPT、Gemini，按量付费，即开即用。',
+        viewPricing: '模型与价格'
+      },
+      quickstart: {
+        titleLine1: '一分钟',
+        titleLine2: '完成接入',
+        keyPlaceholder: 'sk-你的密钥',
+        copy: '复制代码'
+      },
+      features: {
+        stableTitle: '稳定',
+        stableDesc: '多上游自动切换',
+        usageTitle: '透明',
+        usageDesc: '每次调用都有明细',
+        keyTitle: '省心',
+        keyDesc: '一个 Key 用全部模型'
+      },
+      finalCta: {
+        title: '现在开始'
+      },
+      footer: {
+        keyUsage: '用量查询'
+      }
+    },
     footer: {
       allRightsReserved: '保留所有权利。'
     }

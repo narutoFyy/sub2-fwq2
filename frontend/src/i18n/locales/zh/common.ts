@@ -259,6 +259,10 @@ export default {
 
   // Auth
   auth: {
+    layout: {
+      headlineLine1: '一个 Key',
+      headlineLine2: '畅用顶级大模型'
+    },
     welcomeBack: '欢迎回来',
     signInToAccount: '登录您的账户以继续',
     signIn: '登录',

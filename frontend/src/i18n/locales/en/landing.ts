@@ -109,6 +109,36 @@ export default {
       description: 'Sign up now and get free trial credits to experience seamless AI access',
       button: 'Sign Up Free'
     },
+    // Glow-dot landing page (keep it short)
+    switchLanguage: 'Switch language',
+    landing: {
+      hero: {
+        titleLine1: 'One key.',
+        titleLine2: 'Every top model.',
+        subtitle: 'Claude, GPT and Gemini. Pay as you go.',
+        viewPricing: 'Models & pricing'
+      },
+      quickstart: {
+        titleLine1: 'Connected',
+        titleLine2: 'in a minute',
+        keyPlaceholder: 'sk-your-key',
+        copy: 'Copy code'
+      },
+      features: {
+        stableTitle: 'Stable',
+        stableDesc: 'Automatic upstream failover',
+        usageTitle: 'Transparent',
+        usageDesc: 'Every call itemized',
+        keyTitle: 'Simple',
+        keyDesc: 'One key for every model'
+      },
+      finalCta: {
+        title: 'Start now'
+      },
+      footer: {
+        keyUsage: 'Usage lookup'
+      }
+    },
     footer: {
       allRightsReserved: 'All rights reserved.'
     }
