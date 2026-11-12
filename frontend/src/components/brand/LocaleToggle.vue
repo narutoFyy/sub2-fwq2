@@ -53,24 +53,27 @@ async function toggle() {
 .locale-toggle {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: 9999px;
   background: none;
-  color: inherit;
   cursor: pointer;
-  opacity: 0.82;
-  transition: opacity 0.2s;
+  color: var(--muted, inherit);
+  transition:
+    color 0.2s,
+    box-shadow 0.2s;
   -webkit-tap-highlight-color: transparent;
 }
 .locale-toggle:hover {
-  opacity: 1;
+  color: var(--ink, inherit);
+}
+.locale-toggle:focus {
+  outline: none;
 }
 .locale-toggle:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
 }
 .locale-roll {
   position: relative;
@@ -84,12 +87,12 @@ async function toggle() {
   grid-area: 1 / 1;
   font-family: 'Geist Variable', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei UI', sans-serif;
   font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   line-height: 1;
 }
 .locale-label--cjk {
-  font-size: 15px;
+  font-size: 14px;
   letter-spacing: 0;
 }
 

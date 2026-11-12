@@ -32,6 +32,8 @@ export interface GlowDotsOptions {
   seed?: number
   /** 动画起始时间。默认值是实测首屏覆盖最饱满、之后也不会变空的时刻 */
   startTime?: number
+  /** 整体强度系数（<1 时最亮的核心更少，画面更克制） */
+  gain?: number
   /** 加载完成第一帧后回调（用于淡入） */
   onReady?: () => void
 }
@@ -41,10 +43,13 @@ interface Palette {
   levels: string[]
 }
 
-/** 6 档从弱到强；深色底从暗到亮，浅色底从浅到深 */
+/**
+ * 6 档从弱到强。前几档是中性灰，只有最强的核心带强调色，
+ * 让大面积保持中性、颜色只出现在一处（深色：青；浅色：樱粉）。
+ */
 export const GLOW_PALETTES: Record<GlowTheme, Palette> = {
-  midnight: { grid: '#161a24', levels: ['#132a46', '#1d3f9a', '#2563eb', '#3b82f6', '#22d3ee', '#a5f3fc'] },
-  rose: { grid: '#f3e6ea', levels: ['#ffe4e6', '#fecdd3', '#fda4af', '#fb7185', '#e11d48', '#be123c'] },
+  midnight: { grid: '#151619', levels: ['#1a1c21', '#23262d', '#2f343d', '#3b5462', '#2aa7c2', '#8beafb'] },
+  rose: { grid: '#ececee', levels: ['#e9e9ec', '#dcdce1', '#c8c8cf', '#c9a2b0', '#e0587c', '#e11d48'] },
 }
 
 /** 各档圆点直径（相对格子） */
@@ -231,6 +236,7 @@ export class GlowDotsRenderer {
       interactive: true,
       seed: 31,
       startTime: 46,
+      gain: 1,
       ...options,
     }
     this.field = createGlowField(this.o.seed)
@@ -364,7 +370,7 @@ export class GlowDotsRenderer {
             v += dx * swirl - dy * k * 0.45
           }
         }
-        let s = this.field(u, v, this.time)
+        let s = this.field(u, v, this.time) * this.o.gain
         if (k > 0) {
           s = 1 - (1 - s) * (1 - 0.2 * k) // 周围一圈柔光
           s = Math.min(1, s + 0.55 * k * s) // 原有光团提亮

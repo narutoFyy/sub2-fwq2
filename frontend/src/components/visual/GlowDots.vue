@@ -23,6 +23,7 @@ const props = withDefaults(
     maxCells?: number
     interactive?: boolean
     seed?: number
+    gain?: number
   }>(),
   {
     theme: 'auto',
@@ -34,6 +35,7 @@ const props = withDefaults(
     maxCells: 30000,
     interactive: true,
     seed: 31,
+    gain: 1,
   },
 )
 
@@ -58,6 +60,7 @@ onMounted(() => {
     maxCells: props.maxCells,
     interactive: props.interactive,
     seed: props.seed,
+    gain: props.gain,
     onReady: () => {
       ready.value = true
     },

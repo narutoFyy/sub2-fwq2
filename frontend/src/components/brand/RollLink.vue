@@ -50,47 +50,50 @@ const isExternal = computed(() => /^https?:\/\//.test(props.to))
   white-space: nowrap;
   transition:
     transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 0.25s;
+    background-color 0.2s,
+    box-shadow 0.2s;
   -webkit-tap-highlight-color: transparent;
 }
 .roll-link:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
+}
+.roll-link:focus {
+  outline: none;
 }
 .roll-link:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 3px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
 }
 
 .roll-link--solid {
-  background: var(--ink, #1c0a10);
-  color: var(--bg, #fffafb);
+  background: var(--btn-bg, #0a0a0b);
+  color: var(--btn-fg, #fafafa);
 }
 .roll-link--solid:hover {
-  opacity: 0.9;
+  background: var(--btn-bg-hover, #26262a);
 }
 .roll-link--plain {
-  color: inherit;
-  opacity: 0.72;
+  color: var(--muted, inherit);
+  transition:
+    color 0.2s,
+    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .roll-link--plain:hover {
-  opacity: 1;
+  color: var(--ink, inherit);
 }
 
 .roll-link--sm {
-  height: 38px;
-  padding: 0 18px;
+  height: 36px;
+  padding: 0 14px;
   font-size: 14px;
-  letter-spacing: 0.02em;
 }
 .roll-link--lg {
-  height: 52px;
-  padding: 0 26px;
-  font-size: 16px;
-  letter-spacing: 0.01em;
+  height: 44px;
+  padding: 0 20px;
+  font-size: 15px;
 }
 .roll-link--plain.roll-link--sm,
 .roll-link--plain.roll-link--lg {
-  padding: 0 4px;
+  padding: 0 8px;
 }
 
 .roll-text {
@@ -122,7 +125,7 @@ const isExternal = computed(() => /^https?:\/\//.test(props.to))
   height: 16px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
   transition: transform 0.55s var(--ease);

@@ -23,10 +23,9 @@ function initIOSViewportZoomFix() {
 }
 
 function initThemeClass() {
+  // 默认深色；只有用户手动选过浅色时才用浅色
   const savedTheme = localStorage.getItem('theme')
-  const shouldUseDark =
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const shouldUseDark = savedTheme !== 'light'
   document.documentElement.classList.toggle('dark', shouldUseDark)
 }
 

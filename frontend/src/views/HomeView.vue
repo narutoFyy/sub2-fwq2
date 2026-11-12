@@ -151,11 +151,9 @@ function toggleTheme() {
 
 // Initialize theme
 function initTheme() {
+  // 默认深色；只有用户手动选过浅色时才用浅色
   const savedTheme = localStorage.getItem('theme')
-  if (
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  ) {
+  if (savedTheme !== 'light') {
     isDark.value = true
     document.documentElement.classList.add('dark')
   }

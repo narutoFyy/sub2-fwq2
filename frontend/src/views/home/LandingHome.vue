@@ -3,35 +3,35 @@
     <!-- ============ 首屏 ============ -->
     <section class="relative isolate flex min-h-[100svh] flex-col overflow-hidden">
       <div class="absolute inset-0 -z-10" aria-hidden="true">
-        <GlowDots :center-x="0.64" :center-y="0.58" />
+        <GlowDots :center-x="0.76" :center-y="0.5" :gain="0.74" />
         <div class="hero-scrim absolute inset-0"></div>
         <div class="hero-fade absolute inset-x-0 bottom-0 h-[32%]"></div>
       </div>
 
-      <header class="px-5 py-4 sm:px-8 lg:px-12">
-        <nav class="mx-auto flex max-w-7xl items-center justify-between gap-3">
+      <header class="px-5 sm:px-8 lg:px-12">
+        <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3">
           <BrandLogo to="/home" :name="siteName" />
-          <div class="flex shrink-0 items-center gap-1 sm:gap-2">
+          <div class="flex shrink-0 items-center gap-1">
             <RollLink
               v-if="showModelPlazaEntry"
               to="/model-plaza"
               :label="t('nav.modelPlaza')"
               variant="plain"
-              class="mr-2 hidden sm:inline-flex"
+              class="mr-1 hidden sm:inline-flex"
             />
             <LocaleToggle />
             <ThemeToggleIcon />
-            <RollLink :to="isAuthenticated ? dashboardPath : '/login'" :label="isAuthenticated ? t('home.dashboard') : t('home.login')" class="ml-1" />
+            <RollLink :to="isAuthenticated ? dashboardPath : '/login'" :label="isAuthenticated ? t('home.dashboard') : t('home.login')" class="ml-2" />
           </div>
         </nav>
       </header>
 
-      <div class="mx-auto mt-auto w-full max-w-7xl px-5 pb-16 sm:px-8 sm:pb-24 lg:px-12">
+      <div class="mx-auto my-auto w-full max-w-7xl px-5 pb-24 pt-12 sm:px-8 lg:px-12">
         <h1 class="hero-title">
           {{ t('home.landing.hero.titleLine1') }}<br />{{ t('home.landing.hero.titleLine2') }}
         </h1>
-        <p class="mt-6 text-lg text-muted sm:text-xl">{{ t('home.landing.hero.subtitle') }}</p>
-        <div class="mt-10 flex flex-wrap items-center gap-6">
+        <p class="mt-6 max-w-md text-[17px] leading-relaxed text-muted">{{ t('home.landing.hero.subtitle') }}</p>
+        <div class="mt-10 flex flex-wrap items-center gap-4">
           <RollLink
             :to="isAuthenticated ? dashboardPath : '/login'"
             :label="isAuthenticated ? t('home.goToDashboard') : t('home.getStarted')"
@@ -102,11 +102,11 @@
     <!-- ============ 底部 ============ -->
     <section class="relative isolate overflow-hidden">
       <div class="absolute inset-0 -z-10" aria-hidden="true">
-        <GlowDots :center-x="0.5" :center-y="0.62" :seed="47" :max-cells="16000" />
+        <GlowDots :center-x="0.5" :center-y="0.62" :seed="47" :max-cells="16000" :gain="0.74" />
         <div class="cta-fade absolute inset-0"></div>
       </div>
       <div class="mx-auto flex max-w-7xl flex-col items-center px-5 py-32 text-center sm:px-8 sm:py-44">
-        <h2 class="hero-title !text-[clamp(40px,6.4vw,80px)]">{{ t('home.landing.finalCta.title') }}</h2>
+        <h2 class="hero-title !text-[clamp(36px,4.8vw,64px)]">{{ t('home.landing.finalCta.title') }}</h2>
         <RollLink
           :to="isAuthenticated ? dashboardPath : '/login'"
           :label="isAuthenticated ? t('home.goToDashboard') : t('home.getStarted')"
@@ -220,13 +220,16 @@ const features = computed(() => [
 </script>
 
 <style scoped>
-/* 浅色 = 樱粉，深色 = 午夜霓虹，和点阵配色一一对应 */
+/* 中性底色；强调色只出现在点阵最亮的核心（浅色樱粉、深色青） */
 .landing {
-  --bg: #fffafb;
-  --ink: #1c0a10;
-  --muted: rgba(28, 10, 16, 0.56);
+  --bg: #fafafa;
+  --ink: #0a0a0b;
+  --muted: #63636b;
   --accent: #e11d48;
-  --code-bg: #12070b;
+  --btn-bg: #0a0a0b;
+  --btn-fg: #fafafa;
+  --btn-bg-hover: #26262a;
+  --code-bg: #111113;
   background: var(--bg);
   color: var(--ink);
   font-family: 'Geist Variable', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
@@ -235,11 +238,14 @@ const features = computed(() => [
   font-feature-settings: 'ss01', 'cv11';
 }
 .dark .landing {
-  --bg: #07080c;
-  --ink: #f1f5f9;
-  --muted: rgba(241, 245, 249, 0.56);
+  --bg: #0a0a0b;
+  --ink: #ededef;
+  --muted: #8a8f98;
   --accent: #22d3ee;
-  --code-bg: #0e1119;
+  --btn-bg: #e6e6e8;
+  --btn-fg: #0a0a0b;
+  --btn-bg-hover: #ffffff;
+  --code-bg: #131316;
 }
 
 .text-muted {
@@ -247,8 +253,8 @@ const features = computed(() => [
 }
 .hero-scrim {
   background:
-    radial-gradient(ellipse 70% 62% at 20% 70%, color-mix(in srgb, var(--bg) 92%, transparent), transparent 74%),
-    linear-gradient(to right, color-mix(in srgb, var(--bg) 55%, transparent), transparent 58%);
+    linear-gradient(to right, var(--bg) 18%, color-mix(in srgb, var(--bg) 70%, transparent) 42%, transparent 68%),
+    linear-gradient(to bottom, color-mix(in srgb, var(--bg) 60%, transparent), transparent 22%);
 }
 .hero-fade {
   background: linear-gradient(to top, var(--bg) 6%, color-mix(in srgb, var(--bg) 55%, transparent) 50%, transparent);
@@ -259,22 +265,28 @@ const features = computed(() => [
     radial-gradient(ellipse at center, color-mix(in srgb, var(--bg) 55%, transparent), transparent 70%);
 }
 
+/* 中文字距保持 0（方块字一收紧就挤）；英文略收 */
 .hero-title {
-  font-size: clamp(52px, 8.6vw, 128px);
-  line-height: 0.98;
-  letter-spacing: -0.045em;
-  font-weight: 600;
+  font-size: clamp(44px, 5.4vw, 76px);
+  line-height: 1.1;
+  letter-spacing: 0;
+  font-weight: 500;
 }
 .section-title {
-  font-size: clamp(36px, 4.6vw, 60px);
-  line-height: 1.05;
-  letter-spacing: -0.04em;
-  font-weight: 600;
+  font-size: clamp(32px, 3.6vw, 48px);
+  line-height: 1.15;
+  letter-spacing: 0;
+  font-weight: 500;
 }
 .feature-title {
-  font-size: clamp(26px, 2.6vw, 34px);
-  letter-spacing: -0.03em;
-  font-weight: 600;
+  font-size: 24px;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.hero-title:lang(en),
+.section-title:lang(en),
+.feature-title:lang(en) {
+  letter-spacing: -0.025em;
 }
 
 .model-item {

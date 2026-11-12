@@ -16,7 +16,7 @@
       <g :mask="`url(#${maskId})`">
         <circle class="core" cx="12" cy="12" r="8.6" fill="currentColor" />
       </g>
-      <g class="rays" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <g class="rays" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
         <line
           v-for="(ray, i) in rays"
           :key="i"
@@ -128,28 +128,31 @@ onBeforeUnmount(() => observer?.disconnect())
 .theme-toggle-icon {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: 9999px;
   background: none;
-  color: inherit;
   cursor: pointer;
-  opacity: 0.82;
-  transition: opacity 0.2s;
+  color: var(--muted, inherit);
+  transition:
+    color 0.2s,
+    box-shadow 0.2s;
   -webkit-tap-highlight-color: transparent;
 }
 .theme-toggle-icon:hover {
-  opacity: 1;
+  color: var(--ink, inherit);
+}
+.theme-toggle-icon:focus {
+  outline: none;
 }
 .theme-toggle-icon:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
 }
 .theme-toggle-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   overflow: visible;
   transform-origin: 50% 50%;
   transform: rotate(180deg);

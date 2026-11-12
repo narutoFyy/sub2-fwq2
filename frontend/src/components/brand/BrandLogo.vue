@@ -1,15 +1,16 @@
 <template>
   <component :is="to ? RouterLink : 'span'" v-bind="to ? { to } : {}" class="brand-logo" :aria-label="name">
-    <!-- 石头堆（cairn）：登山路上指路的中转标记。顶石用强调色，悬停时轻轻找平衡 -->
+    <!-- 一块被斜线切开的卵石：石头 + 向前的"中转"。单色，悬停时上半块轻轻抬起 -->
     <svg class="brand-mark" viewBox="0 0 32 32" :width="size" :height="size" aria-hidden="true">
-      <g class="stone stone-base">
-        <path d="M3.8 26.3C3.6 22.7 9.2 20.5 16.2 20.5C23.5 20.5 28.5 22.3 28.4 25.6C28.3 28.3 23.9 29.5 16.1 29.5C8.7 29.5 3.9 28.6 3.8 26.3Z" />
+      <defs>
+        <clipPath :id="`${uid}-top`"><polygon points="-4,-4 36,-4 36,12.2 -4,15.9" /></clipPath>
+        <clipPath :id="`${uid}-bottom`"><polygon points="-4,18.5 36,14.8 36,36 -4,36" /></clipPath>
+      </defs>
+      <g class="half half-top">
+        <path :clip-path="`url(#${uid}-top)`" :d="PEBBLE" />
       </g>
-      <g class="stone stone-mid">
-        <path d="M8.3 17.1C8.1 14.4 11.7 12.7 16.8 12.7C21.8 12.7 24.9 14.1 24.7 16.6C24.5 18.6 21.4 19.3 16.3 19.3C11.4 19.3 8.5 18.7 8.3 17.1Z" />
-      </g>
-      <g class="stone stone-top">
-        <path d="M11.4 9.5C11.1 7.1 13.3 5.2 16.6 5.2C19.8 5.2 21.7 6.7 21.5 8.8C21.3 10.6 19.2 11.3 16.1 11.3C13.3 11.3 11.6 10.7 11.4 9.5Z" />
+      <g class="half half-bottom">
+        <path :clip-path="`url(#${uid}-bottom)`" :d="PEBBLE" />
       </g>
     </svg>
     <span v-if="showName" class="brand-name">{{ name }}</span>
@@ -26,8 +27,11 @@ withDefaults(
     size?: number
     showName?: boolean
   }>(),
-  { to: undefined, size: 30, showName: true },
+  { to: undefined, size: 24, showName: true },
 )
+
+const PEBBLE = 'M16 5.5C23.9 5.5 29.5 9.3 29.5 15.6C29.5 22 23.7 26.5 16 26.5C8.3 26.5 2.5 22 2.5 15.6C2.5 9.3 8.1 5.5 16 5.5Z'
+const uid = `brand-${Math.random().toString(36).slice(2, 8)}`
 </script>
 
 <style scoped>
@@ -41,31 +45,22 @@ withDefaults(
 .brand-mark {
   flex-shrink: 0;
   overflow: visible;
-}
-.stone {
   fill: currentColor;
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  transition: transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.stone-top {
-  fill: var(--accent, #e11d48);
-  transition-duration: 0.9s;
+.half {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.brand-logo:hover .stone-top {
-  transform: translate(-0.6px, -0.9px) rotate(-6deg);
-}
-.brand-logo:hover .stone-mid {
-  transform: rotate(2.5deg);
+.brand-logo:hover .half-top {
+  transform: translate(0.8px, -0.9px);
 }
 .brand-name {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 @media (prefers-reduced-motion: reduce) {
-  .stone {
+  .half {
     transition: none;
   }
 }
