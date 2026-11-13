@@ -55,7 +55,9 @@ const zh = {
   dashboard: '进入控制台',
   sortHint: '分组按倍率从低到高排列',
   weekdays: '工作日',
-  group: '分组'
+  group: '分组',
+  platform: '平台',
+  allPlatforms: '全部平台'
 }
 
 type PlazaCopy = typeof zh
@@ -109,7 +111,9 @@ const en: PlazaCopy = {
   dashboard: 'Open console',
   sortHint: 'Groups sorted by rate, lowest first',
   weekdays: 'Weekdays',
-  group: 'Group'
+  group: 'Group',
+  platform: 'Platform',
+  allPlatforms: 'All platforms'
 }
 
 /** 英文下的折扣说明：0.25 → "75% off list"。 */

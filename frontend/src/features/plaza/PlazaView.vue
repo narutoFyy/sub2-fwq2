@@ -19,6 +19,8 @@ import PlazaPriceTable from './PlazaPriceTable.vue'
 import { usePlazaCopy, discountEn } from './content'
 import { usePlazaData } from './usePlazaData'
 import { discountZh, formatRate, groupRate } from './pricing'
+import { platformLabel } from '@/utils/platformColors'
+import ModelIcon from '@/components/common/ModelIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,15 +37,33 @@ const loginPath = '/login?redirect=%2Fplaza'
 
 const search = ref('')
 const selected = ref<number | 'all'>('all')
+const platform = ref<string>('all')
 
 const groups = computed(() =>
   [...(data.value?.groups ?? [])].sort((a, b) => groupRate(a) - groupRate(b) || a.name.localeCompare(b.name))
 )
 
-/** 当前筛选下要展示的分组：选中分组 + 模型名搜索（分组内只留命中的模型）。 */
+/** 平台筛选项：只列出当前有分组的平台，附带分组数；按分组数多到少、再按名称。 */
+const platforms = computed(() => {
+  const counts = new Map<string, number>()
+  for (const g of groups.value) counts.set(g.platform, (counts.get(g.platform) ?? 0) + 1)
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, count, label: platformLabel(id) }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+})
+
+/** 平台 → 图标用的代表模型名；没有对应品牌图标的平台不显示图标（避免出现字母占位块）。 */
+const PLATFORM_ICON: Record<string, string> = { openai: 'gpt-5', anthropic: 'claude', gemini: 'gemini', antigravity: 'gemini', grok: 'grok' }
+
+/** 选了平台后，分组标签条只列该平台的分组。 */
+const platformGroups = computed(() =>
+  platform.value === 'all' ? groups.value : groups.value.filter((g) => g.platform === platform.value)
+)
+
+/** 当前筛选下要展示的分组：平台 + 选中分组 + 模型名搜索（分组内只留命中的模型）。 */
 const shown = computed(() => {
   const q = search.value.trim().toLowerCase()
-  return groups.value
+  return platformGroups.value
     .filter((g) => selected.value === 'all' || g.id === selected.value)
     .map((g) => ({ group: g, models: q ? g.models.filter((m) => m.name.toLowerCase().includes(q)) : g.models }))
     .filter((x) => x.models.length > 0)
@@ -81,18 +101,33 @@ function select(id: number | 'all') {
   void router.replace({ query: { ...route.query, group: id === 'all' ? undefined : String(id) } })
 }
 
+/** 切换平台：已选分组不属于新平台时回到「全部分组」。 */
+function selectPlatform(id: string) {
+  platform.value = id
+  const keep = selected.value !== 'all' && groups.value.some((g) => g.id === selected.value && (id === 'all' || g.platform === id))
+  if (!keep) selected.value = 'all'
+  void router.replace({
+    query: { ...route.query, platform: id === 'all' ? undefined : id, group: keep ? String(selected.value) : undefined }
+  })
+}
+
 watch(
-  () => route.query.group,
-  (v) => {
-    const id = Number(v)
+  () => [route.query.platform, route.query.group] as const,
+  ([p, g]) => {
+    platform.value = typeof p === 'string' && p ? p : 'all'
+    const id = Number(g)
     selected.value = Number.isFinite(id) && id > 0 ? id : 'all'
   },
   { immediate: true }
 )
 
-// 链接带的分组不存在（已删除或无权限）时回到全部。
+// 链接带的分组 / 平台不存在（已删除或无权限）时回到全部；只带分组时自动对齐到它的平台。
 watch(groups, (list) => {
-  if (selected.value !== 'all' && list.length && !list.some((g) => g.id === selected.value)) select('all')
+  if (!list.length) return
+  if (platform.value !== 'all' && !list.some((g) => g.platform === platform.value)) selectPlatform('all')
+  const hit = selected.value === 'all' ? undefined : list.find((g) => g.id === selected.value)
+  if (selected.value !== 'all' && !hit) select('all')
+  else if (hit && platform.value !== 'all' && hit.platform !== platform.value) selectPlatform(hit.platform)
 })
 
 watch(status, async (s) => {
@@ -135,11 +170,21 @@ onMounted(init)
 
       <template v-else>
         <div class="plaza-controls">
-          <div class="plaza-tabs" role="group" :aria-label="copy.allGroups">
-            <button type="button" :aria-pressed="selected === 'all'" @click="select('all')">{{ copy.allGroups }}</button>
-            <button v-for="g in groups" :key="g.id" type="button" :aria-pressed="selected === g.id" @click="select(g.id)">
-              {{ g.name }}<span>×{{ formatRate(groupRate(g)) }}</span>
-            </button>
+          <div class="plaza-filters">
+            <div v-if="platforms.length > 1" class="plaza-tabs plaza-platforms" role="group" :aria-label="copy.platform">
+              <span class="tabs-label">{{ copy.platform }}</span>
+              <button type="button" :aria-pressed="platform === 'all'" @click="selectPlatform('all')">{{ copy.allPlatforms }}</button>
+              <button v-for="p in platforms" :key="p.id" type="button" :aria-pressed="platform === p.id" @click="selectPlatform(p.id)">
+                <ModelIcon v-if="PLATFORM_ICON[p.id]" :model="PLATFORM_ICON[p.id]" size="14px" class="platform-icon" />{{ p.label }}<span>{{ p.count }}</span>
+              </button>
+            </div>
+            <div class="plaza-tabs" role="group" :aria-label="copy.allGroups">
+              <span v-if="platforms.length > 1" class="tabs-label">{{ copy.group }}</span>
+              <button type="button" :aria-pressed="selected === 'all'" @click="select('all')">{{ copy.allGroups }}</button>
+              <button v-for="g in platformGroups" :key="g.id" type="button" :aria-pressed="selected === g.id" @click="select(g.id)">
+                {{ g.name }}<span>×{{ formatRate(groupRate(g)) }}</span>
+              </button>
+            </div>
           </div>
           <label class="plaza-search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -216,6 +261,12 @@ onMounted(init)
   padding: 14px 0; background: color-mix(in srgb, var(--plaza-bg) 92%, transparent); backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--plaza-line);
 }
+.plaza-filters { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.plaza-filters .plaza-tabs { flex: none; }
+.tabs-label { flex-shrink: 0; align-self: center; width: 48px; font-size: 12px; color: var(--plaza-muted); }
+.platform-icon { align-self: center; }
+:global(.dark .plaza-platforms .model-icon path[fill='#000000']) { fill: #ededef; }
+.plaza-platforms button[aria-pressed='true'] :deep(.model-icon path[fill='#000000']) { fill: currentColor; }
 .plaza-tabs { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
 .plaza-tabs::-webkit-scrollbar { display: none; }
 .plaza-tabs button { flex-shrink: 0; display: inline-flex; align-items: baseline; gap: 6px; padding: 8px 14px; border-radius: 99px; font-size: 13px; color: var(--plaza-muted); background: var(--plaza-panel); transition: background-color .15s, color .15s; }
@@ -256,6 +307,7 @@ onMounted(init)
   .plaza-hero { padding: 40px 0 28px; }
   .hero-glow { inset: 0 -16px; }
   .plaza-controls { flex-direction: column; align-items: stretch; gap: 10px; }
+  .tabs-label { width: auto; }
   .plaza-search { width: auto; }
   .plaza-group { padding-top: 40px; }
   .group-head { flex-direction: column; align-items: flex-start; gap: 8px; }
