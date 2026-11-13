@@ -16,6 +16,9 @@ vi.mock('@/api', () => ({
   redeemAPI: { redeem, getHistory },
   authAPI: { getPublicSettings: vi.fn().mockResolvedValue({}) },
 }))
+vi.mock('@/features/onboarding/guideStore', () => ({
+  useGuideStore: () => ({ notifyRedeemed: vi.fn() }),
+}))
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ user: { balance: 10, concurrency: 2 }, refreshUser }),
 }))

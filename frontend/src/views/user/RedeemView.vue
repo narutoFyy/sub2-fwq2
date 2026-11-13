@@ -22,7 +22,7 @@
       <!-- Redeem Form -->
       <div class="card">
         <div class="p-6">
-          <form @submit.prevent="handleRedeem" class="space-y-5">
+          <form @submit.prevent="handleRedeem" class="space-y-5" data-tour="redeem-form">
             <div>
               <label for="code" class="input-label">
                 {{ t('redeem.redeemCodeLabel') }}
@@ -371,6 +371,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useSubscriptionStore } from '@/stores/subscriptions'
+import { useGuideStore } from '@/features/onboarding/guideStore'
 import { redeemAPI, authAPI, type RedeemHistoryItem } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -380,6 +381,7 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 const subscriptionStore = useSubscriptionStore()
+const guideStore = useGuideStore()
 
 const user = computed(() => authStore.user)
 
@@ -512,6 +514,7 @@ const handleRedeem = async () => {
 
     // Show success toast
     appStore.showSuccess(t('redeem.codeRedeemSuccess'))
+    guideStore.notifyRedeemed()
   } catch (error: any) {
     errorMessage.value = error.response?.data?.detail || t('redeem.failedToRedeem')
 

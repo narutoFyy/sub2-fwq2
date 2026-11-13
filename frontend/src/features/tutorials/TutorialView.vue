@@ -30,6 +30,8 @@ const cli = computed(() => client.value === 'codex' ? 'codex' : 'claude')
 const installCommand = computed(() => client.value === 'codex' ? 'npm install -g @openai/codex' : 'npm install -g @anthropic-ai/claude-code')
 const installDocs = computed(() => client.value === 'codex' ? 'https://developers.openai.com/codex/cli' : 'https://code.claude.com/docs/en/setup')
 const group = computed(() => client.value === 'codex' ? copy.value.codexGroup : copy.value.claudeGroup)
+/** 站内支付没开（如只走外部小铺 + 兑换码）时，不展示指向 /purchase、/orders 的入口。 */
+const paymentOn = computed(() => app.cachedPublicSettings?.payment_enabled === true)
 const activeStep = ref(1)
 let observer: IntersectionObserver | undefined
 const steps = computed(() => [
@@ -106,7 +108,7 @@ onBeforeUnmount(() => observer?.disconnect())
             <ol class="step-instructions"><li v-for="line in step.body" :key="line">{{ line }}</li></ol>
             <p v-if="i === 1" class="group-hint">{{ group }}</p>
             <TutorialFigure :step="i + 1" :client="client" :site-name="siteName" :endpoint="endpoint" />
-            <template v-if="i === 0"><div class="guide-actions"><RouterLink to="/purchase">{{ copy.actionRecharge }} <span aria-hidden="true">↗</span></RouterLink><RouterLink to="/redeem">{{ $t('nav.redeem') }}</RouterLink><RouterLink to="/orders">{{ $t('nav.myOrders') }}</RouterLink></div></template>
+            <template v-if="i === 0"><div class="guide-actions"><RouterLink v-if="paymentOn" to="/purchase">{{ copy.actionRecharge }} <span aria-hidden="true">↗</span></RouterLink><RouterLink to="/redeem">{{ $t('nav.redeem') }}</RouterLink><RouterLink v-if="paymentOn" to="/orders">{{ $t('nav.myOrders') }}</RouterLink></div></template>
             <template v-if="i === 1"><div class="guide-actions"><RouterLink to="/keys">{{ copy.actionKeys }} <span aria-hidden="true">↗</span></RouterLink><RouterLink to="/available-channels">{{ copy.actionModels }}</RouterLink></div></template>
             <template v-if="i === 2">
               <div class="guide-actions"><a href="https://github.com/farion1231/cc-switch/releases/latest" target="_blank" rel="noopener noreferrer">{{ copy.downloads }} ↗</a><a :href="installDocs" target="_blank" rel="noopener noreferrer">{{ copy.officialInstall }} ↗</a><a href="https://nodejs.org/en/download" target="_blank" rel="noopener noreferrer">{{ copy.nodeDownload }} ↗</a></div>

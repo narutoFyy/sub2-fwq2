@@ -1203,6 +1203,8 @@
 	import { useI18n } from 'vue-i18n'
 	import { useAppStore } from '@/stores/app'
 	import { useOnboardingStore } from '@/stores/onboarding'
+	import { useGuideStore } from '@/features/onboarding/guideStore'
+	import { CLIENT_PROVIDER } from '@/features/onboarding/config'
 	import { useClipboard } from '@/composables/useClipboard'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
@@ -1260,6 +1262,7 @@ interface GroupOption {
 
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
+const guideStore = useGuideStore()
 const { copyToClipboard: clipboardCopy } = useClipboard()
 
 const allColumns = computed<Column[]>(() => [
@@ -1549,7 +1552,10 @@ const selectCreateProvider = (provider: KeyGroupProvider) => {
 watch([showCreateModal, createProviderOptions], ([isOpen, providers], [wasOpen]) => {
   if (!isOpen) return
   if (!wasOpen || !providers.some((provider) => provider.value === createProvider.value && provider.count > 0)) {
-    selectCreateProvider(providers.find((provider) => provider.count > 0)?.value ?? 'anthropic')
+    // 新手引导里选了 Codex / Claude Code：创建弹窗打开时预选对应的供应商。
+    const guided = guideStore.active && guideStore.step === 'key' && guideStore.client ? CLIENT_PROVIDER[guideStore.client] : null
+    const guidedUsable = guided !== null && providers.some((provider) => provider.value === guided && provider.count > 0)
+    selectCreateProvider(guidedUsable ? guided : (providers.find((provider) => provider.count > 0)?.value ?? 'anthropic'))
   }
   if (!formGroupOptions.value.some((group) => group.value === formData.value.group_id)) {
     formData.value.group_id = null
@@ -1883,6 +1889,7 @@ const handleSubmit = async () => {
         rateLimitData
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
+      guideStore.notifyKeyCreated()
       // Only advance tour if active, on submit step, and creation succeeded
       if (onboardingStore.isCurrentStep('[data-tour="key-form-submit"]')) {
         onboardingStore.nextStep(500)

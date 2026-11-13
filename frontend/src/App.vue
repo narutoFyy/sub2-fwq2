@@ -11,8 +11,8 @@ import { getSetupStatus } from '@/api/setup'
 import { updateFavicon } from '@/utils/branding'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
-import TutorialWelcome from '@/features/tutorials/TutorialWelcome.vue'
-import { useTutorialWelcomeStore } from '@/features/tutorials/welcomeStore'
+import GuideLayer from '@/features/onboarding/GuideLayer.vue'
+import { useGuideStore } from '@/features/onboarding/guideStore'
 
 const router = useRouter()
 const route = useRoute()
@@ -22,15 +22,7 @@ const subscriptionStore = useSubscriptionStore()
 const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
-const tutorialWelcome = useTutorialWelcomeStore()
-const tutorialWelcomeVisible = computed(() =>
-  authStore.isAuthenticated && !authStore.isAdmin && !appStore.backendModeEnabled &&
-  tutorialWelcome.pendingUserId === authStore.user?.id &&
-  !/^\/(auth(?:\/|$)|register$|login$|email-verify$|setup$)/.test(route.path)
-)
-function dismissTutorialWelcome() {
-  if (authStore.user) tutorialWelcome.dismiss(authStore.user.id)
-}
+const guide = useGuideStore()
 
 function updateDocumentTitle() {
   const customMenuItems = [
@@ -176,7 +168,7 @@ onMounted(async () => {
   <NavigationProgress />
   <RouterView />
   <Toast />
-  <AnnouncementPopup v-if="!tutorialWelcomeVisible" />
-  <TutorialWelcome :show="tutorialWelcomeVisible" @close="dismissTutorialWelcome" />
+  <AnnouncementPopup v-if="!guide.active" />
+  <GuideLayer />
   <AdminComplianceDialog />
 </template>

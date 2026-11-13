@@ -85,6 +85,10 @@ vi.mock('@/stores/app', () => ({
   }),
 }))
 
+vi.mock('@/features/onboarding/guideStore', () => ({
+  useGuideStore: () => ({ active: false, step: 'welcome', client: null, notifyKeyCreated: vi.fn() }),
+}))
+
 vi.mock('@/stores/onboarding', () => ({
   useOnboardingStore: () => ({
     isCurrentStep,

@@ -1,0 +1,172 @@
+/* 新手引导层：聚光灯、卡片与动效。所有类名以 og- 开头。 */
+.og-root {
+  --og-bg: #ffffff;
+  --og-ink: #0a0a0b;
+  --og-muted: #63636b;
+  --og-line: #e4e4e7;
+  --og-panel: #f4f4f5;
+  --og-accent: #21646a;
+  --og-glow: rgba(33, 100, 106, 0.42);
+  --og-btn-bg: #0a0a0b;
+  --og-btn-fg: #fafafa;
+  --og-shadow: 0 28px 80px -16px rgba(10, 10, 12, 0.38), 0 0 0 1px rgba(10, 10, 12, 0.06);
+  --og-dim: rgba(8, 8, 10, 0.5);
+  --og-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+  font-family: 'Geist Variable', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.dark .og-root {
+  --og-bg: #141417;
+  --og-ink: #ededef;
+  --og-muted: #a0a4ad;
+  --og-line: #2b2b30;
+  --og-panel: #1c1c20;
+  --og-accent: #a3e4e8;
+  --og-glow: rgba(163, 228, 232, 0.5);
+  --og-btn-bg: #e6e6e8;
+  --og-btn-fg: #0a0a0b;
+  --og-shadow: 0 28px 80px -16px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --og-dim: rgba(0, 0, 0, 0.7);
+}
+.og-root :is(button, a, input):focus-visible { outline: 2px solid var(--og-accent); outline-offset: 3px; border-radius: 8px; }
+.og-root button { font: inherit; cursor: pointer; }
+
+/* ---------- 背景与聚光灯 ---------- */
+.og-backdrop { position: fixed; inset: 0; background: rgba(8, 8, 10, 0.58); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: auto; overflow: hidden; }
+.og-glow { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.9; mask-image: radial-gradient(ellipse 60% 55% at 50% 48%, #000 0%, transparent 80%); -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 48%, #000 0%, transparent 80%); }
+
+/* 聚光灯：一个洞 + 超大阴影压暗周围；位置和尺寸用 transition 平滑滑动 */
+.og-hole {
+  position: fixed; left: 0; top: 0; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 0 9999px var(--og-dim);
+  transition: transform 0.55s var(--og-ease), width 0.55s var(--og-ease), height 0.55s var(--og-ease), opacity 0.3s;
+}
+/* 弹窗里的目标：不额外压暗，只留光圈 */
+.og-hole--clear { box-shadow: none; }
+.og-ring { position: absolute; inset: 0; border-radius: inherit; border: 2px solid var(--og-accent); animation: og-pulse 2.2s ease-out infinite; }
+@keyframes og-pulse {
+  0% { box-shadow: 0 0 0 0 var(--og-glow), 0 0 22px 0 var(--og-glow); }
+  70% { box-shadow: 0 0 0 14px transparent, 0 0 22px 0 transparent; }
+  100% { box-shadow: 0 0 0 0 transparent, 0 0 22px 0 transparent; }
+}
+
+/* 点击提示：指针轻轻点击 + 涟漪 */
+.og-cursor { position: fixed; left: 0; top: 0; pointer-events: none; color: var(--og-ink); transition: transform 0.55s var(--og-ease), opacity 0.3s; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35)); }
+.og-cursor svg { display: block; animation: og-tap 1.8s ease-in-out infinite; transform-origin: 3px 3px; }
+.og-ripple { position: absolute; left: 1px; top: 1px; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: var(--og-accent); opacity: 0; animation: og-ripple 1.8s ease-out infinite; }
+@keyframes og-tap { 0%, 55%, 100% { transform: translate(0, 0) scale(1); } 70% { transform: translate(-2px, -2px) scale(0.86); } 85% { transform: translate(0, 0) scale(1); } }
+@keyframes og-ripple { 0%, 62% { opacity: 0; transform: scale(0.3); } 70% { opacity: 0.5; transform: scale(0.6); } 100% { opacity: 0; transform: scale(2.2); } }
+
+/* ---------- 卡片 ---------- */
+.og-center { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; pointer-events: none; }
+.og-card { pointer-events: auto; background: var(--og-bg); color: var(--og-ink); border-radius: 20px; box-shadow: var(--og-shadow); }
+.og-card--modal { width: min(460px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 28px 28px 20px; }
+.og-card--float { position: fixed; left: 0; top: 0; width: 360px; padding: 22px 22px 16px; transition: transform 0.6s var(--og-ease); will-change: transform; }
+.og-card--float.og-sheet { left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; transform: none !important; border-radius: 20px; max-height: 70vh; overflow: auto; }
+
+.og-card-enter-active { transition: opacity 0.45s var(--og-ease), translate 0.55s var(--og-ease), scale 0.55s var(--og-ease); }
+.og-card-leave-active { transition: opacity 0.2s ease, scale 0.2s ease; }
+.og-card-enter-from { opacity: 0; translate: 0 18px; scale: 0.96; }
+.og-card-leave-to { opacity: 0; scale: 0.97; }
+.og-fade-enter-active, .og-fade-leave-active { transition: opacity 0.4s ease; }
+.og-fade-enter-from, .og-fade-leave-to { opacity: 0; }
+
+/* 步骤内容切换 */
+.og-swap-enter-active { transition: opacity 0.38s var(--og-ease), translate 0.45s var(--og-ease); }
+.og-swap-leave-active { transition: opacity 0.14s ease; }
+.og-swap-enter-from { opacity: 0; translate: 0 10px; }
+.og-swap-leave-to { opacity: 0; }
+
+/* 进度：四段，走过的填满、当前的填一半 */
+.og-stages { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
+.og-stage { flex: 0 0 34px; height: 4px; border-radius: 4px; background: var(--og-line); overflow: hidden; }
+.og-stage i { display: block; height: 100%; width: 0; background: var(--og-accent); border-radius: inherit; transition: width 0.7s var(--og-ease); }
+.og-stage.is-done i { width: 100%; }
+.og-stage.is-active i { width: 50%; }
+.og-stage-label { margin-left: 6px; font-size: 12px; color: var(--og-muted); white-space: nowrap; }
+
+.og-title { font-size: 20px; font-weight: 600; line-height: 1.35; letter-spacing: -0.015em; }
+.og-card--modal .og-title { font-size: 24px; }
+.og-text { margin-top: 10px; font-size: 14px; line-height: 1.75; color: var(--og-muted); }
+.og-hint { margin-top: 10px; font-size: 12.5px; line-height: 1.6; color: var(--og-muted); }
+.og-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+.og-btn { min-height: 40px; padding: 0 18px; border-radius: 999px; font-size: 14px; font-weight: 500; transition: transform 0.15s, background-color 0.15s, opacity 0.15s; }
+.og-btn:active { transform: scale(0.97); }
+.og-btn--primary { background: var(--og-btn-bg); color: var(--og-btn-fg); }
+.og-btn--primary:hover { opacity: 0.88; }
+.og-btn--ghost { background: var(--og-panel); color: var(--og-ink); }
+.og-btn--ghost:hover { background: var(--og-line); }
+.og-btn--text { background: transparent; color: var(--og-muted); padding: 0 10px; margin-right: auto; }
+.og-btn--text:hover { color: var(--og-ink); }
+
+/* 欢迎：四个阶段依次浮现 */
+.og-path { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
+.og-path li, .og-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; opacity: 0; animation: og-rise 0.6s var(--og-ease) forwards; animation-delay: calc(0.12s * var(--i) + 0.15s); }
+.og-path li { padding: 10px 12px; border-radius: 12px; background: var(--og-panel); }
+.og-list { margin-top: 16px; display: grid; gap: 10px; }
+.og-path li span, .og-list li span { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font: 600 11px 'Geist Mono Variable', ui-monospace, monospace; background: var(--og-accent); color: var(--og-bg); }
+@keyframes og-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* 选工具 */
+.og-options { display: grid; gap: 10px; margin-top: 18px; }
+.og-option { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border-radius: 16px; text-align: left; background: var(--og-panel); color: var(--og-ink); border: 1px solid transparent; opacity: 0; animation: og-rise 0.55s var(--og-ease) forwards; animation-delay: calc(0.1s * var(--i) + 0.1s); transition: border-color 0.2s, transform 0.2s, background-color 0.2s; }
+.og-option:hover { border-color: var(--og-accent); transform: translateY(-1px); }
+.og-option-text { flex: 1; min-width: 0; }
+.og-option-text strong { display: block; font-size: 16px; font-weight: 600; }
+.og-option-text small { display: block; margin-top: 3px; font-size: 12.5px; color: var(--og-muted); line-height: 1.5; }
+.og-option svg { color: var(--og-muted); transition: transform 0.2s, color 0.2s; }
+.og-option:hover svg { transform: translateX(3px); color: var(--og-ink); }
+.dark .og-root .og-codex-icon path { fill: #ededef; }
+
+/* 完成：对勾描线 */
+.og-done { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 14px 0 10px; font-size: 16px; font-weight: 600; }
+.og-check-ring { stroke: var(--og-accent); stroke-width: 2.5; stroke-dasharray: 151; stroke-dashoffset: 151; animation: og-draw 0.6s var(--og-ease) forwards; }
+.og-check-mark { stroke: var(--og-accent); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: og-draw 0.45s 0.35s var(--og-ease) forwards; }
+@keyframes og-draw { to { stroke-dashoffset: 0; } }
+
+/* 页脚：跳过 + 客服入口 */
+.og-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--og-line); min-height: 38px; }
+.og-link { background: none; border: 0; padding: 4px 0; font-size: 12px; color: var(--og-muted); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--og-muted) 40%, transparent); }
+.og-link:hover { color: var(--og-ink); }
+.og-link--quiet { text-decoration: none; white-space: nowrap; flex-shrink: 0; }
+.og-support { min-width: 0; text-align: right; }
+.og-support { position: relative; }
+.og-support-pop { position: absolute; right: 0; bottom: calc(100% + 10px); width: 290px; max-width: calc(100vw - 48px); padding: 14px 16px; border-radius: 14px; background: var(--og-panel); border: 1px solid var(--og-line); box-shadow: var(--og-shadow); font-size: 13px; line-height: 1.6; z-index: 2; }
+.og-support-pop p { color: var(--og-muted); }
+.og-support-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.og-support-label { font-size: 12px; color: var(--og-muted); white-space: nowrap; }
+.og-support-number { flex: 1; font: 600 15px 'Geist Mono Variable', ui-monospace, monospace; letter-spacing: 0.02em; user-select: all; }
+.og-support-copy { white-space: nowrap; padding: 5px 12px; border-radius: 999px; font-size: 12px; background: var(--og-btn-bg); color: var(--og-btn-fg); }
+.og-pop-enter-active, .og-pop-leave-active { transition: opacity 0.2s, translate 0.25s var(--og-ease); }
+.og-pop-enter-from, .og-pop-leave-to { opacity: 0; translate: 0 6px; }
+
+/* ---------- 老用户邀请卡片 ---------- */
+.og-invite { pointer-events: auto; position: fixed; right: 24px; bottom: 24px; width: 340px; display: grid; gap: 14px; padding: 18px 20px; border-radius: 18px; background: var(--og-bg); color: var(--og-ink); box-shadow: var(--og-shadow); overflow: hidden; }
+.og-invite-glow { position: absolute; right: -40px; top: -40px; width: 140px; height: 140px; border-radius: 50%; background: radial-gradient(circle, var(--og-glow), transparent 70%); opacity: 0.55; pointer-events: none; }
+.og-invite-text { position: relative; display: grid; gap: 4px; }
+.og-invite-text strong { font-size: 16px; font-weight: 600; }
+.og-invite-text span { font-size: 13.5px; color: var(--og-muted); line-height: 1.6; }
+.og-invite-actions { position: relative; display: flex; justify-content: flex-end; gap: 8px; }
+.og-invite-enter-active { transition: opacity 0.5s var(--og-ease), translate 0.6s var(--og-ease); }
+.og-invite-leave-active { transition: opacity 0.25s, translate 0.3s; }
+.og-invite-enter-from, .og-invite-leave-to { opacity: 0; translate: 0 24px; }
+
+@media (max-width: 640px) {
+  .og-card--modal { padding: 24px 20px 16px; border-radius: 20px; }
+  .og-path { grid-template-columns: 1fr 1fr; }
+  .og-stage { flex-basis: 26px; }
+  .og-invite { left: 12px; right: 12px; bottom: 12px; width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .og-hole, .og-card--float, .og-cursor, .og-stage i { transition-duration: 0.01s; }
+  .og-ring, .og-cursor svg, .og-ripple { animation: none; }
+  .og-path li, .og-list li, .og-option { animation-duration: 0.01s; animation-delay: 0s; }
+  .og-card-enter-active, .og-swap-enter-active, .og-invite-enter-active, .og-pop-enter-active { transition-duration: 0.01s; }
+  .og-check-ring, .og-check-mark { animation-duration: 0.01s; animation-delay: 0s; }
+}
