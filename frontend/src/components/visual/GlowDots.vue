@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { GlowDotsRenderer, type GlowDotsOptions, type GlowTheme } from '@/utils/glowDots'
 
 const props = withDefaults(
@@ -24,6 +24,8 @@ const props = withDefaults(
     interactive?: boolean
     seed?: number
     gain?: number
+    /** 标题元素选择器：文字会从点阵里浮现出来（见 GlowDotsRenderer.attachReveal） */
+    revealSelector?: string
   }>(),
   {
     theme: 'auto',
@@ -39,6 +41,11 @@ const props = withDefaults(
   },
 )
 
+const emit = defineEmits<{
+  /** 标题可以显示了（动画交接，或无需动画） */
+  (e: 'reveal'): void
+}>()
+
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const ready = ref(false)
 let renderer: GlowDotsRenderer | null = null
@@ -47,6 +54,27 @@ let classObserver: MutationObserver | null = null
 function resolveTheme(): GlowTheme {
   if (props.theme !== 'auto') return props.theme
   return document.documentElement.classList.contains('dark') ? 'midnight' : 'rose'
+}
+
+async function setupReveal() {
+  if (!props.revealSelector) return
+  if (!renderer) {
+    emit('reveal')
+    return
+  }
+  await nextTick()
+  try {
+    await document.fonts?.ready
+  } catch {
+    /* 字体 API 不可用时按当前字体继续 */
+  }
+  const el = document.querySelector<HTMLElement>(props.revealSelector)
+  if (!renderer || !el) {
+    emit('reveal')
+    return
+  }
+  const playing = renderer.attachReveal(el, { onHandoff: () => emit('reveal') })
+  if (!playing) emit('reveal')
 }
 
 onMounted(() => {
@@ -66,12 +94,16 @@ onMounted(() => {
     },
   }
   renderer = GlowDotsRenderer.create(canvasRef.value, options)
-  if (!renderer) return
+  if (!renderer) {
+    void setupReveal()
+    return
+  }
   renderer.setTheme(resolveTheme())
   if (typeof MutationObserver !== 'undefined') {
     classObserver = new MutationObserver(() => renderer?.setTheme(resolveTheme()))
     classObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
   }
+  void setupReveal()
 })
 
 watch(
@@ -92,7 +124,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   opacity: 0;
-  transition: opacity 1.2s ease-out;
+  transition: opacity 0.6s ease-out;
 }
 .glow-dots--ready {
   opacity: 1;

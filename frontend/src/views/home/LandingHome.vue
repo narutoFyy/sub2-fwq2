@@ -3,13 +3,13 @@
     <!-- ============ 首屏 ============ -->
     <section class="relative isolate flex min-h-[100svh] flex-col overflow-hidden">
       <div class="absolute inset-0 -z-10" aria-hidden="true">
-        <GlowDots :center-x="0.76" :center-y="0.5" :gain="0.74" />
+        <GlowDots :center-x="0.76" :center-y="0.5" :cell="4" :max-cells="55000" :gain="0.84" reveal-selector="[data-reveal-title]" @reveal="titleShown = true" />
         <div class="hero-scrim absolute inset-0"></div>
         <div class="hero-fade absolute inset-x-0 bottom-0 h-[32%]"></div>
       </div>
 
-      <header class="px-5 sm:px-8 lg:px-12">
-        <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3">
+      <header class="hero-gutter-nav">
+        <nav class="flex h-16 items-center justify-between gap-3">
           <BrandLogo to="/home" :name="siteName" />
           <div class="flex shrink-0 items-center gap-1">
             <span class="hidden sm:inline-flex"><RollLink to="/tutorials" :label="tutorialCopy.nav" variant="plain" class="mr-1" /></span>
@@ -27,12 +27,13 @@
         </nav>
       </header>
 
-      <div class="mx-auto my-auto w-full max-w-7xl px-5 pb-24 pt-12 sm:px-8 lg:px-12">
-        <h1 class="hero-title">
-          {{ t('home.landing.hero.titleLine1') }}<br />{{ t('home.landing.hero.titleLine2') }}
+      <div class="hero-gutter my-auto w-full">
+        <h1 class="hero-title hero-title--stack" :class="{ 'hero-title--hidden': !titleShown }" data-reveal-title>
+          <span class="block" data-reveal-line>{{ t('home.landing.hero.titleLine1') }}</span>
+          <span class="block" data-reveal-line>{{ t('home.landing.hero.titleLine2') }}</span>
         </h1>
-        <p class="mt-6 max-w-md text-[17px] leading-relaxed text-muted">{{ t('home.landing.hero.subtitle') }}</p>
-        <div class="mt-10 flex flex-wrap items-center gap-4">
+        <p class="hero-sub">{{ t('home.landing.hero.subtitle') }}</p>
+        <div class="mt-9 flex flex-wrap items-center gap-4">
           <span class="sm:hidden"><RollLink to="/tutorials" :label="tutorialCopy.nav" size="lg" variant="plain" arrow /></span>
           <RollLink
             :to="isAuthenticated ? dashboardPath : '/login'"
@@ -52,56 +53,7 @@
       </div>
     </section>
 
-    <!-- ============ 模型 ============ -->
-    <section class="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28 lg:px-12">
-      <ul class="flex flex-wrap items-center justify-center gap-x-16 gap-y-8">
-        <li v-for="m in models" :key="m.label" class="model-item">
-          <ModelIcon :model="m.model" size="28px" />
-          <span>{{ m.label }}</span>
-        </li>
-      </ul>
-    </section>
-
     <TutorialEntry />
-
-    <!-- ============ 接入 ============ -->
-    <section class="mx-auto grid max-w-7xl items-center gap-12 px-5 py-20 sm:px-8 sm:py-28 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20 lg:px-12">
-      <h2 class="section-title">
-        {{ t('home.landing.quickstart.titleLine1') }}<br />{{ t('home.landing.quickstart.titleLine2') }}
-      </h2>
-      <div class="code-card">
-        <div class="flex items-center justify-between gap-3 px-4 pt-4">
-          <div class="flex gap-1" role="tablist">
-            <button
-              v-for="tab in codeTabs"
-              :key="tab.id"
-              type="button"
-              role="tab"
-              :aria-selected="activeTab === tab.id"
-              class="code-tab"
-              :class="{ 'code-tab--on': activeTab === tab.id }"
-              @click="activeTab = tab.id"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
-          <button type="button" class="code-copy" :aria-label="t('home.landing.quickstart.copy')" @click="copyCode">
-            <Icon :name="copied ? 'check' : 'copy'" size="sm" />
-          </button>
-        </div>
-        <Transition name="code-fade" mode="out-in">
-          <pre :key="activeTab" class="overflow-x-auto px-6 pb-7 pt-5 text-[13px] leading-[1.8]"><code>{{ activeCode }}</code></pre>
-        </Transition>
-      </div>
-    </section>
-
-    <!-- ============ 优势 ============ -->
-    <section class="mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:grid-cols-3 sm:px-8 sm:py-28 lg:px-12">
-      <div v-for="f in features" :key="f.title">
-        <h3 class="feature-title">{{ f.title }}</h3>
-        <p class="mt-3 text-muted">{{ f.desc }}</p>
-      </div>
-    </section>
 
     <!-- ============ 底部 ============ -->
     <section class="relative isolate overflow-hidden">
@@ -136,16 +88,15 @@
 <script setup lang="ts">
 import '@fontsource-variable/geist'
 import '@fontsource-variable/geist-mono'
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
 import LocaleToggle from '@/components/brand/LocaleToggle.vue'
 import RollLink from '@/components/brand/RollLink.vue'
 import ThemeToggleIcon from '@/components/common/ThemeToggleIcon.vue'
-import ModelIcon from '@/components/common/ModelIcon.vue'
-import Icon from '@/components/icons/Icon.vue'
 import GlowDots from '@/components/visual/GlowDots.vue'
+import { hasRevealPlayed } from '@/utils/glowDots'
 import TutorialEntry from '@/features/tutorials/TutorialEntry.vue'
 import { useTutorialCopy } from '@/features/tutorials/content'
 import { sanitizeUrl } from '@/utils/url'
@@ -156,75 +107,30 @@ const authStore = useAuthStore()
 const appStore = useAppStore()
 const tutorialCopy = useTutorialCopy()
 
-const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
+// 品牌名跟随界面语言：中文「石头中转站」，英文 yf-mail
+const siteName = computed(() => t('home.landing.brandName'))
 const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const dashboardPath = computed(() => (authStore.isAdmin ? '/admin/dashboard' : '/dashboard'))
+// 标题从点阵里浮现：动画期间真实文字保持透明，交接后淡入；减少动态效果 / 非浏览器环境 / 已播放过则直接显示
+const canReveal =
+  typeof window !== 'undefined' &&
+  !/jsdom/i.test(navigator.userAgent) &&
+  !(typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) &&
+  !hasRevealPlayed()
+const titleShown = ref(!canReveal)
+let revealGuard: ReturnType<typeof setTimeout> | undefined
+onMounted(() => {
+  // 兜底：任何原因没收到交接信号，6 秒后也要把标题显示出来
+  revealGuard = setTimeout(() => (titleShown.value = true), 6000)
+})
+onBeforeUnmount(() => clearTimeout(revealGuard))
+
 const showModelPlazaEntry = computed(
   () =>
     isFeatureFlagEnabled(FeatureFlags.modelPlaza) &&
     (isAuthenticated.value || appStore.cachedPublicSettings?.model_plaza_require_auth !== true),
 )
-const origin = typeof window !== 'undefined' ? window.location.origin : 'https://your-domain'
-
-const models = [
-  { model: 'claude', label: 'Claude' },
-  { model: 'gpt-5', label: 'GPT' },
-  { model: 'gemini', label: 'Gemini' },
-]
-
-type CodeTab = 'claudeCode' | 'curl' | 'python'
-const activeTab = ref<CodeTab>('claudeCode')
-const codeTabs: { id: CodeTab; label: string }[] = [
-  { id: 'claudeCode', label: 'Claude Code' },
-  { id: 'curl', label: 'cURL' },
-  { id: 'python', label: 'Python' },
-]
-const codeSamples = computed<Record<CodeTab, string>>(() => {
-  const key = t('home.landing.quickstart.keyPlaceholder')
-  return {
-    claudeCode: [`export ANTHROPIC_BASE_URL=${origin}`, `export ANTHROPIC_AUTH_TOKEN=${key}`, 'claude'].join('\n'),
-    curl: [
-      `curl ${origin}/v1/messages \\`,
-      `  -H "x-api-key: ${key}" \\`,
-      '  -H "anthropic-version: 2023-06-01" \\',
-      '  -H "content-type: application/json" \\',
-      `  -d '{"model":"claude-sonnet-5-5","max_tokens":512,`,
-      `       "messages":[{"role":"user","content":"Hello"}]}'`,
-    ].join('\n'),
-    python: [
-      'from openai import OpenAI',
-      '',
-      `client = OpenAI(base_url="${origin}/v1", api_key="${key}")`,
-      'resp = client.chat.completions.create(',
-      '    model="gpt-5",',
-      '    messages=[{"role": "user", "content": "Hello"}],',
-      ')',
-      'print(resp.choices[0].message.content)',
-    ].join('\n'),
-  }
-})
-const activeCode = computed(() => codeSamples.value[activeTab.value])
-
-const copied = ref(false)
-let copiedTimer: ReturnType<typeof setTimeout> | undefined
-async function copyCode() {
-  try {
-    await navigator.clipboard.writeText(activeCode.value)
-    copied.value = true
-    clearTimeout(copiedTimer)
-    copiedTimer = setTimeout(() => (copied.value = false), 1600)
-  } catch {
-    /* 剪贴板不可用时静默失败，用户仍可手动选中复制 */
-  }
-}
-onBeforeUnmount(() => clearTimeout(copiedTimer))
-
-const features = computed(() => [
-  { title: t('home.landing.features.stableTitle'), desc: t('home.landing.features.stableDesc') },
-  { title: t('home.landing.features.usageTitle'), desc: t('home.landing.features.usageDesc') },
-  { title: t('home.landing.features.keyTitle'), desc: t('home.landing.features.keyDesc') },
-])
 </script>
 
 <style scoped>
@@ -237,7 +143,6 @@ const features = computed(() => [
   --btn-bg: #0a0a0b;
   --btn-fg: #fafafa;
   --btn-bg-hover: #26262a;
-  --code-bg: #111113;
   background: var(--bg);
   color: var(--ink);
   font-family: 'Geist Variable', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
@@ -253,7 +158,6 @@ const features = computed(() => [
   --btn-bg: #e6e6e8;
   --btn-fg: #0a0a0b;
   --btn-bg-hover: #ffffff;
-  --code-bg: #131316;
 }
 
 .text-muted {
@@ -261,7 +165,7 @@ const features = computed(() => [
 }
 .hero-scrim {
   background:
-    linear-gradient(to right, var(--bg) 18%, color-mix(in srgb, var(--bg) 70%, transparent) 42%, transparent 68%),
+    linear-gradient(to right, color-mix(in srgb, var(--bg) 22%, transparent), transparent 50%),
     linear-gradient(to bottom, color-mix(in srgb, var(--bg) 60%, transparent), transparent 22%);
 }
 .hero-fade {
@@ -275,99 +179,43 @@ const features = computed(() => [
 
 /* 中文字距保持 0（方块字一收紧就挤）；英文略收 */
 .hero-title {
-  font-size: clamp(44px, 5.4vw, 76px);
-  line-height: 1.1;
+  font-size: clamp(40px, 12.4vw, 168px);
+  line-height: 1.05;
   letter-spacing: 0;
-  font-weight: 500;
-}
-.section-title {
-  font-size: clamp(32px, 3.6vw, 48px);
-  line-height: 1.15;
-  letter-spacing: 0;
-  font-weight: 500;
-}
-.feature-title {
-  font-size: 24px;
-  letter-spacing: 0;
-  font-weight: 500;
-}
-.hero-title:lang(en),
-.section-title:lang(en),
-.feature-title:lang(en) {
-  letter-spacing: -0.025em;
-}
-
-.model-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 20px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  opacity: 0.6;
-  filter: grayscale(1);
-  transition:
-    opacity 0.4s,
-    filter 0.4s;
+  white-space: nowrap;
 }
-.model-item:hover {
-  opacity: 1;
-  filter: grayscale(0);
+.hero-title {
+  transition: opacity 0.5s ease;
 }
-
-/* 代码卡片两种主题下都用深色，代码更易读；不用边框，只靠底色区分 */
-.code-card {
-  overflow: hidden;
-  border-radius: 20px;
-  background: var(--code-bg);
-  color: #e2e8f0;
-}
-.code-tab {
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 9999px;
-  font-size: 13px;
-  color: rgba(226, 232, 240, 0.5);
-  transition:
-    background 0.3s,
-    color 0.3s;
-}
-.code-tab:hover {
-  color: #e2e8f0;
-}
-.code-tab--on {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-.code-copy {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9999px;
-  color: rgba(226, 232, 240, 0.5);
-  transition: color 0.3s;
-}
-.code-copy:hover {
-  color: #fff;
-}
-pre code {
-  font-family: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
-  white-space: pre;
-}
-.code-fade-enter-active,
-.code-fade-leave-active {
-  transition:
-    opacity 0.25s ease,
-    transform 0.25s ease;
-}
-.code-fade-enter-from {
+.hero-title--hidden {
   opacity: 0;
-  transform: translateY(4px);
 }
-.code-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
+/* 首屏不做居中限宽：Logo 与大标题都按视口比例贴向左侧，导航右侧控件对称 */
+.hero-gutter-nav {
+  padding-inline: clamp(20px, 5.6vw, 140px);
+}
+.hero-gutter {
+  padding-inline: clamp(20px, 8.7vw, 220px);
+  /* 上多下少，把整块内容压到画面偏下；按屏高比例取值，矮窗口里按钮也不会被挤出首屏 */
+  padding-top: max(0px, min(31.3svh, calc(100svh - 17vw - 244px)));
+  padding-bottom: 32px;
+}
+/* 首屏两行大标题：上方是站名小标，下方是一行说明 */
+.hero-title--stack {
+  font-size: clamp(40px, 8.2vw, 160px);
+  line-height: 1.04;
+  font-weight: 700;
+}
+.hero-sub {
+  margin-top: 1rem;
+  max-width: 36rem;
+  font-size: 17px;
+  line-height: 1.625;
+  color: var(--muted);
+}
+.hero-title:lang(en) {
+  letter-spacing: -0.04em;
 }
 
 .footer-link {

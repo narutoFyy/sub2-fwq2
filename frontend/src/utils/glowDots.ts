@@ -49,13 +49,14 @@ interface Palette {
  */
 export const GLOW_PALETTES: Record<GlowTheme, Palette> = {
   midnight: { grid: '#151619', levels: ['#1a1c21', '#23262d', '#2f343d', '#3b5462', '#2aa7c2', '#8beafb'] },
-  rose: { grid: '#ececee', levels: ['#e9e9ec', '#dcdce1', '#c8c8cf', '#c9a2b0', '#e0587c', '#e11d48'] },
+  // 色值取自参考图：外圈淡粉，核心是深绛红（最深的点约 #9e2244）
+  rose: { grid: '#efe4e8', levels: ['#f1dde4', '#ebc2d0', '#e093aa', '#c9567a', '#a8294f', '#8c1a3e'] },
 }
 
 /** 各档圆点直径（相对格子） */
 const SIZES = [0.26, 0.36, 0.48, 0.6, 0.72, 0.84]
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 const TAU = Math.PI * 2
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const smoothstep = (a: number, b: number, x: number) => {
@@ -81,6 +82,64 @@ function mulberry32(seed: number) {
 }
 
 const GRAD = new Float32Array([1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1, 0, 1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, -1, 0, 1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1])
+
+/** cubic-bezier(.22, 1, .36, 1)：快起慢收，有"沉下来"的感觉 */
+const easeOut = (() => {
+  const xs: number[] = []
+  const ys: number[] = []
+  for (let i = 0; i <= 128; i++) {
+    const t = i / 128
+    const m = 1 - t
+    xs.push(3 * m * m * t * 0.22 + 3 * m * t * t * 0.36 + t * t * t)
+    ys.push(3 * m * m * t + 3 * m * t * t + t * t * t)
+  }
+  return (x: number) => {
+    if (x <= 0) return 0
+    if (x >= 1) return 1
+    let lo = 0
+    let hi = 128
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1
+      if (xs[mid] < x) lo = mid
+      else hi = mid
+    }
+    const f = (x - xs[lo]) / (xs[hi] - xs[lo] || 1)
+    return ys[lo] + (ys[hi] - ys[lo]) * f
+  }
+})()
+
+/** 标题"点阵浮现"的时间线（秒）：聚 → 清 → 交接 */
+const REVEAL = { start: 0.3, gather: 0.6, clearAt: 0.45, clear: 0.9, spread: 0.65, tail: 0.6 }
+
+export interface RevealCallbacks {
+  /** 字形完全实心后调用：此时可以让真实 DOM 文字淡入 */
+  onHandoff?: () => void
+}
+
+interface RevealState {
+  cx0: number
+  cy0: number
+  cw: number
+  ch: number
+  /** 字形覆盖率（每格 0~1） */
+  M: Float32Array
+  /** 字形周围的"让位"权重 */
+  Hs: Float32Array
+  /** 每格的出现延迟（秒） */
+  D: Float32Array
+  g: Float32Array
+  c: Float32Array
+  idx: Int32Array
+  glyph: HTMLCanvasElement | null
+  work: HTMLCanvasElement | null
+  amap: HTMLCanvasElement | null
+  amapData: ImageData | null
+  ink: string
+}
+
+let revealPlayed = false
+/** 本次页面生命周期里是否已播放过浮现动画（单页应用内返回首页时直接显示终态） */
+export const hasRevealPlayed = () => revealPlayed
 
 /** 3D Simplex 噪声，返回约 [-1, 1] */
 function createNoise3D(seed: number) {
@@ -203,6 +262,12 @@ export class GlowDotsRenderer {
   private io: IntersectionObserver | null = null
   private ro: ResizeObserver | null = null
   private resizeRaf = 0
+  private revealEl: HTMLElement | null = null
+  private revealCbs: RevealCallbacks = {}
+  private rv: RevealState | null = null
+  private rvT = 0
+  private rvHanded = false
+  private rvDone = false
   private readonly onMove = (e: PointerEvent) => this.handleMove(e)
   private readonly onOut = (e: PointerEvent) => {
     if (!e.relatedTarget) this.mouse.inside = false
@@ -272,8 +337,259 @@ export class GlowDotsRenderer {
     const next = GLOW_PALETTES[theme] ?? GLOW_PALETTES.midnight
     if (next === this.palette && this.grid) return
     this.palette = next
+    if (this.rv && this.revealEl) this.rv.ink = getComputedStyle(this.revealEl).color
     this.paintGrid()
     this.draw()
+  }
+
+  /**
+   * 让标题从同源点阵里"长"出来。返回 true 表示会播放动画（真实文字应保持隐藏，等 onHandoff 再显示）；
+   * 返回 false 表示直接是终态（减少动态效果、或已播放过），文字可立即显示。
+   * 两种情况下标题周围都会为文字让出一圈点阵，保证终态一致。
+   */
+  attachReveal(el: HTMLElement, cbs: RevealCallbacks = {}): boolean {
+    this.revealEl = el
+    this.revealCbs = cbs
+    const instant = this.reduced || revealPlayed
+    this.rvT = instant ? 99 : 0
+    this.rvHanded = instant
+    this.rvDone = instant
+    this.buildReveal()
+    if (!this.rv) {
+      this.rvDone = true
+      return false
+    }
+    if (!instant) revealPlayed = true
+    this.draw()
+    return !instant
+  }
+
+  private buildReveal() {
+    const el = this.revealEl
+    if (!el || !this.cols) return
+    if (!(el.textContent || '').trim()) return
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    const rect = range.getBoundingClientRect()
+    if (rect.width < 1 || rect.height < 1) return
+    const cr = this.canvas.getBoundingClientRect()
+    const k = this.W / Math.max(1, cr.width)
+    const cs = getComputedStyle(el)
+
+    // 多行标题：每行用 [data-reveal-line] 标出；没有标记就当单行
+    const marked = Array.from(el.querySelectorAll<HTMLElement>('[data-reveal-line]'))
+    const lineEls = marked.length ? marked : [el]
+    const lines: { text: string; left: number; baseline: number }[] = []
+    for (const le of lineEls) {
+      const text = (le.textContent || '').trim()
+      if (!text) continue
+      const lr = document.createRange()
+      lr.selectNodeContents(le)
+      // 基线：塞一个零尺寸 inline-block，取它的底边
+      const probe = document.createElement('span')
+      probe.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline'
+      le.appendChild(probe)
+      const baseline = probe.getBoundingClientRect().bottom
+      le.removeChild(probe)
+      lines.push({ text, left: lr.getBoundingClientRect().left, baseline })
+    }
+    if (!lines.length) return
+
+    const { cell } = this
+    const pad = cell * 3
+    const x0 = (rect.left - cr.left) * k - pad
+    const x1 = (rect.right - cr.left) * k + pad
+    const y0 = (rect.top - cr.top) * k - pad
+    const y1 = (rect.bottom - cr.top) * k + pad
+    const cx0 = Math.max(0, Math.floor(x0 / cell))
+    const cy0 = Math.max(0, Math.floor(y0 / cell))
+    const cx1 = Math.min(this.cols, Math.ceil(x1 / cell))
+    const cy1 = Math.min(this.rows, Math.ceil(y1 / cell))
+    const cw = cx1 - cx0
+    const ch = cy1 - cy0
+    if (cw < 2 || ch < 2) return
+
+    // 离屏画出与 DOM 完全一致的文字，再按格子统计覆盖率
+    const glyph = document.createElement('canvas')
+    glyph.width = cw * cell
+    glyph.height = ch * cell
+    const gx = glyph.getContext('2d', { willReadFrequently: true })
+    if (!gx) return
+    gx.font = `${cs.fontStyle} ${cs.fontWeight} ${parseFloat(cs.fontSize) * k}px ${cs.fontFamily}`
+    gx.fillStyle = '#fff'
+    gx.textBaseline = 'alphabetic'
+    const ls = (parseFloat(cs.letterSpacing) || 0) * k
+    const spaced = gx as CanvasRenderingContext2D & { letterSpacing?: string }
+    for (const line of lines) {
+      const tx = (line.left - cr.left) * k - cx0 * cell
+      const ty = (line.baseline - cr.top) * k - cy0 * cell
+      if (typeof spaced.letterSpacing === 'string') {
+        spaced.letterSpacing = `${ls}px`
+        gx.fillText(line.text, tx, ty)
+      } else {
+        let px = tx
+        for (const chr of line.text) {
+          gx.fillText(chr, px, ty)
+          px += gx.measureText(chr).width + ls
+        }
+      }
+    }
+    const data = gx.getImageData(0, 0, glyph.width, glyph.height).data
+    const n = cw * ch
+    const M = new Float32Array(n)
+    const area = cell * cell * 255
+    for (let cy = 0; cy < ch; cy++) {
+      for (let cx = 0; cx < cw; cx++) {
+        let sum = 0
+        for (let py = 0; py < cell; py++) {
+          let o = ((cy * cell + py) * glyph.width + cx * cell) * 4 + 3
+          for (let px = 0; px < cell; px++, o += 4) sum += data[o]
+        }
+        M[cy * cw + cx] = sum / area
+      }
+    }
+
+    // 字形周围一圈：横竖各做一次半径 2 的盒式模糊
+    const tmp = new Float32Array(n)
+    const Hs = new Float32Array(n)
+    for (let y = 0; y < ch; y++) {
+      for (let x = 0; x < cw; x++) {
+        let s = 0
+        for (let d = -2; d <= 2; d++) {
+          const xx = x + d
+          if (xx >= 0 && xx < cw) s += M[y * cw + xx]
+        }
+        tmp[y * cw + x] = s / 5
+      }
+    }
+    for (let y = 0; y < ch; y++) {
+      for (let x = 0; x < cw; x++) {
+        let s = 0
+        for (let d = -2; d <= 2; d++) {
+          const yy = y + d
+          if (yy >= 0 && yy < ch) s += tmp[yy * cw + x]
+        }
+        const j = y * cw + x
+        Hs[j] = Math.min(1, Math.max(M[j], (s / 5) * 3))
+      }
+    }
+
+    const noise = createNoise3D(this.o.seed + 7)
+    const D = new Float32Array(n)
+    const list: number[] = []
+    for (let y = 0; y < ch; y++) {
+      for (let x = 0; x < cw; x++) {
+        const j = y * cw + x
+        const white = (Math.imul(x + cx0, 73856093) ^ Math.imul(y + cy0, 19349663)) >>> 0
+        const rnd = 0.65 * (0.5 + 0.5 * noise(x * 0.16, y * 0.16, 3.1)) + 0.35 * (white / 4294967296)
+        D[j] = 0.35 * rnd + (REVEAL.spread - 0.35) * (x / Math.max(1, cw - 1))
+        if (M[j] > 0.03) list.push(j)
+      }
+    }
+
+    const prev = this.rv
+    const rv: RevealState = {
+      cx0, cy0, cw, ch, M, Hs, D,
+      g: new Float32Array(n),
+      c: new Float32Array(n),
+      idx: Int32Array.from(list),
+      glyph: null, work: null, amap: null, amapData: null,
+      ink: prev?.ink ?? cs.color,
+    }
+    if (!this.rvDone) {
+      rv.glyph = glyph
+      rv.work = document.createElement('canvas')
+      rv.work.width = glyph.width
+      rv.work.height = glyph.height
+      rv.amap = document.createElement('canvas')
+      rv.amap.width = cw
+      rv.amap.height = ch
+      const actx = rv.amap.getContext('2d')
+      rv.amapData = actx ? actx.createImageData(cw, ch) : null
+      if (rv.amapData) for (let i = 0; i < n; i++) rv.amapData.data[i * 4] = rv.amapData.data[i * 4 + 1] = rv.amapData.data[i * 4 + 2] = 255
+    }
+    this.rv = rv
+    this.advanceReveal()
+  }
+
+  /** 按当前时间更新每格的"聚"(g) 与"清"(c) 进度 */
+  private advanceReveal() {
+    const rv = this.rv
+    if (!rv) return
+    const t = this.rvT
+    for (let j = 0; j < rv.D.length; j++) {
+      const u = t - REVEAL.start - rv.D[j]
+      rv.g[j] = smoothstep(0, 1, u / REVEAL.gather)
+      rv.c[j] = easeOut((u - REVEAL.clearAt) / REVEAL.clear)
+    }
+    const solid = REVEAL.start + REVEAL.spread + REVEAL.clearAt + REVEAL.clear
+    if (!this.rvHanded && t >= solid) {
+      this.rvHanded = true
+      this.revealCbs.onHandoff?.()
+    }
+    if (!this.rvDone && t >= solid + REVEAL.tail) {
+      this.rvDone = true
+      rv.g.fill(1)
+      rv.glyph = rv.work = rv.amap = null
+      rv.amapData = null
+    }
+  }
+
+  /** 浮现期间在背景点阵之上画文字层：文字点 + 渐显的真实字形 */
+  private drawReveal() {
+    const rv = this.rv
+    if (!rv || this.rvDone || !rv.glyph || !rv.work || !rv.amap || !rv.amapData) return
+    const { ctx, cell, palette } = this
+    const lvl = new Uint8Array(rv.idx.length)
+    const rad = new Float32Array(rv.idx.length)
+    for (let q = 0; q < rv.idx.length; q++) {
+      const j = rv.idx[q]
+      const x = (j % rv.cw) + rv.cx0
+      const y = ((j / rv.cw) | 0) + rv.cy0
+      const M = rv.M[j]
+      const c = rv.c[j]
+      const ge = 1 - (1 - rv.g[j]) * (1 - rv.g[j])
+      const l = toLevel(ge * (0.55 + 0.45 * Math.sqrt(M)), x, y)
+      lvl[q] = l
+      if (!l) continue
+      const target = smoothstep(0.25, 0.6, M) * 1.4
+      const fade = 1 - smoothstep(0.85, 1, c)
+      rad[q] = Math.min(cell * 0.62, ((cell * SIZES[l - 1]) / 2) * (1 - c + c * target) * fade)
+    }
+    for (let lv = 1; lv <= 6; lv++) {
+      let any = false
+      ctx.beginPath()
+      for (let q = 0; q < rv.idx.length; q++) {
+        if (lvl[q] !== lv || rad[q] <= 0.05) continue
+        const j = rv.idx[q]
+        const cx = ((j % rv.cw) + rv.cx0 + 0.5) * cell
+        const cy = (((j / rv.cw) | 0) + rv.cy0 + 0.5) * cell
+        ctx.moveTo(cx + rad[q], cy)
+        ctx.arc(cx, cy, rad[q], 0, TAU)
+        any = true
+      }
+      if (any) {
+        ctx.fillStyle = palette.levels[lv - 1]
+        ctx.fill()
+      }
+    }
+    if (this.rvT < 0.7) return
+    // 真实字形：每格的透明度 = 该格"清"进度，放大时双线性插值，边缘柔和
+    const d = rv.amapData.data
+    for (let j = 0; j < rv.c.length; j++) d[j * 4 + 3] = Math.pow(rv.c[j], 1.6) * 255
+    rv.amap.getContext('2d')?.putImageData(rv.amapData, 0, 0)
+    const wk = rv.work.getContext('2d')
+    if (!wk) return
+    wk.globalCompositeOperation = 'source-over'
+    wk.clearRect(0, 0, rv.work.width, rv.work.height)
+    wk.drawImage(rv.glyph, 0, 0)
+    wk.globalCompositeOperation = 'destination-in'
+    wk.imageSmoothingEnabled = true
+    wk.drawImage(rv.amap, 0, 0, rv.work.width, rv.work.height)
+    wk.globalCompositeOperation = 'source-atop'
+    wk.fillStyle = rv.ink
+    wk.fillRect(0, 0, rv.work.width, rv.work.height)
+    ctx.drawImage(rv.work, rv.cx0 * cell, rv.cy0 * cell)
   }
 
   destroy() {
@@ -323,6 +639,7 @@ export class GlowDotsRenderer {
         this.V[i] = v
       }
     }
+    if (this.revealEl) this.buildReveal()
     this.paintGrid()
     this.draw()
   }
@@ -353,7 +670,9 @@ export class GlowDotsRenderer {
     if (!this.cols) return
     const { mouse, ctx, cell } = this
     const warp = this.interactive && mouse.strength > 0.002
+    const rv = this.rv
     for (let y = 0, i = 0; y < this.rows; y++) {
+      const inRow = !!rv && y >= rv.cy0 && y < rv.cy0 + rv.ch
       for (let x = 0; x < this.cols; x++, i++) {
         let u = this.U[i]
         let v = this.V[i]
@@ -371,6 +690,11 @@ export class GlowDotsRenderer {
           }
         }
         let s = this.field(u, v, this.time) * this.o.gain
+        if (inRow && rv && x >= rv.cx0 && x < rv.cx0 + rv.cw) {
+          // 给标题让位：字形及其周围一圈的背景点阵随"聚"的进度退去
+          const j = (y - rv.cy0) * rv.cw + (x - rv.cx0)
+          s *= 1 - 0.65 * rv.Hs[j] * rv.g[j]
+        }
         if (k > 0) {
           s = 1 - (1 - s) * (1 - 0.2 * k) // 周围一圈柔光
           s = Math.min(1, s + 0.55 * k * s) // 原有光团提亮
@@ -400,6 +724,7 @@ export class GlowDotsRenderer {
         ctx.fill()
       }
     }
+    this.drawReveal()
     if (!this.ready) {
       this.ready = true
       this.o.onReady?.()
@@ -411,6 +736,10 @@ export class GlowDotsRenderer {
     const dt = this.last ? Math.min((now - this.last) / 1000, 0.05) : 1 / 60
     this.last = now
     this.time += dt * this.o.speed
+    if (this.rv && !this.rvDone) {
+      this.rvT += dt
+      this.advanceReveal()
+    }
     if (this.interactive) {
       const m = this.mouse
       const du = (m.tu - m.u) * 0.12

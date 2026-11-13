@@ -112,10 +112,11 @@ export default {
     // Glow-dot landing page (keep it short)
     switchLanguage: 'Switch language',
     landing: {
+      brandName: 'yf-mail',
       hero: {
-        titleLine1: 'One key.',
-        titleLine2: 'Every top model.',
-        subtitle: 'Claude, GPT and Gemini. Pay as you go.',
+        titleLine1: 'Stone Relay',
+        titleLine2: 'Solid as a rock.',
+        subtitle: 'Claude, GPT and Gemini. Pay as you go, ready in minutes.',
         viewPricing: 'Models & pricing'
       },
       quickstart: {

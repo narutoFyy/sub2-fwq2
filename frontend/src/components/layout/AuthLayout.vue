@@ -9,7 +9,7 @@
     <!-- 左：品牌与标语（桌面端），跟随深浅色主题 -->
     <aside class="auth-art relative hidden flex-col justify-between p-12 lg:flex lg:w-[52%] xl:w-[56%]">
       <BrandLogo to="/home" :name="siteName" />
-      <h2 class="art-title">{{ t('auth.layout.headlineLine1') }}<br />{{ t('auth.layout.headlineLine2') }}</h2>
+      <h2 class="art-title">{{ t('auth.layout.headline') }}</h2>
     </aside>
 
     <!-- 右：表单区，跟随深浅色主题 -->
@@ -55,7 +55,7 @@ import ThemeToggleIcon from '@/components/common/ThemeToggleIcon.vue'
 const { t } = useI18n()
 const appStore = useAppStore()
 
-const siteName = computed(() => appStore.siteName || 'Sub2API')
+const siteName = computed(() => t('home.landing.brandName'))
 
 onMounted(() => {
   appStore.fetchPublicSettings()
@@ -108,10 +108,10 @@ onMounted(() => {
   font-size: clamp(36px, 3.4vw, 52px);
   line-height: 1.15;
   letter-spacing: 0;
-  font-weight: 500;
+  font-weight: 600;
 }
 .art-title:lang(en) {
-  letter-spacing: -0.025em;
+  letter-spacing: -0.03em;
 }
 
 .band-fade {

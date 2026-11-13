@@ -112,9 +112,10 @@ export default {
     // 柔光点阵新版首页（尽量少字）
     switchLanguage: '切换语言',
     landing: {
+      brandName: '石头中转站',
       hero: {
-        titleLine1: '一个 Key',
-        titleLine2: '畅用顶级大模型',
+        titleLine1: '石头中转站',
+        titleLine2: '像石头一样稳。',
         subtitle: 'Claude、GPT、Gemini，按量付费，即开即用。',
         viewPricing: '模型与价格'
       },
