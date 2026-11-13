@@ -181,7 +181,7 @@ export default {
     groups: 'Groups',
     channels: 'Channels',
     availableChannels: 'Available Channels',
-    modelPlaza: 'Model Plaza',
+    modelPlaza: 'Plaza',
     resetRadar: 'Reset Radar',
     subscriptions: 'Subscriptions',
     accounts: 'Accounts',

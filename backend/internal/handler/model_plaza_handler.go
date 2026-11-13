@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -21,6 +22,7 @@ type ModelPlazaHandler struct {
 	plazaService   *service.ModelPlazaService
 	apiKeyService  *service.APIKeyService
 	settingService *service.SettingService
+	modelLister    service.PlazaGroupModelLister
 }
 
 // NewModelPlazaHandler 创建模型广场 handler。
@@ -28,12 +30,39 @@ func NewModelPlazaHandler(
 	plazaService *service.ModelPlazaService,
 	apiKeyService *service.APIKeyService,
 	settingService *service.SettingService,
+	gatewayService *service.GatewayService,
 ) *ModelPlazaHandler {
-	return &ModelPlazaHandler{
+	h := &ModelPlazaHandler{
 		plazaService:   plazaService,
 		apiKeyService:  apiKeyService,
 		settingService: settingService,
 	}
+	if gatewayService != nil {
+		h.modelLister = plazaGatewayModelLister{gatewayService: gatewayService}
+	}
+	return h
+}
+
+// plazaGatewayModelLister 按 /v1/models 的口径为未挂渠道的分组枚举模型：
+// 账号映射键 → 平台默认列表（Anthropic 取并集）→ 分组模型白名单。
+// 分组平台没有可调度账号时返回 nil，广场不展示该分组。
+type plazaGatewayModelLister struct {
+	gatewayService *service.GatewayService
+}
+
+func (l plazaGatewayModelLister) ListGroupModelIDs(ctx context.Context, g *service.Group) []string {
+	if g == nil || l.gatewayService == nil {
+		return nil
+	}
+	if _, ok := l.gatewayService.GetSchedulablePlatforms(ctx, &g.ID)[g.Platform]; !ok {
+		return nil
+	}
+	available := l.gatewayService.GetAvailableModels(ctx, &g.ID, g.Platform)
+	models := modelListingSource(g.Platform, available, defaultModelIDsForPlatform(g.Platform))
+	if g.ModelAllowlistEnabled() {
+		models = g.ModelAllowlist.FilterForListing(models)
+	}
+	return models
 }
 
 // modelPlazaOfficialPricing 官方参考价（USD per token，与计费目录同源）。
@@ -124,7 +153,7 @@ func (h *ModelPlazaHandler) Get(c *gin.Context) {
 		return
 	}
 
-	groups, err := h.plazaService.ListGroups(c.Request.Context())
+	groups, err := h.plazaService.ListGroupsWithModelFallback(c.Request.Context(), h.modelLister)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

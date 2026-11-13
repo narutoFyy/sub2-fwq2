@@ -15,7 +15,7 @@
             <span class="hidden sm:inline-flex"><RollLink to="/tutorials" :label="tutorialCopy.nav" variant="plain" class="mr-1" /></span>
             <RollLink
               v-if="showModelPlazaEntry"
-              to="/model-plaza"
+              to="/plaza"
               :label="t('nav.modelPlaza')"
               variant="plain"
               class="mr-1 hidden sm:inline-flex"
@@ -43,7 +43,7 @@
           />
           <RollLink
             v-if="showModelPlazaEntry"
-            to="/model-plaza"
+            to="/plaza"
             :label="t('home.landing.hero.viewPricing')"
             size="lg"
             variant="plain"
@@ -54,6 +54,7 @@
     </section>
 
     <TutorialEntry />
+    <PlazaEntry v-if="showModelPlazaEntry" />
 
     <!-- ============ 底部 ============ -->
     <section class="relative isolate overflow-hidden">
@@ -77,7 +78,7 @@
       <BrandLogo :name="siteName" :size="22" />
       <div class="flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
         <router-link to="/tutorials" class="footer-link">{{ tutorialCopy.nav }}</router-link>
-        <router-link v-if="showModelPlazaEntry" to="/model-plaza" class="footer-link">{{ t('nav.modelPlaza') }}</router-link>
+        <router-link v-if="showModelPlazaEntry" to="/plaza" class="footer-link">{{ t('nav.modelPlaza') }}</router-link>
         <router-link to="/key-usage" class="footer-link">{{ t('home.landing.footer.keyUsage') }}</router-link>
         <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer" class="footer-link">{{ t('home.docs') }}</a>
       </div>
@@ -98,6 +99,7 @@ import ThemeToggleIcon from '@/components/common/ThemeToggleIcon.vue'
 import GlowDots from '@/components/visual/GlowDots.vue'
 import { hasRevealPlayed } from '@/utils/glowDots'
 import TutorialEntry from '@/features/tutorials/TutorialEntry.vue'
+import PlazaEntry from '@/features/plaza/PlazaEntry.vue'
 import { useTutorialCopy } from '@/features/tutorials/content'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
@@ -126,11 +128,8 @@ onMounted(() => {
 })
 onBeforeUnmount(() => clearTimeout(revealGuard))
 
-const showModelPlazaEntry = computed(
-  () =>
-    isFeatureFlagEnabled(FeatureFlags.modelPlaza) &&
-    (isAuthenticated.value || appStore.cachedPublicSettings?.model_plaza_require_auth !== true),
-)
+// 强制登录时广场页自己提示登录，入口照常展示。
+const showModelPlazaEntry = computed(() => isFeatureFlagEnabled(FeatureFlags.modelPlaza))
 </script>
 
 <style scoped>

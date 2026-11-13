@@ -104,6 +104,20 @@ func NewModelPlazaService(
 //
 // 可见性过滤（专属分组）不在此层做，由 handler 按登录态裁剪。
 func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error) {
+	return s.ListGroupsWithModelFallback(ctx, nil)
+}
+
+// PlazaGroupModelLister 为渠道没有覆盖到的分组枚举可用模型 ID，口径须与该分组
+// 的 /v1/models 一致（账号映射 → 平台默认列表 → 分组白名单）。分组下没有可调度
+// 账号时返回空，表示该分组当前无法提供服务。
+type PlazaGroupModelLister interface {
+	ListGroupModelIDs(ctx context.Context, g *Group) []string
+}
+
+// ListGroupsWithModelFallback 同 ListGroups；渠道未提供任何模型的非 Composite 分组
+// 改由 lister 从账号配置推导模型，定价走同一条计费阶梯（官方价 × 分组倍率）。
+// 推导出的模型若既无实收价也无官方价则不展示，避免列出无法计费的默认模型。
+func (s *ModelPlazaService) ListGroupsWithModelFallback(ctx context.Context, lister PlazaGroupModelLister) ([]PlazaGroup, error) {
 	channels, err := s.channelRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list channels: %w", err)
@@ -201,6 +215,11 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 	out := make([]PlazaGroup, 0, len(order))
 	for _, gid := range order {
 		pg := byGroup[gid]
+		derived := false
+		if len(pg.Models) == 0 && lister != nil && pg.Platform != PlatformComposite {
+			pg.Models = plazaModelsFromIDs(lister.ListGroupModelIDs(ctx, groupEnt[gid]), pg.Platform)
+			derived = true
+		}
 		if len(pg.Models) == 0 {
 			continue
 		}
@@ -215,6 +234,12 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 			s.fillDisplayPricing(ctx, &pg.Models[j], g)
 			pg.Models[j].OfficialPricing = s.lookupOfficialPricing(ctx, pg.Models[j].Name, officialMemo)
 		}
+		if derived {
+			pg.Models = dropUnpricedPlazaModels(pg.Models)
+			if len(pg.Models) == 0 {
+				continue
+			}
+		}
 		out = append(out, *pg)
 	}
 
@@ -225,6 +250,37 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
 		return out[i].Name < out[j].Name
 	})
 	return out, nil
+}
+
+// plazaModelsFromIDs 把推导出的模型 ID 去重、去空白后转成广场条目（平台取分组平台）。
+func plazaModelsFromIDs(ids []string, platform string) []PlazaModel {
+	seen := make(map[string]struct{}, len(ids))
+	models := make([]PlazaModel, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || strings.ContainsAny(id, "*?") {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		models = append(models, PlazaModel{Name: id, Platform: platform})
+	}
+	sort.SliceStable(models, func(i, j int) bool { return models[i].Name < models[j].Name })
+	return models
+}
+
+// dropUnpricedPlazaModels 去掉既无实收价也无官方价的推导模型。
+func dropUnpricedPlazaModels(models []PlazaModel) []PlazaModel {
+	kept := models[:0]
+	for _, m := range models {
+		if m.Pricing == nil && m.OfficialPricing == nil {
+			continue
+		}
+		kept = append(kept, m)
+	}
+	return kept
 }
 
 // fillDisplayPricing 把模型的展示定价换成实收口径：

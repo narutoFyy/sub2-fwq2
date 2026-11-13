@@ -50,6 +50,7 @@ function mountHome(settings: Record<string, unknown> = {}) {
         RouterLink: RouterLinkStub,
         LocaleSwitcher: { template: '<div data-testid="locale-switcher" />' },
         Icon: { template: '<span data-testid="icon" />' },
+        PlazaEntry: { template: '<section data-testid="plaza-entry" />' },
       },
     },
   })
@@ -62,7 +63,7 @@ function compactDestination(wrapper: ReturnType<typeof mountHome>) {
 function modelPlazaDestination(wrapper: ReturnType<typeof mountHome>) {
   return wrapper
     .findAllComponents(RouterLinkStub)
-    .find((link) => link.props('to') === '/model-plaza')
+    .find((link) => link.props('to') === '/plaza')
     ?.props('to')
 }
 
@@ -138,17 +139,17 @@ describe('HomeView compact mode', () => {
       model_plaza_require_auth: false,
     })
 
-    expect(modelPlazaDestination(wrapper)).toBe('/model-plaza')
+    expect(modelPlazaDestination(wrapper)).toBe('/plaza')
   })
 
-  it('hides the model plaza link from anonymous visitors when sign-in is required', () => {
+  it('keeps the plaza link for anonymous visitors when sign-in is required (the page prompts login)', () => {
     const wrapper = mountHome({
       compact_home_enabled: true,
       model_plaza_enabled: true,
       model_plaza_require_auth: true,
     })
 
-    expect(modelPlazaDestination(wrapper)).toBeUndefined()
+    expect(modelPlazaDestination(wrapper)).toBe('/plaza')
   })
 
   it('shows the model plaza link to authenticated visitors when sign-in is required', () => {
@@ -160,7 +161,7 @@ describe('HomeView compact mode', () => {
       model_plaza_require_auth: true,
     })
 
-    expect(modelPlazaDestination(wrapper)).toBe('/model-plaza')
+    expect(modelPlazaDestination(wrapper)).toBe('/plaza')
   })
 
   it('shows the model plaza link in the default home header', () => {
@@ -169,7 +170,7 @@ describe('HomeView compact mode', () => {
       model_plaza_require_auth: false,
     })
 
-    expect(modelPlazaDestination(wrapper)).toBe('/model-plaza')
+    expect(modelPlazaDestination(wrapper)).toBe('/plaza')
   })
 
   it('hides the model plaza link when the feature is disabled', () => {

@@ -182,8 +182,20 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/plaza',
+    name: 'Plaza',
+    component: () => import('@/features/plaza/PlazaView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Plaza',
+      titleKey: 'nav.modelPlaza'
+    }
+  },
+  {
     path: '/model-plaza',
     name: 'ModelPlaza',
+    // 独立形态统一到新版广场；后台内嵌形态（?embedded=1）仍用原页面。
+    beforeEnter: (to) => (to.query.embedded === '1' ? true : { path: '/plaza', query: to.query }),
     component: () => import('@/views/ModelPlazaView.vue'),
     meta: {
       requiresAuth: false,
@@ -910,7 +922,8 @@ router.beforeEach(async (to, _from, next) => {
       return
     }
     // Model Plaza:公开路由但受「启用开关 + 可选强制登录」双重控制(后端同口径 fail-closed)
-    if (to.path === '/model-plaza') {
+    // /plaza 的强制登录在页面内提示（避免访客从首页点进来被直接甩到登录页），其余同口径。
+    if (to.path === '/model-plaza' || to.path === '/plaza') {
       if (!appStore.publicSettingsLoaded) {
         try {
           await appStore.fetchPublicSettings()
@@ -930,7 +943,7 @@ router.beforeEach(async (to, _from, next) => {
         )
         return
       }
-      if (plazaSettings?.model_plaza_require_auth === true && !authStore.isAuthenticated) {
+      if (to.path === '/model-plaza' && to.query.embedded === '1' && plazaSettings?.model_plaza_require_auth === true && !authStore.isAuthenticated) {
         next({ path: '/login', query: { redirect: to.fullPath } })
         return
       }

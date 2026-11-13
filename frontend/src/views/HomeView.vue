@@ -43,7 +43,7 @@
           </a>
           <router-link
             v-if="showModelPlazaEntry"
-            to="/model-plaza"
+            to="/plaza"
             class="flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
             :title="t('nav.modelPlaza')"
           >
@@ -86,6 +86,7 @@
       </div>
     </main>
     <TutorialEntry />
+    <PlazaEntry v-if="showModelPlazaEntry" />
 
     <footer class="min-w-0 border-t border-gray-200 px-4 py-5 text-center text-sm text-gray-500 [overflow-wrap:anywhere] sm:px-6 dark:border-dark-800 dark:text-dark-400">
       &copy; {{ currentYear }} {{ siteName }}
@@ -104,6 +105,7 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import LandingHome from '@/views/home/LandingHome.vue'
 import TutorialEntry from '@/features/tutorials/TutorialEntry.vue'
+import PlazaEntry from '@/features/plaza/PlazaEntry.vue'
 import { useTutorialCopy } from '@/features/tutorials/content'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
@@ -135,12 +137,8 @@ const isDark = ref(document.documentElement.classList.contains('dark'))
 
 // Auth state
 const isAuthenticated = computed(() => authStore.isAuthenticated)
-const modelPlazaRequiresAuth = computed(
-  () => appStore.cachedPublicSettings?.model_plaza_require_auth === true,
-)
-const showModelPlazaEntry = computed(
-  () => modelPlazaEnabled.value && (isAuthenticated.value || !modelPlazaRequiresAuth.value),
-)
+// 强制登录时广场页自己提示登录，入口照常展示。
+const showModelPlazaEntry = computed(() => modelPlazaEnabled.value)
 const isAdmin = computed(() => authStore.isAdmin)
 const dashboardPath = computed(() => isAdmin.value ? '/admin/dashboard' : '/dashboard')
 
