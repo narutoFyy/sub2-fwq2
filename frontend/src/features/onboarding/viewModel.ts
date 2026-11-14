@@ -13,6 +13,8 @@ export type GuideBlock =
   | { type: 'command'; heading: string; command: string; hint?: string }
   | { type: 'copy'; heading?: string; label: string; value: string; secret?: boolean }
   | { type: 'note'; text: string }
+  /** 带脉冲小点的等待状态（如「正在等待第一次调用」）。 */
+  | { type: 'status'; text: string }
 
 export interface GuideAction {
   label: string
@@ -41,6 +43,8 @@ export interface GuideView {
   wide?: boolean
   /** 允许收起成角落的小胶囊（用户去安装软件时不挡着页面）。 */
   collapsible?: boolean
+  /** 收起后胶囊上的文字。 */
+  pillLabel?: string
   primary?: GuideAction
   secondary?: GuideAction
   /** 目标找不到时才出现的「直接前往」按钮。 */

@@ -212,3 +212,13 @@
   .og-block { animation-duration: 0.01s; animation-delay: 0s; }
   .og-pill-dot { animation: none; }
 }
+
+/* ---------- 等待第一次调用 / 庆祝 ---------- */
+.og-status { display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 1.6; color: var(--og-muted); }
+.og-confetti { position: fixed; left: 50%; top: 38%; width: 0; height: 0; pointer-events: none; z-index: 1; }
+.og-confetti i { position: absolute; left: 0; top: 0; width: var(--w); height: calc(var(--w) * 0.55); border-radius: 2px; opacity: 0; animation: og-confetti 1.9s cubic-bezier(0.2, 0.7, 0.3, 1) var(--d) forwards; }
+@keyframes og-confetti {
+  0% { transform: translate(0, 0) rotate(0) scale(0.5); opacity: 1; }
+  45% { transform: translate(calc(var(--x) * 1px), calc(var(--y) * 1px)) rotate(var(--r)) scale(1); opacity: 1; }
+  100% { transform: translate(calc(var(--x) * 1.12px), calc(var(--y) * 1px + 190px)) rotate(calc(var(--r) * 1.6)); opacity: 0; }
+}

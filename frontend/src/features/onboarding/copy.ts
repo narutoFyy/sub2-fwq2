@@ -9,6 +9,7 @@ export function useGuideCopy() {
 
 export const guideCopyZh = {
   stages: ['选工具', '兑换额度', '创建密钥', '接入工具'],
+  stageDone: '全部完成',
   clientName: (c: GuideClient) => (c === 'codex' ? 'Codex' : 'Claude Code'),
 
   welcome: {
@@ -133,9 +134,23 @@ export const guideCopyZh = {
     body: '启用刚导入的供应商，就可以开始用了。',
     stepsCodex: ['在 CC Switch 里启用刚导入的供应商', '打开 Codex 桌面版，新建一个对话', '随便问一句，能回复就接通了'],
     stepsClaude: ['在 CC Switch 里启用刚导入的供应商', '打开终端，运行 claude', '随便问一句，能回复就接通了'],
+    waiting: '正在等待你的第一次调用…试一句，这里会自动提示',
+    pill: '等待第一次调用 · 点这里查看',
     tutorial: '查看图文教程',
     done: '完成'
   },
+  success: {
+    title: '接通了！',
+    body: '第一次调用成功。之后每次调用都能在「使用记录」里看到，余额消耗也会实时更新。',
+    usage: '查看使用记录',
+    done: '完成'
+  },
+  reopen: {
+    title: '新手引导',
+    desc: '重新走一遍：兑换额度、创建密钥、接入工具'
+  },
+  haveKey: '我已有密钥，跳过这步',
+  importAny: '点你要用的那把密钥的「导入到 CC Switch」。',
   done: { redeem: '兑换成功', key: '密钥已创建' },
 
   back: '上一步',
@@ -165,6 +180,7 @@ export type GuideCopy = typeof guideCopyZh
 
 export const guideCopyEn: GuideCopy = {
   stages: ['Pick a tool', 'Add credit', 'Create key', 'Connect'],
+  stageDone: 'All done',
   clientName: (c: GuideClient) => (c === 'codex' ? 'Codex' : 'Claude Code'),
 
   welcome: {
@@ -289,9 +305,23 @@ export const guideCopyEn: GuideCopy = {
     body: 'Enable the provider you just imported and you can start using it.',
     stepsCodex: ['Enable the imported provider in CC Switch', 'Open the Codex desktop app and start a chat', 'Ask anything — if it answers, you are connected'],
     stepsClaude: ['Enable the imported provider in CC Switch', 'Open a terminal and run claude', 'Ask anything — if it answers, you are connected'],
+    waiting: 'Waiting for your first call… send one message and this will notice',
+    pill: 'Waiting for first call · click to view',
     tutorial: 'Open the illustrated guide',
     done: 'Done'
   },
+  success: {
+    title: "You're connected!",
+    body: 'Your first call went through. Every call shows up in Usage records, and your balance updates in real time.',
+    usage: 'View usage records',
+    done: 'Done'
+  },
+  reopen: {
+    title: 'Getting started guide',
+    desc: 'Walk through it again: add credit, create a key, connect your tool'
+  },
+  haveKey: 'I already have a key — skip',
+  importAny: 'Click “Import to CC Switch” on the key you want to use.',
   done: { redeem: 'Redeemed', key: 'Key created' },
 
   back: 'Back',

@@ -18,9 +18,10 @@ export type GuideStepId =
   | 'imported'
   | 'manual'
   | 'finish'
+  | 'success'
 
 export const STEP_ORDER: GuideStepId[] = [
-  'welcome', 'client', 'buy', 'returned', 'redeem', 'key', 'ccs', 'download', 'import', 'imported', 'manual', 'finish'
+  'welcome', 'client', 'buy', 'returned', 'redeem', 'key', 'ccs', 'download', 'import', 'imported', 'manual', 'finish', 'success'
 ]
 
 /** 进度条的四个阶段（欢迎页不算）。 */
@@ -84,8 +85,10 @@ export function nextStep(current: GuideStepId, ctx: GuideContext): GuideStepId {
       return 'imported'
     case 'imported': // 「已导入成功」
     case 'manual': // 「我配置好了」
-    case 'finish':
       return 'finish'
+    case 'finish': // 等到第一次调用
+    case 'success':
+      return 'success'
   }
 }
 

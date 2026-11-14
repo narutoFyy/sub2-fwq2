@@ -11,7 +11,8 @@ describe('onboarding steps', () => {
     expect(nextStep('returned', base)).toBe('redeem')
     expect(nextStep('redeem', base)).toBe('key')
     expect(nextStep('key', base)).toBe('ccs')
-    expect(nextStep('finish', base)).toBe('finish')
+    expect(nextStep('finish', base)).toBe('success')
+    expect(nextStep('success', base)).toBe('success')
   })
 
   it('goes from the install question straight to import, or via the download page', () => {
@@ -42,7 +43,7 @@ describe('onboarding steps', () => {
     expect(stageOf('client')).toBe(0)
     for (const step of FUND_STEPS) expect(stageOf(step)).toBe(1)
     expect(stageOf('key')).toBe(2)
-    for (const step of ['ccs', 'download', 'import', 'imported', 'manual', 'finish'] as const) expect(stageOf(step)).toBe(3)
+    for (const step of ['ccs', 'download', 'import', 'imported', 'manual', 'finish', 'success'] as const) expect(stageOf(step)).toBe(3)
   })
 
   it('goes back one step where it makes sense', () => {

@@ -37,6 +37,10 @@ onBeforeUnmount(() => clearTimeout(timer))
         <p class="og-block-note">{{ block.text }}</p>
       </template>
 
+      <template v-else-if="block.type === 'status'">
+        <p class="og-status" role="status"><span class="og-pill-dot" aria-hidden="true"></span>{{ block.text }}</p>
+      </template>
+
       <template v-else-if="block.type === 'download'">
         <h3 class="og-block-head"><span class="og-num">{{ numberOf(blocks, i) }}</span>{{ block.heading }}</h3>
         <a v-if="block.primary" class="og-dl" :href="block.primary.href" target="_blank" rel="noopener noreferrer" download>

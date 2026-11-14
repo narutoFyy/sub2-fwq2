@@ -28,7 +28,11 @@ const emit = defineEmits<{
 const copy = useGuideCopy()
 const doneText = computed(() => (props.completing === 'redeem' ? copy.value.done.redeem : copy.value.done.key))
 const isWelcome = computed(() => props.view.key === 'welcome')
-const stageLabel = computed(() => (props.stage >= 0 ? `${props.stage + 1} / ${copy.value.stages.length} · ${copy.value.stages[props.stage]}` : ''))
+const stageLabel = computed(() => {
+  if (props.stage < 0) return ''
+  if (props.stage >= copy.value.stages.length) return copy.value.stageDone
+  return `${props.stage + 1} / ${copy.value.stages.length} · ${copy.value.stages[props.stage]}`
+})
 </script>
 
 <template>

@@ -7,6 +7,7 @@ import { useAppStore, useAuthStore, useSubscriptionStore } from '@/stores'
 import { useTutorialWelcomeStore } from '@/features/tutorials/welcomeStore'
 import GlowDots from '@/components/visual/GlowDots.vue'
 import GuideCardBody from './GuideCardBody.vue'
+import GuideConfetti from './GuideConfetti.vue'
 import GuideInvite from './GuideInvite.vue'
 import GuideSpotlight from './GuideSpotlight.vue'
 import { useGuideCopy } from './copy'
@@ -14,6 +15,7 @@ import { buildDownloadBlocks } from './downloads'
 import { useGuideStore } from './guideStore'
 import { detectArch, detectOS, type Env } from './platform'
 import { useDownloadResources } from './useDownloadResources'
+import { useFirstCallWatcher } from './useFirstCallWatcher'
 import { FUND_STEPS, nextStep, prevStep, stageOf, type GuideContext, type PurchaseMode } from './steps'
 import { useGuideTarget, type TargetResolver } from './useGuideTarget'
 import type { GuideClient } from './config'
@@ -135,6 +137,30 @@ const { rect, anchorRect, inDialog, el, index, missing } = useGuideTarget(resolv
 /** 侧栏链接上的文字（「购买套餐」「兑换」…），直接引用界面上的真实名称。 */
 const targetText = computed(() => (el.value?.textContent ?? '').replace(/\s+/g, ' ').trim())
 
+// ---------------------------------------------------------------- 已有密钥 / 等第一次调用
+
+/** 重新走引导的用户可能已经有密钥：创建密钥那步给一个「我已有密钥」跳过入口。 */
+const hasKey = ref(false)
+watch(
+  () => guide.active && guide.step === 'key',
+  async (on) => {
+    if (!on) return
+    try {
+      hasKey.value = (await keysAPI.list(1, 1)).total > 0
+    } catch {
+      hasKey.value = false
+    }
+  },
+  { immediate: true }
+)
+
+// 完成页等用户在 Codex / Claude Code 里发出第一次调用，查到记录就进入庆祝。
+useFirstCallWatcher({
+  active: computed(() => eligible.value && guide.active && guide.step === 'finish'),
+  keyId: computed(() => guide.keyId),
+  onDetected: () => guide.go('success')
+})
+
 // ---------------------------------------------------------------- 手动配置用到的值
 
 /** 手动配置的 API 地址：Codex 需要带 /v1，Claude Code 不带（与图文教程一致）。 */
@@ -247,6 +273,7 @@ const view = computed<GuideView | null>(() => {
         click: phase !== 'form',
         dim: phase !== 'form',
         inSidebar: phase === 'nav',
+        secondary: hasKey.value && phase !== 'form' ? { label: c.haveKey, run: () => guide.go('ccs') } : undefined,
         fallback: missing.value ? go('/keys', c.pageKeys) : undefined,
         resolvers: resolvers.value
       }
@@ -267,6 +294,7 @@ const view = computed<GuideView | null>(() => {
         key: 'download',
         wide: true,
         collapsible: env.value.os !== 'mobile',
+        pillLabel: c.download.pill,
         title: c.download.title,
         body: c.download.body,
         blocks: resources.ready.value
@@ -288,7 +316,7 @@ const view = computed<GuideView | null>(() => {
         kind: 'spot',
         key: onButton ? 'import' : 'import-nav',
         title: onButton ? c.import.title : c.importNav.title,
-        body: onButton ? c.import.body : c.importNav.body(targetText.value || t('nav.apiKeys')),
+        body: onButton ? (guide.keyId != null ? c.import.body : c.importAny) : c.importNav.body(targetText.value || t('nav.apiKeys')),
         hint: onButton ? c.import.hint : undefined,
         click: true,
         inSidebar: !onButton,
@@ -333,9 +361,12 @@ const view = computed<GuideView | null>(() => {
       return {
         kind: 'modal',
         key: 'finish',
+        collapsible: true,
+        pillLabel: c.finish.pill,
         title: c.finish.title,
         body: c.finish.body,
         list: guide.client === 'codex' ? c.finish.stepsCodex : c.finish.stepsClaude,
+        blocks: [{ type: 'status', text: c.finish.waiting }],
         primary: {
           label: c.finish.tutorial,
           run: () => {
@@ -347,11 +378,27 @@ const view = computed<GuideView | null>(() => {
         secondary: { label: c.finish.done, run: () => guide.finish() },
         resolvers: []
       }
+    case 'success':
+      return {
+        kind: 'modal',
+        key: 'success',
+        title: c.success.title,
+        body: c.success.body,
+        primary: {
+          label: c.success.usage,
+          run: () => {
+            guide.finish()
+            void router.push('/usage')
+          }
+        },
+        secondary: { label: c.success.done, run: () => guide.finish() },
+        resolvers: []
+      }
   }
   return null
 })
 
-const stage = computed(() => (guide.step === 'welcome' ? -1 : stageOf(guide.step)))
+const stage = computed(() => (guide.step === 'welcome' ? -1 : guide.step === 'success' ? 4 : stageOf(guide.step)))
 
 function choose(client: GuideClient) {
   guide.chooseClient(client)
@@ -433,7 +480,7 @@ watch(
 
 /** 下载步骤里用户要去装软件：把大卡片收成角落的小胶囊，切回本页时自动展开。 */
 const minimized = ref(false)
-const showPill = computed(() => minimized.value && guide.active && guide.step === 'download')
+const showPill = computed(() => minimized.value && guide.active && !!view.value?.collapsible)
 watch(() => guide.step, () => (minimized.value = false))
 function onVisible() {
   if (document.visibilityState === 'visible' && minimized.value) minimized.value = false
@@ -598,7 +645,7 @@ onBeforeUnmount(() => {
               :stage="stage"
               :completing="completing"
               :confirming="confirming"
-              :show-skip="guide.step !== 'welcome'"
+              :show-skip="guide.step !== 'welcome' && guide.step !== 'success'"
               @choose="choose"
               @ask-skip="confirming = true"
               @confirm-skip="confirmSkip"
@@ -634,9 +681,11 @@ onBeforeUnmount(() => {
           />
         </section>
       </Transition>
+      <GuideConfetti v-if="guide.step === 'success' && !completing" :key="guide.step" />
+
       <Transition name="og-invite">
         <button v-if="showPill" type="button" class="og-pill" @click="minimized = false">
-          <span class="og-pill-dot" aria-hidden="true"></span>{{ copy.download.pill }}
+          <span class="og-pill-dot" aria-hidden="true"></span>{{ view?.pillLabel ?? copy.download.pill }}
         </button>
       </Transition>
     </template>
