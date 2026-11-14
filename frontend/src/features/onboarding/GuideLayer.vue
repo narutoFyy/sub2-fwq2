@@ -10,11 +10,14 @@ import GuideCardBody from './GuideCardBody.vue'
 import GuideInvite from './GuideInvite.vue'
 import GuideSpotlight from './GuideSpotlight.vue'
 import { useGuideCopy } from './copy'
+import { buildDownloadBlocks } from './downloads'
 import { useGuideStore } from './guideStore'
+import { detectArch, detectOS, type Env } from './platform'
+import { useDownloadResources } from './useDownloadResources'
 import { FUND_STEPS, nextStep, prevStep, stageOf, type GuideContext, type PurchaseMode } from './steps'
 import { useGuideTarget, type TargetResolver } from './useGuideTarget'
 import type { GuideClient } from './config'
-import type { GuideView } from './viewModel'
+import type { GuideBlock, GuideView } from './viewModel'
 import './guide.css'
 
 const route = useRoute()
@@ -71,6 +74,21 @@ const ctx = computed<GuideContext>(() => ({
   redeemAvailable: !auth.isSimpleMode
 }))
 
+// ---------------------------------------------------------------- 系统与下载资源
+
+const env = ref<Env>({ os: detectOS(), arch: 'unknown' })
+void detectArch(env.value.os).then((arch) => (env.value = { os: env.value.os, arch }))
+const resources = useDownloadResources()
+
+// 进入下载步骤才去取 manifest 和 Node 版本，其余步骤不发这些请求。
+watch(
+  () => guide.active && (guide.step === 'download' || guide.step === 'ccs'),
+  (need) => {
+    if (need) void resources.load()
+  },
+  { immediate: true }
+)
+
 // ---------------------------------------------------------------- 目标
 
 const byAttr = (selector: string): TargetResolver => () => document.querySelector<HTMLElement>(selector)
@@ -99,6 +117,14 @@ const resolvers = computed<TargetResolver[]>(() => {
         byAttr('[data-tour="keys-create-btn"]'),
         byAttr('[data-tour="sidebar-my-keys"]')
       ]
+    case 'import': {
+      const mine = guide.keyId != null ? `[data-tour="key-import-ccs"][data-key-id="${guide.keyId}"]` : null
+      return [
+        mine ? byAttr(mine) : () => null,
+        byAttr('[data-tour="key-import-ccs"]'),
+        byAttr('[data-tour="sidebar-my-keys"]')
+      ]
+    }
     default:
       return []
   }
@@ -109,12 +135,38 @@ const { rect, anchorRect, inDialog, el, index, missing } = useGuideTarget(resolv
 /** 侧栏链接上的文字（「购买套餐」「兑换」…），直接引用界面上的真实名称。 */
 const targetText = computed(() => (el.value?.textContent ?? '').replace(/\s+/g, ' ').trim())
 
+// ---------------------------------------------------------------- 手动配置用到的值
+
+/** 手动配置的 API 地址：Codex 需要带 /v1，Claude Code 不带（与图文教程一致）。 */
+const manualEndpoint = computed(() => {
+  const base = (app.cachedPublicSettings?.api_base_url || window.location.origin).replace(/\/+$/, '')
+  return guide.client === 'codex' && !base.endsWith('/v1') ? `${base}/v1` : base
+})
+const manualKey = ref<string | null>(null)
+async function loadManualKey() {
+  if (manualKey.value) return
+  try {
+    const row = guide.keyId != null ? await keysAPI.getById(guide.keyId) : (await keysAPI.list(1, 1)).items[0]
+    manualKey.value = row?.key ?? null
+  } catch {
+    manualKey.value = null
+  }
+}
+watch(
+  () => guide.active && guide.step === 'manual',
+  (on) => {
+    if (on) void loadManualKey()
+  },
+  { immediate: true }
+)
+
 // ---------------------------------------------------------------- 当前这一屏
 
 const view = computed<GuideView | null>(() => {
   if (!guide.active) return null
   const c = copy.value
   const step = guide.step
+  const tool = guide.client ? c.clientName(guide.client) : ''
   const advance = () => guide.go(nextStep(step, ctx.value))
   const go = (path: string, page: string) => ({ label: c.goto(page), run: () => void router.push(path) })
 
@@ -199,13 +251,91 @@ const view = computed<GuideView | null>(() => {
         resolvers: resolvers.value
       }
     }
+    case 'ccs':
+      return {
+        kind: 'modal',
+        key: 'ccs',
+        title: c.ccs.title(tool),
+        body: c.ccs.body(tool),
+        primary: { label: c.ccs.yes, run: advance },
+        secondary: { label: c.ccs.no, run: () => guide.go('download') },
+        resolvers: []
+      }
+    case 'download':
+      return {
+        kind: 'modal',
+        key: 'download',
+        wide: true,
+        collapsible: env.value.os !== 'mobile',
+        title: c.download.title,
+        body: c.download.body,
+        blocks: resources.ready.value
+          ? buildDownloadBlocks(
+              env.value,
+              guide.client ?? 'claude-code',
+              { manifest: resources.manifest.value, nodeVersion: resources.nodeVersion.value, siteUrl: window.location.origin },
+              c
+            )
+          : undefined,
+        hint: resources.ready.value ? undefined : c.download.preparing,
+        primary: { label: c.download.cont, run: advance },
+        back: { label: c.back, run: () => guide.go(prevStep('download')) },
+        resolvers: []
+      }
+    case 'import': {
+      const onButton = index.value === 0 || index.value === 1
+      return {
+        kind: 'spot',
+        key: onButton ? 'import' : 'import-nav',
+        title: onButton ? c.import.title : c.importNav.title,
+        body: onButton ? c.import.body : c.importNav.body(targetText.value || t('nav.apiKeys')),
+        hint: onButton ? c.import.hint : undefined,
+        click: true,
+        inSidebar: !onButton,
+        // 站点关闭了一键导入、或按钮找不到时，不让用户卡住。
+        secondary: { label: c.imported.no, run: () => guide.go('manual') },
+        fallback: missing.value ? go('/keys', c.pageKeys) : undefined,
+        resolvers: resolvers.value
+      }
+    }
+    case 'imported':
+      return {
+        kind: 'modal',
+        key: 'imported',
+        title: c.imported.title,
+        body: c.imported.body,
+        hint: c.imported.hint,
+        primary: { label: c.imported.yes, run: advance },
+        secondary: { label: c.imported.no, run: () => guide.go('manual') },
+        back: { label: c.imported.retry, run: () => guide.go(prevStep('imported')) },
+        resolvers: []
+      }
+    case 'manual': {
+      const blocks: GuideBlock[] = [{ type: 'copy', heading: c.manual.endpoint, label: 'URL', value: manualEndpoint.value }]
+      if (manualKey.value) blocks.push({ type: 'copy', heading: c.manual.key, label: 'Key', value: manualKey.value, secret: true })
+      return {
+        kind: 'modal',
+        key: 'manual',
+        title: c.manual.title,
+        body: c.manual.body,
+        blocks,
+        hint: manualKey.value ? undefined : c.manual.loading,
+        primary: { label: c.manual.done, run: advance },
+        secondary: {
+          label: c.manual.tutorial,
+          run: () => void router.push(`/tutorials/${guide.client ?? 'claude-code'}`)
+        },
+        back: { label: c.manual.toDownload, run: () => guide.go('download') },
+        resolvers: []
+      }
+    }
     case 'finish':
       return {
         kind: 'modal',
         key: 'finish',
         title: c.finish.title,
         body: c.finish.body,
-        list: c.finish.steps,
+        list: guide.client === 'codex' ? c.finish.stepsCodex : c.finish.stepsClaude,
         primary: {
           label: c.finish.tutorial,
           run: () => {
@@ -234,7 +364,7 @@ const completing = ref<'redeem' | 'key' | null>(null)
 let completeTimer: ReturnType<typeof setTimeout> | undefined
 
 /** 先给一个对勾动画，再进入下一步。 */
-function complete(kind: 'redeem' | 'key', next: 'key' | 'finish') {
+function complete(kind: 'redeem' | 'key', next: 'key' | 'ccs') {
   if (completing.value) return
   completing.value = kind
   completeTimer = setTimeout(() => {
@@ -260,23 +390,26 @@ watch(
 watch(
   () => guide.keyCreatedTick,
   () => {
-    if (guide.active && guide.step === 'key') complete('key', 'finish')
+    if (guide.active && guide.step === 'key') complete('key', 'ccs')
   }
 )
 
-// 点了购买入口（会在新标签页打开小铺）→ 切到「买好了吗」，用户回来就能看到。
+// 点了购买入口（会在新标签页打开小铺）→ 切到「买好了吗」；点了「导入到 CC Switch」→ 切到「弹窗确认了吗」。
+// 用户回来时卡片已经在那里等着。
 let clickedEl: HTMLElement | null = null
-function onPurchaseClick() {
-  if (guide.active && guide.step === 'buy') guide.go('returned')
+function onTargetClick() {
+  if (!guide.active) return
+  if (guide.step === 'buy') guide.go('returned')
+  else if (guide.step === 'import' && (index.value === 0 || index.value === 1)) guide.go('imported')
 }
 watch(
-  [el, () => guide.step],
-  ([target, step]) => {
-    clickedEl?.removeEventListener('click', onPurchaseClick, true)
+  [el, () => guide.step, index],
+  ([target, step, idx]) => {
+    clickedEl?.removeEventListener('click', onTargetClick, true)
     clickedEl = null
-    if (step === 'buy' && target) {
+    if (target && (step === 'buy' || (step === 'import' && (idx === 0 || idx === 1)))) {
       clickedEl = target
-      target.addEventListener('click', onPurchaseClick, true)
+      target.addEventListener('click', onTargetClick, true)
     }
   },
   { flush: 'post' }
@@ -295,6 +428,17 @@ watch(
   },
   { immediate: true }
 )
+
+// ---------------------------------------------------------------- 收起成胶囊
+
+/** 下载步骤里用户要去装软件：把大卡片收成角落的小胶囊，切回本页时自动展开。 */
+const minimized = ref(false)
+const showPill = computed(() => minimized.value && guide.active && guide.step === 'download')
+watch(() => guide.step, () => (minimized.value = false))
+function onVisible() {
+  if (document.visibilityState === 'visible' && minimized.value) minimized.value = false
+}
+onMounted(() => document.addEventListener('visibilitychange', onVisible))
 
 // ---------------------------------------------------------------- 跳过确认
 
@@ -330,6 +474,8 @@ function onResize() {
 onMounted(() => window.addEventListener('resize', onResize))
 
 const isSheet = computed(() => vw.value < 640)
+/** 手机上目标落在下半屏、又滚不上去时，把抽屉挪到顶部，免得盖住目标。 */
+const sheetTop = computed(() => isSheet.value && !!rect.value && rect.value.y + rect.value.h / 2 > vh.value * 0.5)
 
 /**
  * 贴着目标（弹窗里的目标则贴着整个弹窗面板）放：优先右侧，其次左侧、下方、上方。
@@ -360,7 +506,7 @@ watch(
   async () => {
     if (!view.value || view.value.kind !== 'modal') return
     await nextTick()
-    cardEl.value?.querySelector<HTMLElement>('[data-og-autofocus]')?.focus()
+    cardEl.value?.querySelector<HTMLElement>('[data-og-autofocus]')?.focus({ preventScroll: true })
   },
   { flush: 'post' }
 )
@@ -425,7 +571,8 @@ function dismissInvite() {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   observer?.disconnect()
-  clickedEl?.removeEventListener('click', onPurchaseClick, true)
+  clickedEl?.removeEventListener('click', onTargetClick, true)
+  document.removeEventListener('visibilitychange', onVisible)
   clearTimeout(completeTimer)
   clearTimeout(drawerTimer)
   clearTimeout(inviteTimer)
@@ -436,7 +583,7 @@ onBeforeUnmount(() => {
   <div class="og-root">
     <template v-if="eligible && guide.active && view">
       <Transition name="og-fade">
-        <div v-if="view.kind === 'modal'" class="og-backdrop" aria-hidden="true">
+        <div v-if="view.kind === 'modal' && !showPill" class="og-backdrop" aria-hidden="true">
           <GlowDots v-if="guide.step === 'welcome'" class="og-glow" :center-x="0.5" :center-y="0.46" :cell="5" :max-cells="14000" :gain="0.5" :interactive="false" />
         </div>
       </Transition>
@@ -444,8 +591,8 @@ onBeforeUnmount(() => {
       <GuideSpotlight v-if="view.kind === 'spot'" :rect="rect" :cursor="view.click" :dim="view.dim !== false" />
 
       <Transition name="og-card" appear>
-        <div v-if="view.kind === 'modal'" class="og-center">
-          <section ref="cardEl" class="og-card og-card--modal" role="dialog" aria-modal="true" aria-labelledby="og-title" @keydown="onKeydown">
+        <div v-if="view.kind === 'modal' && !showPill" class="og-center">
+          <section ref="cardEl" class="og-card og-card--modal" :class="{ 'og-card--wide': view.wide }" role="dialog" aria-modal="true" aria-labelledby="og-title" @keydown="onKeydown">
             <GuideCardBody
               :view="view"
               :stage="stage"
@@ -456,6 +603,7 @@ onBeforeUnmount(() => {
               @ask-skip="confirming = true"
               @confirm-skip="confirmSkip"
               @cancel-skip="confirming = false"
+              @collapse="minimized = true"
             />
           </section>
         </div>
@@ -466,7 +614,7 @@ onBeforeUnmount(() => {
           v-if="view.kind === 'spot'"
           ref="cardEl"
           class="og-card og-card--float"
-          :class="{ 'og-sheet': isSheet }"
+          :class="{ 'og-sheet': isSheet, 'og-sheet--top': sheetTop }"
           :style="floatStyle"
           role="dialog"
           aria-modal="false"
@@ -485,6 +633,11 @@ onBeforeUnmount(() => {
             @cancel-skip="confirming = false"
           />
         </section>
+      </Transition>
+      <Transition name="og-invite">
+        <button v-if="showPill" type="button" class="og-pill" @click="minimized = false">
+          <span class="og-pill-dot" aria-hidden="true"></span>{{ copy.download.pill }}
+        </button>
       </Transition>
     </template>
 

@@ -54,7 +54,9 @@ export function useGuideTarget(resolvers: Ref<TargetResolver[]>, enabled: Ref<bo
 
   function bringIntoView(target: HTMLElement) {
     const r = target.getBoundingClientRect()
-    if (r.top < 0 || r.bottom > window.innerHeight) {
+    // 手机上说明卡片是贴在屏幕底部的抽屉：目标落在下半屏就会被它盖住，也要滚上来。
+    const behindSheet = window.innerWidth < 640 && r.bottom > window.innerHeight * 0.55
+    if (r.top < 0 || r.bottom > window.innerHeight || behindSheet) {
       target.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
   }

@@ -684,6 +684,16 @@ func TestFrontendServer_Middleware(t *testing.T) {
 	})
 }
 
+func TestEmbeddedFrontendBypassesDownloadsRoutes(t *testing.T) {
+	for _, path := range []string{
+		"/downloads/cc-switch/manifest.json",
+		"/downloads/cc-switch/CC-Switch-v4.0.31-Windows.msi",
+	} {
+		require.True(t, shouldBypassEmbeddedFrontend(path), "path=%s", path)
+	}
+	require.False(t, shouldBypassEmbeddedFrontend("/downloads"))
+}
+
 func TestEmbeddedFrontendBypassesBareVideoAPIRoutes(t *testing.T) {
 	for _, path := range []string{
 		"/videos/generations",

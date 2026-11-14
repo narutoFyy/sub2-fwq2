@@ -165,6 +165,11 @@ export default defineConfig(({ mode }) => {
         '/setup': {
           target: backendUrl,
           changeOrigin: true
+        },
+        // 新手引导里自托管的 CC Switch 安装包（后端 DOWNLOADS_DIR）
+        '/downloads': {
+          target: backendUrl,
+          changeOrigin: true
         }
       }
     }

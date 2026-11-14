@@ -90,6 +90,7 @@ type Config struct {
 	Default                 DefaultConfig                 `mapstructure:"default"`
 	RateLimit               RateLimitConfig               `mapstructure:"rate_limit"`
 	Pricing                 PricingConfig                 `mapstructure:"pricing"`
+	Downloads               DownloadsConfig               `mapstructure:"downloads"`
 	Gateway                 GatewayConfig                 `mapstructure:"gateway"`
 	APIKeyAuth              APIKeyAuthCacheConfig         `mapstructure:"api_key_auth_cache"`
 	APIKeyCreate            APIKeyCreateConfig            `mapstructure:"api_key_create"`
@@ -717,6 +718,12 @@ type TokenRefreshConfig struct {
 	AttemptTimeoutSeconds int `mapstructure:"attempt_timeout_seconds"`
 	// 单个后台刷新周期的总超时（秒）
 	CycleTimeoutSeconds int `mapstructure:"cycle_timeout_seconds"`
+}
+
+// DownloadsConfig 控制 /downloads/* 静态下载目录（新手引导里的 CC Switch 安装包自托管）。
+// Dir 为空表示不启用（路由返回 404）；通过环境变量 DOWNLOADS_DIR 配置。
+type DownloadsConfig struct {
+	Dir string `mapstructure:"dir"`
 }
 
 type PricingConfig struct {
@@ -2403,6 +2410,7 @@ func setDefaults() {
 	// Pricing - 从 model-price-repo main 分支同步模型定价和上下文窗口数据
 	viper.SetDefault("pricing.remote_url", "https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.json")
 	viper.SetDefault("pricing.hash_url", "https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.sha256")
+	viper.SetDefault("downloads.dir", "")
 	viper.SetDefault("pricing.data_dir", "./data")
 	viper.SetDefault("pricing.fallback_file", "./resources/model-pricing/model_prices_and_context_window.json")
 	viper.SetDefault("pricing.override_file", "")

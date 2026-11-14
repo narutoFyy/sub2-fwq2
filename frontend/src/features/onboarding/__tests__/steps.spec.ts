@@ -10,8 +10,16 @@ describe('onboarding steps', () => {
     expect(nextStep('buy', base)).toBe('returned')
     expect(nextStep('returned', base)).toBe('redeem')
     expect(nextStep('redeem', base)).toBe('key')
-    expect(nextStep('key', base)).toBe('finish')
+    expect(nextStep('key', base)).toBe('ccs')
     expect(nextStep('finish', base)).toBe('finish')
+  })
+
+  it('goes from the install question straight to import, or via the download page', () => {
+    expect(nextStep('ccs', base)).toBe('import')
+    expect(nextStep('download', base)).toBe('import')
+    expect(nextStep('import', base)).toBe('imported')
+    expect(nextStep('imported', base)).toBe('finish')
+    expect(nextStep('manual', base)).toBe('finish')
   })
 
   it('skips the funding steps when the user already has credit', () => {
@@ -34,12 +42,15 @@ describe('onboarding steps', () => {
     expect(stageOf('client')).toBe(0)
     for (const step of FUND_STEPS) expect(stageOf(step)).toBe(1)
     expect(stageOf('key')).toBe(2)
-    expect(stageOf('finish')).toBe(3)
+    for (const step of ['ccs', 'download', 'import', 'imported', 'manual', 'finish'] as const) expect(stageOf(step)).toBe(3)
   })
 
   it('goes back one step where it makes sense', () => {
     expect(prevStep('client')).toBe('welcome')
     expect(prevStep('returned')).toBe('buy')
+    expect(prevStep('download')).toBe('ccs')
+    expect(prevStep('imported')).toBe('import')
+    expect(prevStep('manual')).toBe('imported')
     expect(prevStep('key')).toBe('key')
   })
 })

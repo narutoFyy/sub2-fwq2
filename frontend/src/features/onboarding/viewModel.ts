@@ -1,6 +1,19 @@
 import type { GuideClient } from './config'
 import type { TargetResolver } from './useGuideTarget'
 
+export interface GuideLink {
+  label: string
+  href: string
+  meta?: string
+}
+
+/** 卡片里的内容块（下载页等用）。 */
+export type GuideBlock =
+  | { type: 'download'; heading: string; primary?: GuideLink; alternates?: GuideLink[]; note?: string; backup?: GuideLink; verify?: GuideLink }
+  | { type: 'command'; heading: string; command: string; hint?: string }
+  | { type: 'copy'; heading?: string; label: string; value: string; secret?: boolean }
+  | { type: 'note'; text: string }
+
 export interface GuideAction {
   label: string
   run: () => void
@@ -23,6 +36,11 @@ export interface GuideView {
   hint?: string
   list?: string[]
   options?: GuideClientOption[]
+  blocks?: GuideBlock[]
+  /** 宽一点的卡片（下载页内容多）。 */
+  wide?: boolean
+  /** 允许收起成角落的小胶囊（用户去安装软件时不挡着页面）。 */
+  collapsible?: boolean
   primary?: GuideAction
   secondary?: GuideAction
   /** 目标找不到时才出现的「直接前往」按钮。 */

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { SUPPORT_QQ_GROUP } from './config'
+import { copyText } from './copyText'
 import { useGuideCopy } from './copy'
 
 const copy = useGuideCopy()
@@ -10,21 +11,7 @@ const root = ref<HTMLElement>()
 let timer: ReturnType<typeof setTimeout> | undefined
 
 async function copyGroup() {
-  let ok = false
-  try {
-    await navigator.clipboard.writeText(SUPPORT_QQ_GROUP)
-    ok = true
-  } catch {
-    const area = document.createElement('textarea')
-    area.value = SUPPORT_QQ_GROUP
-    area.style.position = 'fixed'
-    area.style.opacity = '0'
-    document.body.appendChild(area)
-    area.select()
-    try { ok = document.execCommand('copy') } catch { ok = false }
-    area.remove()
-  }
-  if (!ok) return
+  if (!(await copyText(SUPPORT_QQ_GROUP))) return
   copied.value = true
   clearTimeout(timer)
   timer = setTimeout(() => (copied.value = false), 1600)

@@ -13,9 +13,11 @@ interface Persisted {
   status: GuideStatus
   step: GuideStepId
   client: GuideClient | null
+  /** 引导里创建的那把 Key，用来在 Key 列表里高亮它的「导入」按钮。 */
+  keyId: number | null
 }
 
-const DEFAULT: Persisted = { status: 'idle', step: 'welcome', client: null }
+const DEFAULT: Persisted = { status: 'idle', step: 'welcome', client: null, keyId: null }
 const key = (userId: number) => `${GUIDE_STORAGE_PREFIX}:${userId}`
 
 function read(userId: number): Persisted {
@@ -26,7 +28,8 @@ function read(userId: number): Persisted {
     return {
       status: parsed.status ?? 'idle',
       step: parsed.step ?? 'welcome',
-      client: parsed.client === 'codex' || parsed.client === 'claude-code' ? parsed.client : null
+      client: parsed.client === 'codex' || parsed.client === 'claude-code' ? parsed.client : null,
+      keyId: typeof parsed.keyId === 'number' ? parsed.keyId : null
     }
   } catch {
     return { ...DEFAULT }
@@ -39,6 +42,7 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
   const status = ref<GuideStatus>('idle')
   const step = ref<GuideStepId>('welcome')
   const client = ref<GuideClient | null>(null)
+  const keyId = ref<number | null>(null)
   /** 兑换成功 / Key 创建成功这类页面事件的计数，GuideLayer 据此推进。 */
   const redeemedTick = ref(0)
   const keyCreatedTick = ref(0)
@@ -48,7 +52,7 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
   function persist() {
     if (userId.value == null) return
     try {
-      localStorage.setItem(key(userId.value), JSON.stringify({ status: status.value, step: step.value, client: client.value }))
+      localStorage.setItem(key(userId.value), JSON.stringify({ status: status.value, step: step.value, client: client.value, keyId: keyId.value }))
     } catch {
       /* 存储不可用时本次会话内仍可用 */
     }
@@ -61,12 +65,14 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
     status.value = saved.status
     step.value = saved.step
     client.value = saved.client
+    keyId.value = saved.keyId
   }
 
   function start() {
     status.value = 'active'
     step.value = 'welcome'
     client.value = null
+    keyId.value = null
     persist()
   }
 
@@ -100,7 +106,11 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
     redeemedTick.value++
   }
 
-  function notifyKeyCreated() {
+  function notifyKeyCreated(id?: number) {
+    if (typeof id === 'number') {
+      keyId.value = id
+      persist()
+    }
     keyCreatedTick.value++
   }
 
@@ -109,6 +119,7 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
     status,
     step,
     client,
+    keyId,
     active,
     redeemedTick,
     keyCreatedTick,

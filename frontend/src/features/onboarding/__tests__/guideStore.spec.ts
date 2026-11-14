@@ -56,6 +56,23 @@ describe('guide store', () => {
     expect(guide.step).toBe('welcome')
   })
 
+  it('remembers the key created in the guide across reloads', () => {
+    const guide = useGuideStore()
+    guide.load(11)
+    guide.start()
+    guide.notifyKeyCreated(42)
+    guide.notifyKeyCreated() // 没带 id 的通知不应清掉已记住的 key
+
+    setActivePinia(createPinia())
+    const reloaded = useGuideStore()
+    reloaded.load(11)
+    expect(reloaded.keyId).toBe(42)
+    expect(reloaded.keyCreatedTick).toBe(0)
+
+    reloaded.start() // 重新开始引导时丢掉旧的 key
+    expect(reloaded.keyId).toBeNull()
+  })
+
   it('bumps event counters for page notifications', () => {
     const guide = useGuideStore()
     guide.notifyRedeemed()

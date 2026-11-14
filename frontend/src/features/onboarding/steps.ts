@@ -1,13 +1,27 @@
 /**
  * 新手引导的步骤与流转（纯逻辑，不依赖 DOM / 路由，便于单测）。
  *
- * 流程：欢迎 → 选工具 → 买码并兑换 → 创建 Key → 完成。
+ * 流程：欢迎 → 选工具 → 买码并兑换 → 创建 Key → 问「装了吗」→（下载）→ 一键导入 → 完成。
  * 「买码并兑换」拆成 buy（去小铺）/ returned（问买好没）/ redeem（去兑换）三步；
  * 「创建 Key」是一步，具体高亮哪个按钮由页面当前状态决定（见 GuideLayer）。
  */
-export type GuideStepId = 'welcome' | 'client' | 'buy' | 'returned' | 'redeem' | 'key' | 'finish'
+export type GuideStepId =
+  | 'welcome'
+  | 'client'
+  | 'buy'
+  | 'returned'
+  | 'redeem'
+  | 'key'
+  | 'ccs'
+  | 'download'
+  | 'import'
+  | 'imported'
+  | 'manual'
+  | 'finish'
 
-export const STEP_ORDER: GuideStepId[] = ['welcome', 'client', 'buy', 'returned', 'redeem', 'key', 'finish']
+export const STEP_ORDER: GuideStepId[] = [
+  'welcome', 'client', 'buy', 'returned', 'redeem', 'key', 'ccs', 'download', 'import', 'imported', 'manual', 'finish'
+]
 
 /** 进度条的四个阶段（欢迎页不算）。 */
 export const STAGES = ['client', 'fund', 'key', 'connect'] as const
@@ -24,7 +38,8 @@ export function stageOf(step: GuideStepId): number {
       return 1
     case 'key':
       return 2
-    case 'finish':
+    default:
+      // 问「装了吗」、下载、导入、手动配置、完成都属于「接入工具」。
       return 3
   }
 }
@@ -61,7 +76,14 @@ export function nextStep(current: GuideStepId, ctx: GuideContext): GuideStepId {
     case 'redeem':
       return 'key'
     case 'key':
-      return 'finish'
+      return 'ccs'
+    case 'ccs': // 「都装好了」
+    case 'download': // 「我装好了，继续」
+      return 'import'
+    case 'import': // 点了导入按钮
+      return 'imported'
+    case 'imported': // 「已导入成功」
+    case 'manual': // 「我配置好了」
     case 'finish':
       return 'finish'
   }
@@ -74,6 +96,12 @@ export function prevStep(current: GuideStepId): GuideStepId {
       return 'welcome'
     case 'returned':
       return 'buy'
+    case 'download':
+      return 'ccs'
+    case 'imported':
+      return 'import'
+    case 'manual':
+      return 'imported'
     default:
       return current
   }

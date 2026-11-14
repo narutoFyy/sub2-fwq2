@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import ModelIcon from '@/components/common/ModelIcon.vue'
+import GuideBlocks from './GuideBlocks.vue'
 import GuideSupport from './GuideSupport.vue'
 import { useGuideCopy } from './copy'
 import type { GuideClient } from './config'
@@ -21,6 +22,7 @@ const emit = defineEmits<{
   askSkip: []
   confirmSkip: []
   cancelSkip: []
+  collapse: []
 }>()
 
 const copy = useGuideCopy()
@@ -74,10 +76,13 @@ const stageLabel = computed(() => (props.stage >= 0 ? `${props.stage + 1} / ${co
           </button>
         </div>
 
+        <GuideBlocks v-if="view.blocks" :blocks="view.blocks" />
+
         <p v-if="view.hint" class="og-hint">{{ view.hint }}</p>
 
         <div v-if="view.primary || view.secondary || view.fallback || view.back" class="og-actions">
           <button v-if="view.back" type="button" class="og-btn og-btn--text" @click="view.back.run()">{{ view.back.label }}</button>
+          <button v-if="view.collapsible" type="button" class="og-btn og-btn--ghost" @click="emit('collapse')">{{ copy.download.collapse }}</button>
           <button v-if="view.secondary" type="button" class="og-btn og-btn--ghost" @click="view.secondary.run()">{{ view.secondary.label }}</button>
           <button v-if="view.fallback" type="button" class="og-btn og-btn--ghost" @click="view.fallback.run()">{{ view.fallback.label }}</button>
           <button v-if="view.primary" type="button" class="og-btn og-btn--primary" data-og-autofocus @click="view.primary.run()">{{ view.primary.label }}</button>

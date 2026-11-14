@@ -66,6 +66,7 @@
 .og-card { pointer-events: auto; background: var(--og-bg); color: var(--og-ink); border-radius: 20px; box-shadow: var(--og-shadow); }
 .og-card--modal { width: min(460px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 28px 28px 20px; }
 .og-card--float { position: fixed; left: 0; top: 0; width: 360px; padding: 22px 22px 16px; transition: transform 0.6s var(--og-ease); will-change: transform; }
+.og-card--float.og-sheet.og-sheet--top { top: 12px; bottom: auto; }
 .og-card--float.og-sheet { left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; transform: none !important; border-radius: 20px; max-height: 70vh; overflow: auto; }
 
 .og-card-enter-active { transition: opacity 0.45s var(--og-ease), translate 0.55s var(--og-ease), scale 0.55s var(--og-ease); }
@@ -169,4 +170,45 @@
   .og-path li, .og-list li, .og-option { animation-duration: 0.01s; animation-delay: 0s; }
   .og-card-enter-active, .og-swap-enter-active, .og-invite-enter-active, .og-pop-enter-active { transition-duration: 0.01s; }
   .og-check-ring, .og-check-mark { animation-duration: 0.01s; animation-delay: 0s; }
+}
+
+/* ---------- 下载页：内容块 ---------- */
+.og-card--wide { width: min(540px, 100%); }
+.og-blocks { display: grid; gap: 14px; margin-top: 16px; }
+.og-block { padding: 14px 16px; border-radius: 14px; background: var(--og-panel); opacity: 0; animation: og-rise 0.55s var(--og-ease) forwards; animation-delay: calc(0.1s * var(--i) + 0.1s); }
+.og-block-head { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; line-height: 1.4; margin-bottom: 10px; }
+.og-num { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font: 600 11px 'Geist Mono Variable', ui-monospace, monospace; background: var(--og-accent); color: var(--og-bg); }
+.og-block-note { font-size: 13px; line-height: 1.7; color: var(--og-muted); }
+.og-block-hint { margin-top: 8px; font-size: 12.5px; line-height: 1.65; color: var(--og-muted); }
+
+.og-dl { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: 12px; background: var(--og-btn-bg); color: var(--og-btn-fg); font-size: 14px; font-weight: 500; text-decoration: none; transition: opacity 0.15s, transform 0.15s; }
+.og-dl:hover { opacity: 0.9; }
+.og-dl:active { transform: scale(0.99); }
+.og-dl-label { flex: 1; min-width: 0; }
+.og-dl-meta { font-size: 12px; opacity: 0.7; white-space: nowrap; }
+.og-alt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-top: 10px; font-size: 12.5px; color: var(--og-muted); }
+.og-alt a { color: var(--og-ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--og-ink) 35%, transparent); }
+.og-alt a:hover { text-decoration-color: currentColor; }
+.og-alt small { color: var(--og-muted); }
+.og-alt--quiet a { color: var(--og-muted); }
+
+.og-code { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border-radius: 10px; background: var(--og-bg); border: 1px solid var(--og-line); }
+.og-code code { flex: 1; min-width: 0; font: 12.5px/1.6 'Geist Mono Variable', ui-monospace, monospace; overflow-wrap: anywhere; user-select: all; }
+.og-code button { flex: none; padding: 5px 12px; border-radius: 999px; font-size: 12px; background: var(--og-btn-bg); color: var(--og-btn-fg); white-space: nowrap; }
+.og-field-label { flex: none; font-size: 12px; color: var(--og-muted); min-width: 28px; }
+
+/* ---------- 收起后的角落胶囊 ---------- */
+.og-pill { pointer-events: auto; position: fixed; right: 24px; bottom: 24px; display: inline-flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 12px 18px; border-radius: 999px; background: var(--og-bg); color: var(--og-ink); box-shadow: var(--og-shadow); font-size: 13.5px; font-weight: 500; }
+.og-pill:hover { transform: translateY(-1px); }
+.og-pill-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--og-accent); box-shadow: 0 0 0 0 var(--og-glow); animation: og-pill-pulse 2s ease-out infinite; }
+@keyframes og-pill-pulse { 0% { box-shadow: 0 0 0 0 var(--og-glow); } 70% { box-shadow: 0 0 0 9px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+@media (max-width: 640px) {
+  .og-pill { left: 12px; right: 12px; bottom: 12px; justify-content: center; }
+  .og-block { padding: 12px 12px; }
+  .og-dl { padding: 11px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .og-block { animation-duration: 0.01s; animation-delay: 0s; }
+  .og-pill-dot { animation: none; }
 }

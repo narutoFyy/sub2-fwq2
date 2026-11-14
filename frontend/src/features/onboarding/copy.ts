@@ -4,10 +4,10 @@ import type { GuideClient } from './config'
 
 export function useGuideCopy() {
   const { locale } = useI18n()
-  return computed(() => (locale.value.startsWith('zh') ? zh : en))
+  return computed(() => (locale.value.startsWith('zh') ? guideCopyZh : guideCopyEn))
 }
 
-const zh = {
+export const guideCopyZh = {
   stages: ['选工具', '兑换额度', '创建密钥', '接入工具'],
   clientName: (c: GuideClient) => (c === 'codex' ? 'Codex' : 'Claude Code'),
 
@@ -55,10 +55,84 @@ const zh = {
     title: '确认类型并选择分组',
     body: (client: string) => `已按你选的 ${client} 选好类型。选一个分组（倍率越低越便宜），然后点「创建」。`
   },
+  ccs: {
+    title: (tool: string) => `${tool} 和 CC Switch 都装好了吗？`,
+    body: (tool: string) => `CC Switch 负责把密钥一键配置进 ${tool}，两个都要装在电脑上。`,
+    yes: '都装好了',
+    no: '还没有，带我装'
+  },
+  download: {
+    title: '先把软件装好',
+    body: '按顺序来：下载 → 安装 → 回到这里点「继续」。',
+    cont: '我装好了，继续',
+    collapse: '收起',
+    pill: '引导进行中 · 装好后点这里继续',
+    preparing: '正在准备下载链接…',
+    ccsHeading: '下载 CC Switch',
+    ccsAsset: { 'win-x64': 'Windows（64 位）', 'win-arm64': 'Windows（ARM）', mac: 'macOS', 'linux-deb': 'Linux（.deb）' },
+    ccsMacNote: '首次打开如果提示「无法验证开发者」，到「系统设置 → 隐私与安全性」点「仍要打开」。',
+    ccsGithubNote: '该下载来自 GitHub，国内可能较慢；打不开可用下面的备用链接，或找客服。',
+    ccsBackup: 'GitHub 发布页（全部版本）',
+    codexHeading: '下载 Codex 桌面版',
+    codexAsset: { 'win-x64': 'Windows（64 位）', 'win-arm64': 'Windows（ARM）', 'mac-arm64': 'macOS · Apple 芯片（M 系列）', 'mac-intel': 'macOS · Intel 芯片' },
+    codexWinNote: '文件较大，约 1 GB，建议连 Wi-Fi。下载后双击安装。',
+    codexBigNote: '文件较大，约 900 MB，建议连 Wi-Fi。下载后打开安装包，把 Codex 拖进「应用程序」。',
+    macChipHint: '不确定芯片？点屏幕左上角苹果 →「关于本机」：显示 Apple M 系列选「Apple 芯片」，显示 Intel 选「Intel 芯片」。文件约 900 MB，建议连 Wi-Fi。',
+    codexNoDesktop: 'Codex 桌面版目前只有 Windows 和 macOS 版，你的系统可以用命令行版：',
+    codexCliHeading: '安装 Codex 命令行版',
+    nodeNeeded: '需要先安装 Node.js 22 或更高版本。',
+    verify: '校验文件完整性（SHA-256）',
+    nodeHeading: '安装 Node.js（已装 22 或更高版本可跳过）',
+    nodeNote: '用来运行下面的安装命令，装完需要重新打开终端。',
+    nodeLinux: '请先用系统自带的包管理器安装 Node.js 22 或更高版本，已装可跳过。',
+    nodeWin: 'Windows（64 位）',
+    nodeWinArm: 'Windows（ARM）',
+    nodeMac: 'macOS',
+    claudeHeading: '安装 Claude Code',
+    claudeCheck: '检查是否装好',
+    claudeCheckHint: '能看到版本号就说明装好了。',
+    shellWin: '在「PowerShell」或「命令提示符」里运行；如提示权限不足，用「以管理员身份运行」重开。',
+    shellUnix: '在「终端」里运行；如提示权限不足，在命令前面加 sudo。',
+    mobile: 'CC Switch 和 Codex / Claude Code 都要装在电脑上，请用电脑打开本站，继续这个引导。',
+    siteUrl: '本站网址',
+    copy: '复制',
+    copied: '已复制',
+    get: '下载',
+    other: '其他版本',
+    backupLabel: '备用'
+  },
+  importNav: {
+    title: '回到密钥页',
+    body: (label: string) => `点击左侧的「${label}」，找到刚创建的密钥。`
+  },
+  import: {
+    title: '点「导入到 CC Switch」',
+    body: '这是你刚创建的密钥那一行的按钮。',
+    hint: '浏览器会问是否打开 CC Switch，选「打开」，再在 CC Switch 里确认导入。'
+  },
+  imported: {
+    title: 'CC Switch 弹出确认窗口了吗？',
+    body: '在 CC Switch 里确认导入，这个密钥就配置好了。',
+    hint: '浏览器如果问「是否打开 CC Switch」，请选择打开。',
+    yes: '已导入成功',
+    no: '没反应',
+    retry: '重新点一次'
+  },
+  manual: {
+    title: '手动配置也很快',
+    body: '先确认 CC Switch 已安装并能打开，再在里面添加一个自定义供应商，填入下面两项。',
+    endpoint: 'API 地址',
+    key: 'API Key',
+    loading: '正在读取密钥…',
+    done: '我配置好了',
+    toDownload: '回到下载页',
+    tutorial: '看图文教程'
+  },
   finish: {
-    title: '密钥创建好了',
-    body: '最后一步：安装 CC Switch，一键导入这个密钥。',
-    steps: ['下载并安装 CC Switch', '回到「API 密钥」页，点「导入到 CC Switch」', '启用后，在终端或桌面端开始使用'],
+    title: '导入完成，最后一步',
+    body: '启用刚导入的供应商，就可以开始用了。',
+    stepsCodex: ['在 CC Switch 里启用刚导入的供应商', '打开 Codex 桌面版，新建一个对话', '随便问一句，能回复就接通了'],
+    stepsClaude: ['在 CC Switch 里启用刚导入的供应商', '打开终端，运行 claude', '随便问一句，能回复就接通了'],
     tutorial: '查看图文教程',
     done: '完成'
   },
@@ -87,9 +161,9 @@ const zh = {
   }
 }
 
-type GuideCopy = typeof zh
+export type GuideCopy = typeof guideCopyZh
 
-const en: GuideCopy = {
+export const guideCopyEn: GuideCopy = {
   stages: ['Pick a tool', 'Add credit', 'Create key', 'Connect'],
   clientName: (c: GuideClient) => (c === 'codex' ? 'Codex' : 'Claude Code'),
 
@@ -137,10 +211,84 @@ const en: GuideCopy = {
     title: 'Confirm type and pick a group',
     body: (client: string) => `We preselected the type for ${client}. Pick a group (lower rate = cheaper), then click Create.`
   },
+  ccs: {
+    title: (tool: string) => `Are ${tool} and CC Switch installed?`,
+    body: (tool: string) => `CC Switch configures your key into ${tool} in one click. You need both on your computer.`,
+    yes: 'Both installed',
+    no: 'Not yet, help me install'
+  },
+  download: {
+    title: 'Install the software first',
+    body: 'In order: download → install → come back and click Continue.',
+    cont: "I've installed it, continue",
+    collapse: 'Minimize',
+    pill: 'Guide in progress · click to continue',
+    preparing: 'Preparing download links…',
+    ccsHeading: 'Download CC Switch',
+    ccsAsset: { 'win-x64': 'Windows (64-bit)', 'win-arm64': 'Windows (ARM)', mac: 'macOS', 'linux-deb': 'Linux (.deb)' },
+    ccsMacNote: 'If macOS says it cannot verify the developer, open System Settings → Privacy & Security and click Open Anyway.',
+    ccsGithubNote: 'This download comes from GitHub and may be slow in some regions. Use the backup link below or ask support if it fails.',
+    ccsBackup: 'GitHub releases (all versions)',
+    codexHeading: 'Download the Codex desktop app',
+    codexAsset: { 'win-x64': 'Windows (64-bit)', 'win-arm64': 'Windows (ARM)', 'mac-arm64': 'macOS · Apple silicon (M series)', 'mac-intel': 'macOS · Intel' },
+    codexWinNote: 'Large file, about 1 GB — use Wi-Fi. Double-click to install after downloading.',
+    codexBigNote: 'Large file, about 900 MB — use Wi-Fi. Open the installer and drag Codex into Applications.',
+    macChipHint: 'Not sure which chip? Click the Apple menu → About This Mac: “Apple M…” means Apple silicon, “Intel” means Intel. About 900 MB — use Wi-Fi.',
+    codexNoDesktop: 'The Codex desktop app is only available for Windows and macOS. On your system, use the command-line version:',
+    codexCliHeading: 'Install the Codex CLI',
+    nodeNeeded: 'Requires Node.js 22 or newer.',
+    verify: 'Verify file integrity (SHA-256)',
+    nodeHeading: 'Install Node.js (skip if you already have 22 or newer)',
+    nodeNote: 'It runs the install command below. Reopen your terminal after installing.',
+    nodeLinux: 'Install Node.js 22 or newer with your system package manager first (skip if you already have it).',
+    nodeWin: 'Windows (64-bit)',
+    nodeWinArm: 'Windows (ARM)',
+    nodeMac: 'macOS',
+    claudeHeading: 'Install Claude Code',
+    claudeCheck: 'Check it worked',
+    claudeCheckHint: 'If you see a version number, it is installed.',
+    shellWin: 'Run it in PowerShell or Command Prompt; if you get a permissions error, reopen as administrator.',
+    shellUnix: 'Run it in your terminal; if you get a permissions error, prefix the command with sudo.',
+    mobile: 'CC Switch and Codex / Claude Code must be installed on a computer. Open this site on your computer to continue the guide.',
+    siteUrl: 'Site address',
+    copy: 'Copy',
+    copied: 'Copied',
+    get: 'Download',
+    other: 'Other versions',
+    backupLabel: 'Backup'
+  },
+  importNav: {
+    title: 'Back to your keys',
+    body: (label: string) => `Click “${label}” on the left and find the key you just created.`
+  },
+  import: {
+    title: 'Click “Import to CC Switch”',
+    body: 'It is the button on the row of the key you just created.',
+    hint: 'Your browser will ask to open CC Switch — choose Open, then confirm the import inside CC Switch.'
+  },
+  imported: {
+    title: 'Did CC Switch ask you to confirm?',
+    body: 'Confirm the import in CC Switch and the key is configured.',
+    hint: 'If the browser asks whether to open CC Switch, choose Open.',
+    yes: 'Imported',
+    no: 'Nothing happened',
+    retry: 'Try again'
+  },
+  manual: {
+    title: 'Manual setup is quick too',
+    body: 'Make sure CC Switch is installed and opens, then add a custom provider in it with the two values below.',
+    endpoint: 'API address',
+    key: 'API key',
+    loading: 'Loading your key…',
+    done: "I've set it up",
+    toDownload: 'Back to downloads',
+    tutorial: 'Illustrated guide'
+  },
   finish: {
-    title: 'Your key is ready',
-    body: 'Last step: install CC Switch and import this key with one click.',
-    steps: ['Download and install CC Switch', 'Back on the API keys page, click “Import to CC Switch”', 'Enable it, then start using it in your terminal or desktop app'],
+    title: 'Imported — one last step',
+    body: 'Enable the provider you just imported and you can start using it.',
+    stepsCodex: ['Enable the imported provider in CC Switch', 'Open the Codex desktop app and start a chat', 'Ask anything — if it answers, you are connected'],
+    stepsClaude: ['Enable the imported provider in CC Switch', 'Open a terminal and run claude', 'Ask anything — if it answers, you are connected'],
     tutorial: 'Open the illustrated guide',
     done: 'Done'
   },
