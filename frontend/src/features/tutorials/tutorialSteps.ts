@@ -87,7 +87,7 @@ function zh(c: StepContext): TutorialStep[] {
         {
           text: '付款成功后，页面会显示一串兑换码（也叫卡密），完整复制下来。',
           hint: '不小心关了页面？回到小铺，点右上角「订单查询」，输入刚才填的联系方式就能找回。',
-          shot: { id: 'shop-code', caption: '付款成功后显示的兑换码' }
+          shot: { id: 'shop-code', legend: ['这一串就是兑换码（卡密）', '点「复制」，或点上面的「一键复制」'] }
         }
       ],
       note: `付款后没拿到兑换码，请加 QQ 群 ${qqGroup} 找管理员，不要重复付款。`
@@ -158,8 +158,17 @@ function zh(c: StepContext): TutorialStep[] {
         },
         { text: '浏览器会问「要打开 CC Switch 吗」，选「打开」。第一次可能还要勾选「始终允许」。' },
         {
-          text: 'CC Switch 会弹出导入确认窗口，核对一下名称和地址，点确认。',
-          shot: { id: 'ccswitch-import', caption: 'CC Switch 里的导入确认窗口' }
+          text: 'CC Switch 会弹出「确认导入供应商配置」窗口，核对一下，点「导入」。',
+          hint: '窗口里那一大段脚本代码是用来在 CC Switch 里显示余额的，不用管它。',
+          shot: {
+            id: 'ccswitch-import',
+            legend: [
+              isCodex ? '应用类型：这里会显示 Codex（图中是 Claude 的例子）' : '应用类型：显示 Claude',
+              `供应商名称：「${site}」`,
+              'API 端点：本站的地址',
+              '点「导入」'
+            ]
+          }
         },
         { text: `回到 CC Switch：左边选「${tool}」，供应商列表里会多出一个「${site}」，就是刚导入的。` }
       ],
@@ -236,7 +245,7 @@ function en(c: StepContext): TutorialStep[] {
         {
           text: 'After payment the page shows a redeem code (also called a card key). Copy all of it.',
           hint: 'Closed the page by mistake? Go back to the shop, click “Order lookup” at the top right, and enter the same contact.',
-          shot: { id: 'shop-code', caption: 'The redeem code shown after payment' }
+          shot: { id: 'shop-code', legend: ['This string is the redeem code (card key)', 'Click “Copy”, or “Copy all” above it'] }
         }
       ],
       note: `If you paid but got no code, join QQ group ${qqGroup} and ask an admin — do not pay again.`
@@ -303,7 +312,19 @@ function en(c: StepContext): TutorialStep[] {
           shot: { id: `keys-import-${c.client}`, caption: `“${u.importCcs}” at the right end of the row` }
         },
         { text: 'Your browser asks whether to open CC Switch — choose Open. The first time you may also tick “Always allow”.' },
-        { text: 'CC Switch shows an import confirmation. Check the name and address, then confirm.', shot: { id: 'ccswitch-import', caption: 'The import confirmation inside CC Switch' } },
+        {
+          text: 'CC Switch shows a “Confirm import” window. Check it, then click “Import”.',
+          hint: 'The long script in that window just shows your balance inside CC Switch — ignore it.',
+          shot: {
+            id: 'ccswitch-import',
+            legend: [
+              isCodex ? 'App type: this will say Codex (the picture shows Claude as an example)' : 'App type: shows Claude',
+              `Provider name: “${site}”`,
+              'API endpoint: this site’s address',
+              'Click “Import”'
+            ]
+          }
+        },
         { text: `Back in CC Switch, pick “${tool}” on the left. A new provider named “${site}” appears in the list — that is the one you just imported.` }
       ],
       detail: {

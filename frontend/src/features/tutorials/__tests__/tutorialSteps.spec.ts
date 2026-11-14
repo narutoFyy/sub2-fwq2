@@ -7,8 +7,8 @@ import { buildSteps, type StepContext, type TutorialClient } from '../tutorialSt
 type Meta = { src: string; w: number; h: number; marks: { n?: number }[] }
 const all = shots as unknown as Record<string, Record<string, Meta>>
 
-// 这两张只有用户自己的环境才截得到（付款后的页面、CC Switch 的导入弹窗）；没有就不显示，是预期行为。
-const OPTIONAL = new Set(['shop-code', 'ccswitch-import'])
+// 所有引用的截图都必须存在；以后如果有只能站长截的图暂时缺着，把 id 加到这里（缺了会自动不显示）。
+const OPTIONAL = new Set<string>([])
 
 const ui = {
   apiKeys: 'API Keys', redeem: 'Redeem', usage: 'Usage', createKey: 'Create API Key', importCcs: 'Import to CCS',

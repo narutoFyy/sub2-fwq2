@@ -109,11 +109,11 @@ export const guideCopyZh = {
   import: {
     title: (label: string) => `点「${label}」`,
     body: '这是你刚创建的密钥那一行的按钮。',
-    hint: '浏览器会问是否打开 CC Switch，选「打开」，再在 CC Switch 里确认导入。'
+    hint: '浏览器会问是否打开 CC Switch，选「打开」，再在 CC Switch 弹出的窗口里点「导入」。'
   },
   imported: {
     title: 'CC Switch 弹出确认窗口了吗？',
-    body: '在 CC Switch 里确认导入，这个密钥就配置好了。',
+    body: 'CC Switch 会弹出「确认导入供应商配置」，点「导入」，这个密钥就配置好了。',
     hint: '浏览器如果问「是否打开 CC Switch」，请选择打开。',
     yes: '已导入成功',
     no: '没反应',
@@ -280,11 +280,11 @@ export const guideCopyEn: GuideCopy = {
   import: {
     title: (label: string) => `Click “${label}”`,
     body: 'It is the button on the row of the key you just created.',
-    hint: 'Your browser will ask to open CC Switch — choose Open, then confirm the import inside CC Switch.'
+    hint: 'Your browser will ask to open CC Switch — choose Open, then click “Import” in the window CC Switch shows.'
   },
   imported: {
     title: 'Did CC Switch ask you to confirm?',
-    body: 'Confirm the import in CC Switch and the key is configured.',
+    body: 'CC Switch shows a “Confirm import” window — click “Import” and the key is configured.',
     hint: 'If the browser asks whether to open CC Switch, choose Open.',
     yes: 'Imported',
     no: 'Nothing happened',
