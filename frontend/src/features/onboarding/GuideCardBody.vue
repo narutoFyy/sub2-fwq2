@@ -13,7 +13,7 @@ const props = defineProps<{
   stage: number
   completing: string | null
   confirming: boolean
-  /** 欢迎页没有「跳过」页脚（欢迎页上已有显式按钮）。 */
+  /** 右上角的「跳过引导」；欢迎页（已有显式按钮）和成功页不显示。 */
   showSkip: boolean
 }>()
 
@@ -28,6 +28,11 @@ const emit = defineEmits<{
 const copy = useGuideCopy()
 const doneText = computed(() => (props.completing === 'redeem' ? copy.value.done.redeem : copy.value.done.key))
 const isWelcome = computed(() => props.view.key === 'welcome')
+/** 「我已有密钥，跳过这步」这类次要出口放在底部一行（和客服入口同一行，右对齐）。 */
+const quietAction = computed(() => (props.view.secondary?.quiet ? props.view.secondary : null))
+const hasActions = computed(
+  () => !!(props.view.primary || (props.view.secondary && !props.view.secondary.quiet) || props.view.fallback || props.view.back)
+)
 const stageLabel = computed(() => {
   if (props.stage < 0) return ''
   if (props.stage >= copy.value.stages.length) return copy.value.stageDone
@@ -37,9 +42,12 @@ const stageLabel = computed(() => {
 
 <template>
   <div class="og-body">
-    <div v-if="stage >= 0" class="og-stages" role="progressbar" aria-valuemin="1" :aria-valuemax="copy.stages.length" :aria-valuenow="stage + 1" :aria-label="stageLabel">
-      <span v-for="(_, i) in copy.stages" :key="i" class="og-stage" :class="{ 'is-done': i < stage, 'is-active': i === stage }"><i></i></span>
-      <span class="og-stage-label">{{ stageLabel }}</span>
+    <div v-if="stage >= 0" class="og-top">
+      <div class="og-stages" role="progressbar" aria-valuemin="1" :aria-valuemax="copy.stages.length" :aria-valuenow="stage + 1" :aria-label="stageLabel">
+        <span v-for="(_, i) in copy.stages" :key="i" class="og-stage" :class="{ 'is-done': i < stage, 'is-active': i === stage }"><i></i></span>
+        <span class="og-stage-label">{{ stageLabel }}</span>
+      </div>
+      <button v-if="showSkip && !confirming && !completing" type="button" class="og-link og-link--skip" @click="emit('askSkip')">{{ copy.skip }}</button>
     </div>
 
     <Transition name="og-swap" mode="out-in">
@@ -84,10 +92,10 @@ const stageLabel = computed(() => {
 
         <p v-if="view.hint" class="og-hint">{{ view.hint }}</p>
 
-        <div v-if="view.primary || view.secondary || view.fallback || view.back" class="og-actions">
+        <div v-if="hasActions" class="og-actions">
           <button v-if="view.back" type="button" class="og-btn og-btn--text" @click="view.back.run()">{{ view.back.label }}</button>
           <button v-if="view.collapsible" type="button" class="og-btn og-btn--ghost" @click="emit('collapse')">{{ copy.download.collapse }}</button>
-          <button v-if="view.secondary" type="button" class="og-btn" :class="view.secondary.quiet ? 'og-btn--quiet' : 'og-btn--ghost'" @click="view.secondary.run()">{{ view.secondary.label }}</button>
+          <button v-if="view.secondary && !view.secondary.quiet" type="button" class="og-btn og-btn--ghost" @click="view.secondary.run()">{{ view.secondary.label }}</button>
           <button v-if="view.fallback" type="button" class="og-btn og-btn--ghost" @click="view.fallback.run()">{{ view.fallback.label }}</button>
           <button v-if="view.primary" type="button" class="og-btn og-btn--primary" data-og-autofocus @click="view.primary.run()">{{ view.primary.label }}</button>
         </div>
@@ -95,9 +103,8 @@ const stageLabel = computed(() => {
     </Transition>
 
     <footer class="og-foot">
-      <button v-if="showSkip && !confirming && !completing" type="button" class="og-link og-link--quiet" @click="emit('askSkip')">{{ copy.skip }}</button>
-      <span v-else></span>
       <GuideSupport />
+      <button v-if="quietAction && !confirming && !completing" type="button" class="og-link" @click="quietAction.run()">{{ quietAction.label }}</button>
     </footer>
   </div>
 </template>

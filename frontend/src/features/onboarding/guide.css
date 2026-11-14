@@ -33,7 +33,8 @@
   --og-dim: rgba(0, 0, 0, 0.7);
 }
 .og-root :is(button, a, input):focus-visible { outline: 2px solid var(--og-accent); outline-offset: 3px; border-radius: 8px; }
-.og-root button { font: inherit; cursor: pointer; }
+/* 只继承字体族：用 `font: inherit` 会把按钮字号一并重置成 16px，盖掉下面各自声明的字号 */
+.og-root button { font-family: inherit; cursor: pointer; }
 
 /* ---------- 背景与聚光灯 ---------- */
 .og-backdrop { position: fixed; inset: 0; background: rgba(8, 8, 10, 0.58); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: auto; overflow: hidden; }
@@ -64,8 +65,8 @@
 /* ---------- 卡片 ---------- */
 .og-center { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; pointer-events: none; }
 .og-card { pointer-events: auto; background: var(--og-bg); color: var(--og-ink); border-radius: 20px; box-shadow: var(--og-shadow); }
-.og-card--modal { width: min(460px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 28px 28px 20px; }
-.og-card--float { position: fixed; left: 0; top: 0; width: 360px; padding: 22px 22px 16px; transition: transform 0.6s var(--og-ease); will-change: transform; }
+.og-card--modal { width: min(460px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 28px 28px 12px; }
+.og-card--float { position: fixed; left: 0; top: 0; width: 360px; padding: 22px 22px 12px; transition: transform 0.6s var(--og-ease); will-change: transform; }
 .og-card--float.og-sheet.og-sheet--top { top: 12px; bottom: auto; }
 .og-card--float.og-sheet { left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; transform: none !important; border-radius: 20px; max-height: 70vh; overflow: auto; }
 
@@ -83,7 +84,8 @@
 .og-swap-leave-to { opacity: 0; }
 
 /* 进度：四段，走过的填满、当前的填一半 */
-.og-stages { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
+.og-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 16px; }
+.og-stages { display: flex; align-items: center; gap: 6px; }
 .og-stage { flex: 0 0 34px; height: 4px; border-radius: 4px; background: var(--og-line); overflow: hidden; }
 .og-stage i { display: block; height: 100%; width: 0; background: var(--og-accent); border-radius: inherit; transition: width 0.7s var(--og-ease); }
 .og-stage.is-done i { width: 100%; }
@@ -104,10 +106,6 @@
 .og-btn--ghost:hover { background: var(--og-line); }
 .og-btn--text { background: transparent; color: var(--og-muted); padding: 0 10px; margin-right: auto; }
 .og-btn--text:hover { color: var(--og-ink); }
-/* 安静的次要出口：小字、无底色、下划线，只在需要时才会被注意到 */
-.og-btn--quiet { min-height: 26px; padding: 0 6px; font-size: 12px; font-weight: 400; background: transparent; color: var(--og-muted); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--og-muted) 40%, transparent); }
-.og-btn--quiet:hover { color: var(--og-ink); text-decoration-color: currentColor; }
-.og-actions:has(> .og-btn--quiet:only-child) { margin-top: 8px; }
 
 /* 欢迎：四个阶段依次浮现 */
 .og-path { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
@@ -119,7 +117,7 @@
 
 /* 选工具 */
 .og-options { display: grid; gap: 10px; margin-top: 18px; }
-.og-option { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border-radius: 16px; text-align: left; background: var(--og-panel); color: var(--og-ink); border: 1px solid transparent; opacity: 0; animation: og-rise 0.55s var(--og-ease) forwards; animation-delay: calc(0.1s * var(--i) + 0.1s); transition: border-color 0.2s, transform 0.2s, background-color 0.2s; }
+.og-option { font-size: 14px; display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border-radius: 16px; text-align: left; background: var(--og-panel); color: var(--og-ink); border: 1px solid transparent; opacity: 0; animation: og-rise 0.55s var(--og-ease) forwards; animation-delay: calc(0.1s * var(--i) + 0.1s); transition: border-color 0.2s, transform 0.2s, background-color 0.2s; }
 .og-option:hover { border-color: var(--og-accent); transform: translateY(-1px); }
 .og-option-text { flex: 1; min-width: 0; }
 .og-option-text strong { display: block; font-size: 16px; font-weight: 600; }
@@ -135,13 +133,13 @@
 @keyframes og-draw { to { stroke-dashoffset: 0; } }
 
 /* 页脚：跳过 + 客服入口 */
-.og-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-top: 12px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--og-line) 70%, transparent); }
-.og-link { background: none; border: 0; padding: 2px 0; font-size: 11px; color: color-mix(in srgb, var(--og-muted) 85%, transparent); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--og-muted) 40%, transparent); }
-.og-link:hover { color: var(--og-ink); }
-.og-link--quiet { text-decoration: none; white-space: nowrap; flex-shrink: 0; }
-.og-support { min-width: 0; text-align: right; }
+.og-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+/* 页脚、跳过引导、次要出口：都是和注释（进度文字）一样的 12px 灰字，悬停才出现下划线 */
+.og-link { background: none; border: 0; padding: 2px 0; font-size: 12px; line-height: 1.5; color: var(--og-muted); text-decoration: none; text-underline-offset: 3px; }
+.og-link:hover { color: var(--og-ink); text-decoration: underline; }
+.og-link--skip { flex-shrink: 0; white-space: nowrap; }
 .og-support { position: relative; }
-.og-support-pop { position: absolute; right: 0; bottom: calc(100% + 10px); width: 290px; max-width: calc(100vw - 48px); padding: 14px 16px; border-radius: 14px; background: var(--og-panel); border: 1px solid var(--og-line); box-shadow: var(--og-shadow); font-size: 13px; line-height: 1.6; z-index: 2; }
+.og-support-pop { position: absolute; left: 0; bottom: calc(100% + 10px); width: 290px; max-width: calc(100vw - 48px); padding: 14px 16px; border-radius: 14px; background: var(--og-panel); border: 1px solid var(--og-line); box-shadow: var(--og-shadow); font-size: 13px; line-height: 1.6; z-index: 2; }
 .og-support-pop p { color: var(--og-muted); }
 .og-support-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .og-support-label { font-size: 12px; color: var(--og-muted); white-space: nowrap; }
@@ -162,7 +160,7 @@
 .og-invite-enter-from, .og-invite-leave-to { opacity: 0; translate: 0 24px; }
 
 @media (max-width: 640px) {
-  .og-card--modal { padding: 24px 20px 16px; border-radius: 20px; }
+  .og-card--modal { padding: 24px 20px 12px; border-radius: 20px; }
   .og-path { grid-template-columns: 1fr 1fr; }
   .og-stage { flex-basis: 26px; }
   .og-invite { left: 12px; right: 12px; bottom: 12px; width: auto; }
