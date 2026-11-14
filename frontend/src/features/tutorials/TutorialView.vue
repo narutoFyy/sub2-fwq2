@@ -2,7 +2,8 @@
 import '@fontsource-variable/geist'
 import '@fontsource-variable/geist-mono'
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
@@ -11,37 +12,50 @@ import ThemeToggleIcon from '@/components/common/ThemeToggleIcon.vue'
 import RollLink from '@/components/brand/RollLink.vue'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import GlowDots from '@/components/visual/GlowDots.vue'
-import TutorialFigure from './TutorialFigure.vue'
+import { SUPPORT_QQ_GROUP } from '@/features/onboarding/config'
+import { useGuideStore } from '@/features/onboarding/guideStore'
+import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import TutorialCode from './TutorialCode.vue'
+import TutorialDownloads from './TutorialDownloads.vue'
+import TutorialShot from './TutorialShot.vue'
 import { clientName, tutorialClients, useTutorialCopy, type TutorialClient } from './content'
+import { buildSteps } from './tutorialSteps'
+import { useUiLabels } from './uiLabels'
 import './tutorials.css'
 
 const route = useRoute()
+const router = useRouter()
+const { locale } = useI18n()
 const app = useAppStore()
 const auth = useAuthStore()
+const guide = useGuideStore()
 const copy = useTutorialCopy()
+const ui = useUiLabels()
 const client = computed<TutorialClient>(() => route.params.client === 'codex' ? 'codex' : 'claude-code')
 const isIndex = computed(() => !route.params.client)
 const name = computed(() => clientName(client.value))
 const siteName = computed(() => app.cachedPublicSettings?.site_name || app.siteName || 'Sub2API')
 const endpoint = computed(() => (app.cachedPublicSettings?.api_base_url || window.location.origin).replace(/\/+$/, ''))
+/** 手动添加供应商时填的地址：Codex 需要带 /v1，Claude Code 不带。 */
 const manualEndpoint = computed(() => client.value === 'codex' && !endpoint.value.endsWith('/v1') ? `${endpoint.value}/v1` : endpoint.value)
-const cli = computed(() => client.value === 'codex' ? 'codex' : 'claude')
-const installCommand = computed(() => client.value === 'codex' ? 'npm install -g @openai/codex' : 'npm install -g @anthropic-ai/claude-code')
-const installDocs = computed(() => client.value === 'codex' ? 'https://developers.openai.com/codex/cli' : 'https://code.claude.com/docs/en/setup')
-const group = computed(() => client.value === 'codex' ? copy.value.codexGroup : copy.value.claudeGroup)
-/** 站内支付没开（如只走外部小铺 + 兑换码）时，不展示指向 /purchase、/orders 的入口。 */
-const paymentOn = computed(() => app.cachedPublicSettings?.payment_enabled === true)
+const plazaOn = computed(() => resolveFeatureFlag(app.cachedPublicSettings, FeatureFlags.modelPlaza))
+const canStartGuide = computed(() => auth.isAuthenticated && !auth.isAdmin)
+const steps = computed(() => buildSteps({
+  lang: locale.value.startsWith('zh') ? 'zh' : 'en',
+  client: client.value,
+  ui: ui.value,
+  siteName: siteName.value,
+  endpoint: manualEndpoint.value,
+  qqGroup: SUPPORT_QQ_GROUP,
+  plaza: plazaOn.value
+}))
 const activeStep = ref(1)
 let observer: IntersectionObserver | undefined
-const steps = computed(() => [
-  { id: 'credit', title: copy.value.rechargeTitle, body: copy.value.rechargeBody, note: copy.value.rechargeNote },
-  { id: 'key', title: copy.value.keyTitle, body: copy.value.keyBody, note: copy.value.keyNote },
-  { id: 'install', title: copy.value.installTitle, body: copy.value.installBody },
-  { id: 'import', title: copy.value.importTitle, body: copy.value.importBody },
-  { id: 'launch', title: copy.value.activateTitle, body: copy.value.activateBody, note: copy.value.activateNote },
-  { id: 'verify', title: copy.value.verifyTitle, body: copy.value.verifyBody },
-])
+
+function startInAppGuide() {
+  guide.start()
+  void router.push('/dashboard')
+}
 
 watch(() => route.path, async () => {
   observer?.disconnect()
@@ -100,27 +114,38 @@ onBeforeUnmount(() => observer?.disconnect())
         </aside>
 
         <div class="guide-article">
-          <div class="before-start"><h2>{{ copy.prereq }}</h2><p>{{ copy.prereqText }}</p><RouterLink :to="auth.isAuthenticated ? '/keys' : '/register'">{{ auth.isAuthenticated ? copy.actionKeys : copy.register }}</RouterLink></div>
+          <div class="before-start">
+            <h2>{{ copy.prereq }}</h2>
+            <p>{{ copy.prereqText }}</p>
+            <div class="before-links">
+              <RouterLink :to="auth.isAuthenticated ? '/keys' : '/register'">{{ auth.isAuthenticated ? copy.actionKeys : copy.register }}</RouterLink>
+              <button v-if="canStartGuide" type="button" class="guide-cta" @click="startInAppGuide">{{ copy.guideCta }}<span>{{ copy.guideCtaAction }} →</span></button>
+            </div>
+          </div>
           <p class="figure-explainer">{{ copy.figureNote }}</p>
 
           <section v-for="(step, i) in steps" :id="step.id" :key="step.id" :data-step="i + 1" data-guide-step class="guide-step">
             <div class="step-title"><span>{{ String(i + 1).padStart(2, '0') }}</span><h2>{{ step.title }}</h2></div>
-            <ol class="step-instructions"><li v-for="line in step.body" :key="line">{{ line }}</li></ol>
-            <p v-if="i === 1" class="group-hint">{{ group }}</p>
-            <TutorialFigure :step="i + 1" :client="client" :site-name="siteName" :endpoint="endpoint" />
-            <template v-if="i === 0"><div class="guide-actions"><RouterLink v-if="paymentOn" to="/purchase">{{ copy.actionRecharge }} <span aria-hidden="true">↗</span></RouterLink><RouterLink to="/redeem">{{ $t('nav.redeem') }}</RouterLink><RouterLink v-if="paymentOn" to="/orders">{{ $t('nav.myOrders') }}</RouterLink></div></template>
-            <template v-if="i === 1"><div class="guide-actions"><RouterLink to="/keys">{{ copy.actionKeys }} <span aria-hidden="true">↗</span></RouterLink><RouterLink to="/available-channels">{{ copy.actionModels }}</RouterLink></div></template>
-            <template v-if="i === 2">
-              <div class="guide-actions"><a href="https://github.com/farion1231/cc-switch/releases/latest" target="_blank" rel="noopener noreferrer">{{ copy.downloads }} ↗</a><a :href="installDocs" target="_blank" rel="noopener noreferrer">{{ copy.officialInstall }} ↗</a><a href="https://nodejs.org/en/download" target="_blank" rel="noopener noreferrer">{{ copy.nodeDownload }} ↗</a></div>
-              <TutorialCode :code="installCommand" :label="`${name} / npm`" />
-              <TutorialCode :code="`${cli} --version`" :label="copy.versionCheck" />
-            </template>
-            <template v-if="i === 3">
-              <div class="guide-actions"><RouterLink to="/keys">{{ copy.actionKeys }} <span aria-hidden="true">↗</span></RouterLink></div>
-              <details class="manual-import"><summary>{{ copy.importHidden }}</summary><dl><dt>{{ copy.endpoint }}</dt><dd><code>{{ manualEndpoint }}</code></dd><dt>{{ copy.apiKey }}</dt><dd>{{ copy.keyPlaceholder }}</dd></dl><p>{{ copy.endpointNote }}</p></details>
-            </template>
-            <template v-if="i === 4"><TutorialCode :code="cli" :label="name" /></template>
-            <template v-if="i === 5"><TutorialCode :code="copy.prompt" :label="name" /><div class="guide-actions"><RouterLink to="/usage">{{ copy.actionUsage }} <span aria-hidden="true">↗</span></RouterLink></div></template>
+            <p class="step-lead">{{ step.lead }}</p>
+            <ol class="action-list">
+              <li v-for="(action, j) in step.actions" :key="j" class="action">
+                <p class="action-text">{{ action.text }}</p>
+                <p v-if="action.hint" class="action-hint">{{ action.hint }}</p>
+                <TutorialDownloads v-if="action.downloads" :client="client" />
+                <details v-if="action.terminal" class="terminal-help">
+                  <summary>{{ copy.terminalSummary }}</summary>
+                  <ul><li v-for="line in copy.terminalLines" :key="line">{{ line }}</li></ul>
+                </details>
+                <TutorialCode v-if="action.code" :code="action.code.text" :label="action.code.label" />
+                <TutorialShot v-if="action.shot" :id="action.shot.id" :legend="action.shot.legend" :caption="action.shot.caption" />
+                <RouterLink v-if="action.link" :to="action.link.to" class="action-link">{{ action.link.label }} <span aria-hidden="true">↗</span></RouterLink>
+              </li>
+            </ol>
+            <details v-if="step.detail" class="manual-import">
+              <summary>{{ step.detail.summary }}</summary>
+              <p v-for="line in step.detail.lines" :key="line">{{ line }}</p>
+              <dl v-if="step.detail.fields"><template v-for="field in step.detail.fields" :key="field.label"><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></template></dl>
+            </details>
             <p v-if="step.note" class="guide-note">{{ step.note }}</p>
           </section>
 

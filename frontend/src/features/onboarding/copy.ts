@@ -107,7 +107,7 @@ export const guideCopyZh = {
     body: (label: string) => `点击左侧的「${label}」，找到刚创建的密钥。`
   },
   import: {
-    title: '点「导入到 CC Switch」',
+    title: (label: string) => `点「${label}」`,
     body: '这是你刚创建的密钥那一行的按钮。',
     hint: '浏览器会问是否打开 CC Switch，选「打开」，再在 CC Switch 里确认导入。'
   },
@@ -121,7 +121,7 @@ export const guideCopyZh = {
   },
   manual: {
     title: '手动配置也很快',
-    body: '先确认 CC Switch 已安装并能打开，再在里面添加一个自定义供应商，填入下面两项。',
+    body: '先确认 CC Switch 已安装并能打开，点它右上角的「添加供应商」，选自定义，填入下面两项。',
     endpoint: 'API 地址',
     key: 'API Key',
     loading: '正在读取密钥…',
@@ -132,8 +132,8 @@ export const guideCopyZh = {
   finish: {
     title: '导入完成，最后一步',
     body: '启用刚导入的供应商，就可以开始用了。',
-    stepsCodex: ['在 CC Switch 里启用刚导入的供应商', '打开 Codex 桌面版，新建一个对话', '随便问一句，能回复就接通了'],
-    stepsClaude: ['在 CC Switch 里启用刚导入的供应商', '打开终端，运行 claude', '随便问一句，能回复就接通了'],
+    stepsCodex: ['在 CC Switch 左边选「Codex」，点刚导入的供应商右边的 ▶，变成「使用中」', '打开 Codex 桌面版，新建一个对话', '随便问一句，能回复就接通了'],
+    stepsClaude: ['在 CC Switch 左边选「Claude Code」，点刚导入的供应商右边的 ▶，变成「使用中」', '打开终端，进入项目文件夹，运行 claude', '随便问一句，能回复就接通了'],
     waiting: '正在等待你的第一次调用…试一句，这里会自动提示',
     pill: '等待第一次调用 · 点这里查看',
     tutorial: '查看图文教程',
@@ -278,7 +278,7 @@ export const guideCopyEn: GuideCopy = {
     body: (label: string) => `Click “${label}” on the left and find the key you just created.`
   },
   import: {
-    title: 'Click “Import to CC Switch”',
+    title: (label: string) => `Click “${label}”`,
     body: 'It is the button on the row of the key you just created.',
     hint: 'Your browser will ask to open CC Switch — choose Open, then confirm the import inside CC Switch.'
   },
@@ -292,7 +292,7 @@ export const guideCopyEn: GuideCopy = {
   },
   manual: {
     title: 'Manual setup is quick too',
-    body: 'Make sure CC Switch is installed and opens, then add a custom provider in it with the two values below.',
+    body: 'Make sure CC Switch is installed and opens, click “Add provider” at its top right, choose custom, and fill in the two values below.',
     endpoint: 'API address',
     key: 'API key',
     loading: 'Loading your key…',
@@ -303,8 +303,8 @@ export const guideCopyEn: GuideCopy = {
   finish: {
     title: 'Imported — one last step',
     body: 'Enable the provider you just imported and you can start using it.',
-    stepsCodex: ['Enable the imported provider in CC Switch', 'Open the Codex desktop app and start a chat', 'Ask anything — if it answers, you are connected'],
-    stepsClaude: ['Enable the imported provider in CC Switch', 'Open a terminal and run claude', 'Ask anything — if it answers, you are connected'],
+    stepsCodex: ['In CC Switch pick “Codex” on the left and click ▶ next to the imported provider until it says “In use”', 'Open the Codex desktop app and start a chat', 'Ask anything — if it answers, you are connected'],
+    stepsClaude: ['In CC Switch pick “Claude Code” on the left and click ▶ next to the imported provider until it says “In use”', 'Open a terminal, go to your project folder and run claude', 'Ask anything — if it answers, you are connected'],
     waiting: 'Waiting for your first call… send one message and this will notice',
     pill: 'Waiting for first call · click to view',
     tutorial: 'Open the illustrated guide',

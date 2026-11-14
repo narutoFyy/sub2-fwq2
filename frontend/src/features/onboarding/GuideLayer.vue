@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { keysAPI } from '@/api/keys'
 import { useAppStore, useAuthStore, useSubscriptionStore } from '@/stores'
 import { useTutorialWelcomeStore } from '@/features/tutorials/welcomeStore'
+import { useUiLabels } from '@/features/tutorials/uiLabels'
 import GlowDots from '@/components/visual/GlowDots.vue'
 import GuideCardBody from './GuideCardBody.vue'
 import GuideConfetti from './GuideConfetti.vue'
@@ -31,6 +32,7 @@ const subs = useSubscriptionStore()
 const welcome = useTutorialWelcomeStore()
 const guide = useGuideStore()
 const copy = useGuideCopy()
+const uiLabels = useUiLabels()
 
 /** 只在普通用户的控制台页面里出现：管理员、backend 模式、登录前的页面都不触发。 */
 const eligible = computed(
@@ -315,7 +317,7 @@ const view = computed<GuideView | null>(() => {
       return {
         kind: 'spot',
         key: onButton ? 'import' : 'import-nav',
-        title: onButton ? c.import.title : c.importNav.title,
+        title: onButton ? c.import.title(uiLabels.value.importCcs) : c.importNav.title,
         body: onButton ? (guide.keyId != null ? c.import.body : c.importAny) : c.importNav.body(targetText.value || t('nav.apiKeys')),
         hint: onButton ? c.import.hint : undefined,
         click: true,

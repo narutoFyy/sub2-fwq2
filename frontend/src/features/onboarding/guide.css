@@ -224,3 +224,6 @@
   45% { transform: translate(calc(var(--x) * 1px), calc(var(--y) * 1px)) rotate(var(--r)) scale(1); opacity: 1; }
   100% { transform: translate(calc(var(--x) * 1.12px), calc(var(--y) * 1px + 190px)) rotate(calc(var(--r) * 1.6)); opacity: 0; }
 }
+
+/* 在教程页里内嵌下载块：不是浮层，按普通内容排布 */
+.og-root--inline { position: static; inset: auto; z-index: auto; pointer-events: auto; }

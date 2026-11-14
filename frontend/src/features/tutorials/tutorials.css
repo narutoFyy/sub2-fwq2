@@ -45,10 +45,6 @@
 .step-title { display: flex; align-items: baseline; gap: 16px; margin-bottom: 24px; }
 .step-title > span { font: 13px 'Geist Mono Variable', monospace; color: var(--guide-accent-ink); }
 .step-title h2 { font-size: clamp(22px, 2.4vw, 28px); line-height: 1.4; font-weight: 500; }
-.step-instructions { padding-left: 20px; list-style-type: decimal; }
-.step-instructions li { color: var(--guide-muted); font-size: 14px; line-height: 1.95; padding-left: 6px; margin: 12px 0; }
-.step-instructions li::marker { font-size: 11px; color: var(--guide-muted); }
-.group-hint { font-size: 13px; padding: 14px 18px; margin-top: 20px; border-left: 2px solid var(--guide-accent); background: var(--guide-panel); }
 .guide-actions { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; margin: 20px 0; }
 .guide-actions a { font-size: 13px; padding: 6px 0; text-decoration: underline; text-underline-offset: 5px; }
 .guide-actions a:not(:first-child) { color: var(--guide-muted); }
@@ -94,7 +90,45 @@
   .guide-toc nav { padding: 8px 0; position: static; } .guide-toc p, .toc-help { display: none; }
   .guide-toc ol { display: flex; overflow-x: auto; gap: 22px; } .guide-toc li { flex-shrink: 0; } .guide-toc li a { gap: 7px; min-height: 40px; font-size: 12px; }
   .guide-article { padding-top: 24px; } .guide-step { padding-top: 44px; scroll-margin-top: 78px; }
-  .before-start { padding: 22px; } .step-title { gap: 12px; } .step-instructions li { font-size: 14px; }
-  .next-guide { flex-direction: column; align-items: flex-start; padding: 40px 0; } .guide-footer { flex-wrap: wrap; padding: 24px 20px; gap: 20px; }
+  .before-start { padding: 22px; } .step-title { gap: 12px; }   .next-guide { flex-direction: column; align-items: flex-start; padding: 40px 0; } .guide-footer { flex-wrap: wrap; padding: 24px 20px; gap: 20px; }
   .guide-index { padding: 60px 24px; } .index-intro { margin-bottom: 36px; } .index-guides { grid-template-columns: 1fr; gap: 24px; } .index-steps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 28px 16px; }
 }
+
+/* ---------- 步骤：一个动作一行 + 真实截图 ---------- */
+.step-lead { font-size: 15px; line-height: 1.9; color: var(--guide-muted); margin: -6px 0 30px; max-width: 660px; }
+.action-list { list-style: none; counter-reset: action; display: grid; gap: 36px; }
+.action { counter-increment: action; position: relative; padding-left: 46px; min-width: 0; }
+.action::before { content: counter(action); position: absolute; left: 0; top: 1px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 600 12px 'Geist Mono Variable', monospace; background: var(--guide-ink); color: var(--guide-bg); }
+.action-text { font-size: 16px; line-height: 1.75; font-weight: 500; }
+.action-hint { margin-top: 6px; font-size: 13.5px; line-height: 1.85; color: var(--guide-muted); }
+.action-link { display: inline-block; margin-top: 14px; font-size: 13px; text-decoration: underline; text-underline-offset: 5px; }
+.before-links { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 28px; margin-top: 16px; }
+.before-links a { margin-top: 0; }
+.guide-cta { display: inline-flex; align-items: baseline; gap: 10px; font-size: 13px; color: var(--guide-muted); text-align: left; }
+.guide-cta span { color: var(--guide-accent-ink); text-decoration: underline; text-underline-offset: 4px; }
+.guide-cta:hover span { text-decoration-thickness: 2px; }
+
+.shot { margin: 16px 0 4px; }
+.shot-frame { --shot: #ff7a1a; position: relative; width: 100%; overflow: hidden; border-radius: 12px; border: 1px solid var(--guide-line); background: var(--guide-panel); }
+.shot-open { display: block; cursor: zoom-in; }
+.shot-frame img { display: block; width: 100%; height: auto; }
+.shot-mark { z-index: 1; position: absolute; border: 2px solid var(--shot); border-radius: 8px; box-shadow: 0 0 0 2px rgba(0, 0, 0, .28), 0 0 16px rgba(255, 122, 26, .5); pointer-events: none; }
+.shot-mark b { position: absolute; left: -2px; top: -2px; transform: translate(-45%, -45%); width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 700 11px 'Geist Variable', sans-serif; background: var(--shot); color: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
+.shot-mark.is-single { animation: shot-pulse 2.4s ease-out infinite; }
+@keyframes shot-pulse { 0% { box-shadow: 0 0 0 2px rgba(0, 0, 0, .28), 0 0 0 0 rgba(255, 122, 26, .55); } 70% { box-shadow: 0 0 0 2px rgba(0, 0, 0, .28), 0 0 0 12px rgba(255, 122, 26, 0); } 100% { box-shadow: 0 0 0 2px rgba(0, 0, 0, .28), 0 0 0 0 rgba(255, 122, 26, 0); } }
+.shot-legend { list-style: none; display: grid; gap: 8px; margin-top: 14px; }
+.shot-legend li { display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; line-height: 1.7; color: var(--guide-muted); }
+.shot-legend b { flex: none; width: 20px; height: 20px; margin-top: 2px; border-radius: 50%; display: grid; place-items: center; font: 700 11px 'Geist Variable', sans-serif; background: #ff7a1a; color: #fff; }
+.shot-caption { margin-top: 10px; font-size: 12.5px; color: var(--guide-muted); }
+
+.terminal-help { margin-top: 12px; background: var(--guide-panel); border-radius: 10px; padding: 14px 18px; font-size: 13px; }
+.terminal-help summary { cursor: pointer; color: var(--guide-muted); line-height: 1.8; }
+.terminal-help ul { margin-top: 10px; padding-left: 18px; list-style: disc; color: var(--guide-muted); line-height: 1.95; }
+.tutorial-downloads { margin-top: 12px; }
+.manual-import p + p { margin-top: 6px; }
+.manual-import dl { font-size: 13px; }
+@media (max-width: 700px) {
+  .action { padding-left: 38px; } .action::before { width: 24px; height: 24px; } .action-text { font-size: 15px; }
+  .action-list { gap: 30px; }
+}
+@media (prefers-reduced-motion: reduce) { .shot-mark.is-single { animation: none; } }

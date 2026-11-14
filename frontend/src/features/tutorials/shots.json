@@ -1,0 +1,455 @@
+{
+  "zh": {
+    "sidebar-buy": {
+      "src": "/tutorials/zh/sidebar-buy.jpg",
+      "w": 384,
+      "h": 336,
+      "css": 256,
+      "marks": [
+        {
+          "x": 4.69,
+          "y": 65.18,
+          "w": 90.23,
+          "h": 23.21
+        }
+      ]
+    },
+    "sidebar-redeem": {
+      "src": "/tutorials/zh/sidebar-redeem.jpg",
+      "w": 384,
+      "h": 336,
+      "css": 256,
+      "marks": [
+        {
+          "x": 4.69,
+          "y": 6.25,
+          "w": 90.23,
+          "h": 17.86
+        }
+      ]
+    },
+    "redeem-form": {
+      "src": "/tutorials/zh/redeem-form.jpg",
+      "w": 1062,
+      "h": 375,
+      "css": 708,
+      "marks": [
+        {
+          "n": 1,
+          "x": 6.07,
+          "y": 27.6,
+          "w": 87.85,
+          "h": 21.6
+        },
+        {
+          "n": 2,
+          "x": 6.07,
+          "y": 65.2,
+          "w": 87.85,
+          "h": 17.6
+        }
+      ]
+    },
+    "redeem-ok": {
+      "src": "/tutorials/zh/redeem-ok.jpg",
+      "w": 1140,
+      "h": 960,
+      "css": 760,
+      "marks": []
+    },
+    "keys-create": {
+      "src": "/tutorials/zh/keys-create.jpg",
+      "w": 1266,
+      "h": 285,
+      "css": 844,
+      "marks": [
+        {
+          "x": 81.52,
+          "y": 14.21,
+          "w": 14.69,
+          "h": 21.05
+        }
+      ]
+    },
+    "keys-form-claude-code": {
+      "src": "/tutorials/zh/keys-form-claude-code.jpg",
+      "w": 816,
+      "h": 1128,
+      "css": 544,
+      "marks": [
+        {
+          "n": 1,
+          "x": 7.54,
+          "y": 17.02,
+          "w": 84.93,
+          "h": 5.59
+        },
+        {
+          "n": 2,
+          "x": 7.54,
+          "y": 28.72,
+          "w": 84.93,
+          "h": 11.44
+        },
+        {
+          "n": 3,
+          "x": 7.54,
+          "y": 50.0,
+          "w": 84.93,
+          "h": 6.12
+        },
+        {
+          "n": 4,
+          "x": 81.43,
+          "y": 90.29,
+          "w": 11.03,
+          "h": 5.32
+        }
+      ]
+    },
+    "keys-import-claude-code": {
+      "src": "/tutorials/zh/keys-import-claude-code.jpg",
+      "w": 1266,
+      "h": 435,
+      "css": 844,
+      "marks": [
+        {
+          "x": 70.55,
+          "y": 51.03,
+          "w": 8.95,
+          "h": 15.86
+        }
+      ]
+    },
+    "keys-form-codex": {
+      "src": "/tutorials/zh/keys-form-codex.jpg",
+      "w": 816,
+      "h": 1128,
+      "css": 544,
+      "marks": [
+        {
+          "n": 1,
+          "x": 7.54,
+          "y": 17.02,
+          "w": 84.93,
+          "h": 5.59
+        },
+        {
+          "n": 2,
+          "x": 7.54,
+          "y": 28.72,
+          "w": 84.93,
+          "h": 11.44
+        },
+        {
+          "n": 3,
+          "x": 7.54,
+          "y": 50.0,
+          "w": 84.93,
+          "h": 6.12
+        },
+        {
+          "n": 4,
+          "x": 81.43,
+          "y": 90.29,
+          "w": 11.03,
+          "h": 5.32
+        }
+      ]
+    },
+    "keys-import-codex": {
+      "src": "/tutorials/zh/keys-import-codex.jpg",
+      "w": 1266,
+      "h": 435,
+      "css": 844,
+      "marks": [
+        {
+          "x": 70.55,
+          "y": 51.03,
+          "w": 8.95,
+          "h": 15.86
+        }
+      ]
+    },
+    "usage": {
+      "src": "/tutorials/zh/usage.jpg",
+      "w": 1266,
+      "h": 328,
+      "css": 844,
+      "marks": [
+        {
+          "x": 3.91,
+          "y": 47.72,
+          "w": 107.03,
+          "h": 38.58
+        }
+      ]
+    }
+  },
+  "en": {
+    "sidebar-buy": {
+      "src": "/tutorials/en/sidebar-buy.jpg",
+      "w": 384,
+      "h": 336,
+      "css": 256,
+      "marks": [
+        {
+          "x": 4.69,
+          "y": 65.18,
+          "w": 90.23,
+          "h": 23.21
+        }
+      ]
+    },
+    "sidebar-redeem": {
+      "src": "/tutorials/en/sidebar-redeem.jpg",
+      "w": 384,
+      "h": 336,
+      "css": 256,
+      "marks": [
+        {
+          "x": 4.69,
+          "y": 6.25,
+          "w": 90.23,
+          "h": 17.86
+        }
+      ]
+    },
+    "redeem-form": {
+      "src": "/tutorials/en/redeem-form.jpg",
+      "w": 1062,
+      "h": 375,
+      "css": 708,
+      "marks": [
+        {
+          "n": 1,
+          "x": 6.07,
+          "y": 27.6,
+          "w": 87.85,
+          "h": 21.6
+        },
+        {
+          "n": 2,
+          "x": 6.07,
+          "y": 65.2,
+          "w": 87.85,
+          "h": 17.6
+        }
+      ]
+    },
+    "redeem-ok": {
+      "src": "/tutorials/en/redeem-ok.jpg",
+      "w": 1140,
+      "h": 960,
+      "css": 760,
+      "marks": []
+    },
+    "keys-create": {
+      "src": "/tutorials/en/keys-create.jpg",
+      "w": 1266,
+      "h": 285,
+      "css": 844,
+      "marks": [
+        {
+          "x": 76.7,
+          "y": 14.21,
+          "w": 19.51,
+          "h": 21.05
+        }
+      ]
+    },
+    "keys-form-claude-code": {
+      "src": "/tutorials/en/keys-form-claude-code.jpg",
+      "w": 816,
+      "h": 1128,
+      "css": 544,
+      "marks": [
+        {
+          "n": 1,
+          "x": 7.54,
+          "y": 17.02,
+          "w": 84.93,
+          "h": 5.59
+        },
+        {
+          "n": 2,
+          "x": 7.54,
+          "y": 28.72,
+          "w": 84.93,
+          "h": 11.44
+        },
+        {
+          "n": 3,
+          "x": 7.54,
+          "y": 50.0,
+          "w": 84.93,
+          "h": 6.12
+        },
+        {
+          "n": 4,
+          "x": 78.54,
+          "y": 90.29,
+          "w": 13.92,
+          "h": 5.32
+        }
+      ]
+    },
+    "keys-import-claude-code": {
+      "src": "/tutorials/en/keys-import-claude-code.jpg",
+      "w": 1266,
+      "h": 435,
+      "css": 844,
+      "marks": [
+        {
+          "x": 65.76,
+          "y": 51.03,
+          "w": 10.66,
+          "h": 15.86
+        }
+      ]
+    },
+    "keys-form-codex": {
+      "src": "/tutorials/en/keys-form-codex.jpg",
+      "w": 816,
+      "h": 1128,
+      "css": 544,
+      "marks": [
+        {
+          "n": 1,
+          "x": 7.54,
+          "y": 17.02,
+          "w": 84.93,
+          "h": 5.59
+        },
+        {
+          "n": 2,
+          "x": 7.54,
+          "y": 28.72,
+          "w": 84.93,
+          "h": 11.44
+        },
+        {
+          "n": 3,
+          "x": 7.54,
+          "y": 50.0,
+          "w": 84.93,
+          "h": 6.12
+        },
+        {
+          "n": 4,
+          "x": 78.54,
+          "y": 90.29,
+          "w": 13.92,
+          "h": 5.32
+        }
+      ]
+    },
+    "keys-import-codex": {
+      "src": "/tutorials/en/keys-import-codex.jpg",
+      "w": 1266,
+      "h": 435,
+      "css": 844,
+      "marks": [
+        {
+          "x": 65.76,
+          "y": 51.03,
+          "w": 10.66,
+          "h": 15.86
+        }
+      ]
+    },
+    "usage": {
+      "src": "/tutorials/en/usage.jpg",
+      "w": 1266,
+      "h": 328,
+      "css": 844,
+      "marks": [
+        {
+          "x": 3.91,
+          "y": 47.72,
+          "w": 131.49,
+          "h": 38.58
+        }
+      ]
+    }
+  },
+  "shared": {
+    "shop-list": {
+      "src": "/tutorials/shared/shop-list.jpg",
+      "w": 785,
+      "h": 320,
+      "marks": [
+        {
+          "n": 1,
+          "x": 21.27,
+          "y": 5.94,
+          "w": 19.49,
+          "h": 20.94
+        },
+        {
+          "n": 2,
+          "x": 0.3,
+          "y": 54.69,
+          "w": 99.4,
+          "h": 26.25
+        }
+      ]
+    },
+    "shop-order": {
+      "src": "/tutorials/shared/shop-order.jpg",
+      "w": 540,
+      "h": 568,
+      "marks": [
+        {
+          "n": 1,
+          "x": 8.33,
+          "y": 49.3,
+          "w": 83.33,
+          "h": 6.7
+        },
+        {
+          "n": 2,
+          "x": 8.33,
+          "y": 72.36,
+          "w": 49.26,
+          "h": 7.75
+        },
+        {
+          "n": 3,
+          "x": 77.96,
+          "y": 86.62,
+          "w": 13.7,
+          "h": 5.63
+        }
+      ]
+    },
+    "ccswitch-enable": {
+      "src": "/tutorials/shared/ccswitch-enable.jpg",
+      "w": 990,
+      "h": 748,
+      "marks": [
+        {
+          "n": 1,
+          "x": 0.71,
+          "y": 16.84,
+          "w": 18.48,
+          "h": 3.74
+        },
+        {
+          "n": 2,
+          "x": 86.36,
+          "y": 26.47,
+          "w": 2.63,
+          "h": 3.48
+        },
+        {
+          "n": 3,
+          "x": 83.23,
+          "y": 45.45,
+          "w": 5.66,
+          "h": 2.94
+        }
+      ]
+    }
+  }
+}
