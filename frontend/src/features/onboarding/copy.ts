@@ -52,6 +52,10 @@ export const guideCopyZh = {
     title: '点「创建密钥」',
     body: '密钥就是你的工具连接本站的凭证。'
   },
+  keyName: {
+    title: '给密钥起个名字',
+    body: (client: string) => `随便起一个方便你认出来的名字，比如「我的 ${client || '密钥'}」。填好后再选分组。`
+  },
   keyForm: {
     title: '确认类型并选择分组',
     body: (client: string) => `已按你选的 ${client} 选好类型。选一个分组（倍率越低越便宜），然后点「创建」。`
@@ -222,6 +226,10 @@ export const guideCopyEn: GuideCopy = {
   keyCreate: {
     title: 'Click “Create key”',
     body: 'A key is the credential your tool uses to connect to this site.'
+  },
+  keyName: {
+    title: 'Name your key',
+    body: (client: string) => `Pick any name you will recognize, e.g. “My ${client || 'key'}”. Then choose a group.`
   },
   keyForm: {
     title: 'Confirm type and pick a group',

@@ -108,6 +108,13 @@ const purchaseResolver = computed<TargetResolver>(() => {
   return sidebarLink((a) => a.getAttribute('href') === href)
 })
 
+/** 密钥名称：还没填、或正在输入时停在这里；填好并离开输入框后，高亮移到分组。 */
+const keyNameResolver: TargetResolver = () => {
+  const input = document.querySelector<HTMLInputElement>('[data-tour="key-form-name"]')
+  if (!input) return null
+  return input.value.trim() === '' || document.activeElement === input ? input : null
+}
+
 const resolvers = computed<TargetResolver[]>(() => {
   if (!guide.active) return []
   switch (guide.step) {
@@ -117,6 +124,7 @@ const resolvers = computed<TargetResolver[]>(() => {
       return [byAttr('[data-tour="redeem-form"]'), sidebarLink((a) => a.getAttribute('href') === '/redeem')]
     case 'key':
       return [
+        keyNameResolver,
         byAttr('[data-tour="key-form-group"]'),
         byAttr('[data-tour="keys-create-btn"]'),
         byAttr('[data-tour="sidebar-my-keys"]')
@@ -260,22 +268,32 @@ const view = computed<GuideView | null>(() => {
       }
     }
     case 'key': {
-      const phase = index.value === 0 ? 'form' : index.value === 1 ? 'create' : 'nav'
+      const phase = (['name', 'form', 'create', 'nav'] as const)[index.value] ?? 'nav'
+      const inForm = phase === 'name' || phase === 'form'
       const clientName = guide.client ? c.clientName(guide.client) : ''
       return {
         kind: 'spot',
         key: `key-${phase}`,
-        title: phase === 'form' ? c.keyForm.title : phase === 'create' ? c.keyCreate.title : c.keyNav.title,
+        title:
+          phase === 'name'
+            ? c.keyName.title
+            : phase === 'form'
+              ? c.keyForm.title
+              : phase === 'create'
+                ? c.keyCreate.title
+                : c.keyNav.title,
         body:
-          phase === 'form'
-            ? c.keyForm.body(clientName)
-            : phase === 'create'
-              ? c.keyCreate.body
-              : c.keyNav.body(targetText.value || t('nav.apiKeys')),
-        click: phase !== 'form',
-        dim: phase !== 'form',
+          phase === 'name'
+            ? c.keyName.body(clientName)
+            : phase === 'form'
+              ? c.keyForm.body(clientName)
+              : phase === 'create'
+                ? c.keyCreate.body
+                : c.keyNav.body(targetText.value || t('nav.apiKeys')),
+        click: !inForm,
+        dim: !inForm,
         inSidebar: phase === 'nav',
-        secondary: hasKey.value && phase !== 'form' ? { label: c.haveKey, run: () => guide.go('ccs'), quiet: true } : undefined,
+        secondary: hasKey.value && !inForm ? { label: c.haveKey, run: () => guide.go('ccs'), quiet: true } : undefined,
         fallback: missing.value ? go('/keys', c.pageKeys) : undefined,
         resolvers: resolvers.value
       }
