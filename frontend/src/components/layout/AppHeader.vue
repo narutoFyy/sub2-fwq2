@@ -158,6 +158,12 @@
                   {{ t('nav.apiKeys') }}
                 </router-link>
 
+                <!-- 用户版新手引导（兑换、创建密钥、接入工具）：跳过或关掉后从这里随时重开 -->
+                <button v-if="showUserGuideEntry" @click="handleStartUserGuide" data-testid="header-reopen-guide" class="dropdown-item w-full">
+                  <Icon name="sparkles" size="sm" />
+                  {{ guideCopy.reopen.title }}
+                </button>
+
                 <a
                   v-if="authStore.isAdmin"
                   href="https://github.com/Wei-Shaw/sub2api"
@@ -259,6 +265,8 @@ import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 import { resolveRouteMetaKeys } from '@/router/title'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
+import { useGuideCopy } from '@/features/onboarding/copy'
+import { useGuideStore } from '@/features/onboarding/guideStore'
 
 const router = useRouter()
 const route = useRoute()
@@ -267,6 +275,8 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
+const guide = useGuideStore()
+const guideCopy = useGuideCopy()
 
 const user = computed(() => authStore.user)
 const dropdownOpen = ref(false)
@@ -286,6 +296,9 @@ const balanceFrozenLabel = computed(() => `${balanceFrozenText.value} ${formatHe
 const showOnboardingButton = computed(() => {
   return !authStore.isSimpleMode && user.value?.role === 'admin'
 })
+
+// 普通用户的新手引导入口（与控制台首页「快捷操作」里的入口一致）
+const showUserGuideEntry = computed(() => !authStore.isAdmin && !appStore.backendModeEnabled && !guide.active)
 
 const displayName = computed(() => {
   if (!user.value) return ''
@@ -345,6 +358,11 @@ async function handleLogout() {
     console.error('Logout error:', error)
   }
   await router.push('/login')
+}
+
+function handleStartUserGuide() {
+  closeDropdown()
+  guide.start()
 }
 
 function handleReplayGuide() {
