@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-dark-950">
-    <!-- Background Decoration -->
-    <div class="pointer-events-none fixed inset-0 bg-mesh-gradient"></div>
+    <!-- Background Decoration：右上角一团点阵柔光，呼应首页 -->
+    <div class="console-glow" aria-hidden="true"></div>
 
     <!-- Sidebar -->
     <AppSidebar />
@@ -50,3 +50,16 @@ onMounted(() => {
 
 defineExpose({ replayTour })
 </script>
+
+<style scoped>
+.console-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--console-glow-dot) 1.1px, transparent 1.5px);
+  background-size: 6px 6px;
+  opacity: var(--console-glow-opacity);
+  -webkit-mask-image: radial-gradient(ellipse 58% 46% at 100% 0%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse 58% 46% at 100% 0%, #000 0%, transparent 72%);
+}
+</style>

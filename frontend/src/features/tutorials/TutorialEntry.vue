@@ -22,14 +22,14 @@ const copy = useTutorialCopy()
 
 <style scoped>
 .tutorial-entry { max-width: 1280px; margin: 0 auto; padding: 80px 48px; color: #0a0a0b; }
-:global(.dark) .tutorial-entry { color: #ededef; }
+:global(.dark .tutorial-entry) { color: #ededef; }
 .entry-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 40px; }
 h2 { font-size: clamp(26px, 3vw, 38px); line-height: 1.25; font-weight: 500; }
 p, small { color: #63636b; }
-:global(.dark) .tutorial-entry :is(p, small) { color: #a0a4ad; }
+:global(.dark .tutorial-entry :is(p, small)) { color: #a0a4ad; }
 .entry-links { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
 .entry-link { display: flex; align-items: center; gap: 20px; padding: 28px 0; border-bottom: 1px solid #dedee1; }
-:global(.dark) .entry-link { border-color: #2b2b30; }
+:global(.dark .entry-link) { border-color: #2b2b30; }
 .entry-link span { flex: 1; }
 strong { display: block; font-size: 24px; font-weight: 500; }
 small { display: block; margin-top: 8px; font-size: 14px; }
