@@ -556,6 +556,12 @@ const (
 	// the Model Plaza page (global pricing notes, exchange rate, promotions, ...).
 	SettingKeyModelPlazaDescription = "model_plaza_description"
 
+	// SettingKeyModelPlazaHiddenGroupIDs stores a JSON array of group IDs that must not
+	// be listed in the Model Plaza (for anonymous and logged-in visitors alike). The
+	// groups themselves stay fully usable; this only controls the showcase. Empty or
+	// invalid = nothing hidden.
+	SettingKeyModelPlazaHiddenGroupIDs = "model_plaza_hidden_group_ids"
+
 	// SettingKeyPluginManagementEnabled controls sidebar visibility only; it does
 	// not stop or otherwise change already loaded plugin runtimes.
 	SettingKeyPluginManagementEnabled = "plugin_management_enabled"

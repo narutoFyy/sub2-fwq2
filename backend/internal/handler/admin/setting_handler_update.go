@@ -357,6 +357,8 @@ type UpdateSettingsRequest struct {
 	ModelPlazaEnabled     *bool   `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth *bool   `json:"model_plaza_require_auth"`
 	ModelPlazaDescription *string `json:"model_plaza_description"`
+	// 不在广场展示的分组 ID；省略 = 保持原值，传空数组 = 全部展示。
+	ModelPlazaHiddenGroupIDs *[]int64 `json:"model_plaza_hidden_group_ids"`
 
 	// Plugin management menu visibility switch; plugin runtime is unaffected.
 	PluginManagementEnabled *bool `json:"plugin_management_enabled"`
@@ -2002,6 +2004,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ModelPlazaDescription
 		}(),
+		ModelPlazaHiddenGroupIDs: func() []int64 {
+			if req.ModelPlazaHiddenGroupIDs != nil {
+				return *req.ModelPlazaHiddenGroupIDs
+			}
+			return previousSettings.ModelPlazaHiddenGroupIDs
+		}(),
 		PluginManagementEnabled: func() bool {
 			if req.PluginManagementEnabled != nil {
 				return *req.PluginManagementEnabled
@@ -2444,10 +2452,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
 		SubscriptionEnabled:      updatedSettings.SubscriptionEnabled,
 
-		ModelPlazaEnabled:       updatedSettings.ModelPlazaEnabled,
-		ModelPlazaRequireAuth:   updatedSettings.ModelPlazaRequireAuth,
-		ModelPlazaDescription:   updatedSettings.ModelPlazaDescription,
-		PluginManagementEnabled: updatedSettings.PluginManagementEnabled,
+		ModelPlazaEnabled:        updatedSettings.ModelPlazaEnabled,
+		ModelPlazaRequireAuth:    updatedSettings.ModelPlazaRequireAuth,
+		ModelPlazaDescription:    updatedSettings.ModelPlazaDescription,
+		ModelPlazaHiddenGroupIDs: updatedSettings.ModelPlazaHiddenGroupIDs,
+		PluginManagementEnabled:  updatedSettings.PluginManagementEnabled,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 

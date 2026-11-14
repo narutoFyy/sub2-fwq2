@@ -69,6 +69,10 @@ export default {
           requireAuthHint: 'When on, anonymous visitors are redirected to the login page; when off, the page is public and anonymous visitors only see non-exclusive groups.',
           priceDescription: 'Pricing notes (Markdown)',
           priceDescriptionHint: 'Rendered at the top of the plaza page. Use it for billing rules, exchange rates, promotions, etc.',
+          visibleGroups: 'Groups shown in the plaza',
+          visibleGroupsHint: 'Unchecked groups are left out of the Model Plaza and the homepage plaza section for every visitor. The groups stay fully usable; they are just not showcased. New groups are shown by default.',
+          visibleGroupsEmpty: 'No active groups yet.',
+          exclusiveTag: 'Exclusive',
         },
         pluginManagement: {
           title: 'Plugin Management',

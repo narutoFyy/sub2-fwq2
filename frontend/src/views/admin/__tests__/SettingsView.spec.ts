@@ -765,6 +765,36 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("lets the admin choose which groups the model plaza shows", async () => {
+    getGroups.mockResolvedValue([
+      { id: 1, name: "Claude 经济", platform: "anthropic", rate_multiplier: 0.4, status: "active", is_exclusive: false, subscription_type: "standard" },
+      { id: 2, name: "内部号池", platform: "openai", rate_multiplier: 0.1, status: "active", is_exclusive: false, subscription_type: "standard" },
+      { id: 3, name: "VIP", platform: "openai", rate_multiplier: 1, status: "active", is_exclusive: true, subscription_type: "standard" },
+    ]);
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      model_plaza_enabled: true,
+      model_plaza_hidden_group_ids: [2],
+    });
+    const wrapper = mountView();
+    await flushPromises();
+
+    const box = (id: number) => wrapper.get<HTMLInputElement>(`[data-testid="plaza-group-${id}"]`);
+    // 已在隐藏名单里的分组不勾选，其余默认勾选（展示）。
+    expect([1, 2, 3].map((id) => box(id).element.checked)).toEqual([true, false, true]);
+
+    await box(1).setValue(false);
+    await box(2).setValue(true);
+    await box(3).setValue(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ model_plaza_hidden_group_ids: [1, 3] }),
+    );
+    wrapper.unmount();
+  });
+
   it("renders panel rate limit card and saves settings", async () => {
     getPanelRateLimitSettings.mockClear();
     updatePanelRateLimitSettings.mockClear();

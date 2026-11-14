@@ -153,7 +153,7 @@ func (h *ModelPlazaHandler) Get(c *gin.Context) {
 		return
 	}
 
-	groups, err := h.plazaService.ListGroupsWithModelFallback(c.Request.Context(), h.modelLister)
+	groups, err := h.plazaService.ListGroupsFiltered(c.Request.Context(), h.modelLister, rt.HiddenGroupIDs)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

@@ -69,6 +69,10 @@ export default {
           requireAuthHint: '开启后未登录访问将跳转登录页；关闭则公开可见，匿名访客仅展示非专属分组。',
           priceDescription: '价格说明（Markdown）',
           priceDescriptionHint: '展示在模型广场页面顶部，可用于说明计费规则、汇率、优惠活动等。',
+          visibleGroups: '在广场展示的分组',
+          visibleGroupsHint: '取消勾选的分组不会出现在模型广场和首页的广场板块（对所有访客生效）；分组本身照常可用，只是不对外展示。新建的分组默认展示。',
+          visibleGroupsEmpty: '暂无启用中的分组。',
+          exclusiveTag: '专属',
         },
         pluginManagement: {
           title: '插件管理',

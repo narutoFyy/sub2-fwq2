@@ -749,6 +749,8 @@ export interface SystemSettings {
   model_plaza_enabled: boolean;
   model_plaza_require_auth: boolean;
   model_plaza_description: string;
+  /** 不在模型广场展示的分组 ID（分组本身照常可用） */
+  model_plaza_hidden_group_ids: number[];
   plugin_management_enabled: boolean;
 
   // Affiliate (邀请返利) feature switch
@@ -1061,6 +1063,7 @@ export interface UpdateSettingsRequest {
   model_plaza_enabled?: boolean;
   model_plaza_require_auth?: boolean;
   model_plaza_description?: string;
+  model_plaza_hidden_group_ids?: number[];
   plugin_management_enabled?: boolean;
 
   // Affiliate (邀请返利) feature switch

@@ -206,10 +206,11 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeySubscriptionEnabled: "true",
 
 		// Model plaza feature (default disabled; opt-in, public unless require_auth)
-		SettingKeyModelPlazaEnabled:       "false",
-		SettingKeyModelPlazaRequireAuth:   "false",
-		SettingKeyModelPlazaDescription:   "",
-		SettingKeyPluginManagementEnabled: "false",
+		SettingKeyModelPlazaEnabled:        "false",
+		SettingKeyModelPlazaRequireAuth:    "false",
+		SettingKeyModelPlazaDescription:    "",
+		SettingKeyModelPlazaHiddenGroupIDs: "[]",
+		SettingKeyPluginManagementEnabled:  "false",
 
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled:              "false",
@@ -273,6 +274,38 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 	}
 
 	return s.settingRepo.SetMultiple(ctx, defaults)
+}
+
+// parseModelPlazaHiddenGroupIDs 解析「不在广场展示的分组」设置（JSON 数组）。
+// 空串、非法 JSON 一律当作没有隐藏任何分组（广场照常展示），避免脏数据把整个广场弄坏。
+func parseModelPlazaHiddenGroupIDs(raw string) []int64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []int64{}
+	}
+	var ids []int64
+	if err := json.Unmarshal([]byte(raw), &ids); err != nil {
+		return []int64{}
+	}
+	return normalizeModelPlazaHiddenGroupIDs(ids)
+}
+
+// normalizeModelPlazaHiddenGroupIDs 去掉非正数与重复项并按升序排列；结果恒为非 nil。
+func normalizeModelPlazaHiddenGroupIDs(ids []int64) []int64 {
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 func parseForwardedClientIPHeadersSetting(value string) ([]string, error) {
@@ -834,6 +867,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.ModelPlazaEnabled = settings[SettingKeyModelPlazaEnabled] == "true"
 	result.ModelPlazaRequireAuth = settings[SettingKeyModelPlazaRequireAuth] == "true"
 	result.ModelPlazaDescription = settings[SettingKeyModelPlazaDescription]
+	result.ModelPlazaHiddenGroupIDs = parseModelPlazaHiddenGroupIDs(settings[SettingKeyModelPlazaHiddenGroupIDs])
 	result.PluginManagementEnabled = settings[SettingKeyPluginManagementEnabled] == "true"
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)

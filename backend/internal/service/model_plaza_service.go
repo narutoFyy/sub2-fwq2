@@ -118,6 +118,12 @@ type PlazaGroupModelLister interface {
 // 改由 lister 从账号配置推导模型，定价走同一条计费阶梯（官方价 × 分组倍率）。
 // 推导出的模型若既无实收价也无官方价则不展示，避免列出无法计费的默认模型。
 func (s *ModelPlazaService) ListGroupsWithModelFallback(ctx context.Context, lister PlazaGroupModelLister) ([]PlazaGroup, error) {
+	return s.ListGroupsFiltered(ctx, lister, nil)
+}
+
+// ListGroupsFiltered 同 ListGroupsWithModelFallback，并跳过 hidden 里的分组：管理员选择
+// 「不在广场展示」的分组不参与模型枚举与定价计算（也就不产生推导模型所需的账号查询）。
+func (s *ModelPlazaService) ListGroupsFiltered(ctx context.Context, lister PlazaGroupModelLister, hidden map[int64]struct{}) ([]PlazaGroup, error) {
 	channels, err := s.channelRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list channels: %w", err)
@@ -214,6 +220,9 @@ func (s *ModelPlazaService) ListGroupsWithModelFallback(ctx context.Context, lis
 	officialMemo := make(map[string]*PlazaOfficialPricing)
 	out := make([]PlazaGroup, 0, len(order))
 	for _, gid := range order {
+		if _, skip := hidden[gid]; skip {
+			continue
+		}
 		pg := byGroup[gid]
 		derived := false
 		if len(pg.Models) == 0 && lister != nil && pg.Platform != PlatformComposite {

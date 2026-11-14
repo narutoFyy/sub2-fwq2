@@ -517,6 +517,8 @@ type ModelPlazaRuntime struct {
 	Enabled     bool
 	RequireAuth bool
 	Description string
+	// HiddenGroupIDs 不在广场展示的分组（对所有访客生效，分组本身照常可用）。
+	HiddenGroupIDs map[int64]struct{}
 }
 
 // GetModelPlazaRuntime reads the model-plaza feature switches directly from the
@@ -527,14 +529,21 @@ func (s *SettingService) GetModelPlazaRuntime(ctx context.Context) ModelPlazaRun
 		SettingKeyModelPlazaEnabled,
 		SettingKeyModelPlazaRequireAuth,
 		SettingKeyModelPlazaDescription,
+		SettingKeyModelPlazaHiddenGroupIDs,
 	})
 	if err != nil {
 		return ModelPlazaRuntime{Enabled: false}
 	}
+	hidden := parseModelPlazaHiddenGroupIDs(vals[SettingKeyModelPlazaHiddenGroupIDs])
+	hiddenSet := make(map[int64]struct{}, len(hidden))
+	for _, id := range hidden {
+		hiddenSet[id] = struct{}{}
+	}
 	return ModelPlazaRuntime{
-		Enabled:     vals[SettingKeyModelPlazaEnabled] == "true",
-		RequireAuth: vals[SettingKeyModelPlazaRequireAuth] == "true",
-		Description: vals[SettingKeyModelPlazaDescription],
+		Enabled:        vals[SettingKeyModelPlazaEnabled] == "true",
+		RequireAuth:    vals[SettingKeyModelPlazaRequireAuth] == "true",
+		Description:    vals[SettingKeyModelPlazaDescription],
+		HiddenGroupIDs: hiddenSet,
 	}
 }
 

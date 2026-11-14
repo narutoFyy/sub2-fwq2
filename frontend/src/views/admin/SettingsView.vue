@@ -7344,6 +7344,37 @@
                 class="input font-mono text-sm"
               ></textarea>
             </div>
+
+            <div v-if="form.model_plaza_enabled" data-testid="plaza-group-visibility">
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.features.modelPlaza.visibleGroups') }}
+              </label>
+              <p class="mb-2 mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.features.modelPlaza.visibleGroupsHint') }}
+              </p>
+              <p v-if="plazaGroups.length === 0" class="text-sm text-gray-400 dark:text-gray-500">
+                {{ t('admin.settings.features.modelPlaza.visibleGroupsEmpty') }}
+              </p>
+              <div v-else class="grid gap-2 sm:grid-cols-2">
+                <label
+                  v-for="group in plazaGroups"
+                  :key="group.id"
+                  class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 px-3 py-2.5 text-sm dark:border-dark-700"
+                >
+                  <input
+                    type="checkbox"
+                    :data-testid="`plaza-group-${group.id}`"
+                    :checked="isPlazaGroupShown(group.id)"
+                    @change="setPlazaGroupShown(group.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                  <span class="min-w-0 flex-1 truncate font-medium text-gray-800 dark:text-gray-100">{{ group.name }}</span>
+                  <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
+                    {{ group.platform }} · ×{{ group.rate_multiplier }}
+                    <template v-if="group.is_exclusive"> · {{ t('admin.settings.features.modelPlaza.exclusiveTag') }}</template>
+                  </span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -9156,6 +9187,8 @@ const adminApiKeyMasked = ref("");
 const adminApiKeyOperating = ref(false);
 const newAdminApiKey = ref("");
 const subscriptionGroups = ref<AdminGroup[]>([]);
+// 模型广场「展示哪些分组」的候选（启用中的分组）
+const plazaGroups = ref<AdminGroup[]>([]);
 
 // Upstream billing probe state
 const upstreamBillingProbeLoading = ref(true);
@@ -10036,6 +10069,7 @@ const form = reactive<SettingsForm>({
   model_plaza_enabled: false,
   model_plaza_require_auth: false,
   model_plaza_description: '',
+  model_plaza_hidden_group_ids: [],
   // Plugin management menu visibility; plugin runtime is unaffected.
   plugin_management_enabled: false,
   // Affiliate (邀请返利) feature switch
@@ -11208,13 +11242,27 @@ async function loadSettings() {
 async function loadSubscriptionGroups() {
   try {
     const groups = await adminAPI.groups.getAll();
+    plazaGroups.value = groups.filter((group) => group.status === "active");
     subscriptionGroups.value = groups.filter(
       (group) =>
         group.subscription_type === "subscription" && group.status === "active",
     );
   } catch (_error: unknown) {
+    plazaGroups.value = [];
     subscriptionGroups.value = [];
   }
+}
+
+/** 广场里是否展示该分组：不在「隐藏名单」里就展示（新建的分组默认展示）。 */
+function isPlazaGroupShown(groupId: number): boolean {
+  return !form.model_plaza_hidden_group_ids.includes(groupId);
+}
+
+function setPlazaGroupShown(groupId: number, shown: boolean) {
+  const hidden = new Set(form.model_plaza_hidden_group_ids);
+  if (shown) hidden.delete(groupId);
+  else hidden.add(groupId);
+  form.model_plaza_hidden_group_ids = [...hidden].sort((a, b) => a - b);
 }
 
 function findNextAvailableSubscriptionGroup(
@@ -11773,6 +11821,7 @@ async function saveSettings() {
       model_plaza_enabled: form.model_plaza_enabled,
       model_plaza_require_auth: form.model_plaza_require_auth,
       model_plaza_description: form.model_plaza_description,
+      model_plaza_hidden_group_ids: form.model_plaza_hidden_group_ids,
       plugin_management_enabled: form.plugin_management_enabled,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
