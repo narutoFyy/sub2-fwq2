@@ -1,10 +1,12 @@
 import type { ApiKey } from '@/types'
 import { GatewayError, listGatewayModels, streamChatCompletion } from './gateway'
+import { systemPromptFor } from './prompts'
 import { createBrowserChatRepository, createChatId, emptyConversation, titleFromFirstMessage } from './storage'
 import type {
   ChatCompletionMessage,
   ChatConversation,
   ChatMessage,
+  ChatMode,
   ChatRepository,
   GatewayErrorShape,
   StreamChatResult,
@@ -51,11 +53,13 @@ export function createInitialChatState(persisted = true): ChatEngineState {
   }
 }
 
-function toGatewayMessages(conversation: ChatConversation): ChatCompletionMessage[] {
-  return conversation.messages
+export function toGatewayMessages(conversation: ChatConversation): ChatCompletionMessage[] {
+  const history: ChatCompletionMessage[] = conversation.messages
     .filter((message) => message.role === 'user' || message.status === 'complete')
     .filter((message) => message.content.trim().length > 0)
     .map((message) => ({ role: message.role, content: message.content }))
+  const system = systemPromptFor(conversation.mode)
+  return system ? [{ role: 'system', content: system }, ...history] : history
 }
 
 function activeKey(state: ChatEngineState): ApiKey | undefined {
@@ -192,10 +196,11 @@ export function createChatEngine(deps: ChatEngineDeps, state: ChatEngineState = 
     state.sendError = null
   }
 
-  async function newConversation() {
+  async function newConversation(mode: ChatMode = 'chat') {
     const conversation = emptyConversation({
       keyId: state.selectedKeyId,
       model: state.selectedModel,
+      mode,
     })
     state.activeId = conversation.id
     state.draft = ''

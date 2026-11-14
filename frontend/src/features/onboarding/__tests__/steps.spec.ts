@@ -39,6 +39,14 @@ describe('onboarding steps', () => {
     expect(nextStep('returned', { ...base, redeemAvailable: false })).toBe('key')
   })
 
+  it('sends chat-only users from the key step to the chat page instead of installing tools', () => {
+    const ctx = { ...base, chatOnly: true }
+    expect(nextStep('key', ctx)).toBe('chat')
+    expect(nextStep('chat', ctx)).toBe('finish')
+    expect(nextStep('finish', ctx)).toBe('success')
+    expect(stageOf('chat')).toBe(3)
+  })
+
   it('maps steps to the four progress stages', () => {
     expect(stageOf('client')).toBe(0)
     for (const step of FUND_STEPS) expect(stageOf(step)).toBe(1)

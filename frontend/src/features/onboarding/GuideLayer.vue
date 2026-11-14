@@ -17,9 +17,9 @@ import { useGuideStore } from './guideStore'
 import { detectArch, detectOS, type Env } from './platform'
 import { useDownloadResources } from './useDownloadResources'
 import { useFirstCallWatcher } from './useFirstCallWatcher'
-import { FUND_STEPS, nextStep, prevStep, stageOf, type GuideContext, type PurchaseMode } from './steps'
+import { afterKeyStep, FUND_STEPS, nextStep, prevStep, stageOf, type GuideContext, type GuideStepId, type PurchaseMode } from './steps'
 import { useGuideTarget, type TargetResolver } from './useGuideTarget'
-import type { GuideClient } from './config'
+import { chatPathFor, isChatClient, type GuideClient } from './config'
 import type { GuideBlock, GuideView } from './viewModel'
 import './guide.css'
 
@@ -75,7 +75,8 @@ const hasFunds = computed(() => (auth.user?.balance ?? 0) > 0 || subs.hasActiveS
 const ctx = computed<GuideContext>(() => ({
   hasFunds: hasFunds.value,
   purchaseMode: purchaseMode.value,
-  redeemAvailable: !auth.isSimpleMode
+  redeemAvailable: !auth.isSimpleMode,
+  chatOnly: isChatClient(guide.client)
 }))
 
 // ---------------------------------------------------------------- 系统与下载资源
@@ -225,7 +226,9 @@ const view = computed<GuideView | null>(() => {
         body: c.client.body,
         options: [
           { id: 'codex', name: 'Codex', desc: c.client.codex },
-          { id: 'claude-code', name: 'Claude Code', desc: c.client.claude }
+          { id: 'claude-code', name: 'Claude Code', desc: c.client.claude },
+          { id: 'chat', name: c.clientName('chat'), desc: c.client.chat },
+          { id: 'fortune', name: c.clientName('fortune'), desc: c.client.fortune }
         ],
         back: { label: c.back, run: () => guide.go(prevStep('client')) },
         resolvers: []
@@ -286,14 +289,16 @@ const view = computed<GuideView | null>(() => {
           phase === 'name'
             ? c.keyName.body(clientName)
             : phase === 'form'
-              ? c.keyForm.body(clientName)
+              ? isChatClient(guide.client)
+                ? c.keyForm.bodyChat
+                : c.keyForm.body(clientName)
               : phase === 'create'
                 ? c.keyCreate.body
                 : c.keyNav.body(targetText.value || t('nav.apiKeys')),
         click: !inForm,
         dim: !inForm,
         inSidebar: phase === 'nav',
-        secondary: hasKey.value && !inForm ? { label: c.haveKey, run: () => guide.go('ccs'), quiet: true } : undefined,
+        secondary: hasKey.value && !inForm ? { label: c.haveKey, run: () => guide.go(afterKeyStep(ctx.value)), quiet: true } : undefined,
         fallback: missing.value ? go('/keys', c.pageKeys) : undefined,
         resolvers: resolvers.value
       }
@@ -320,7 +325,7 @@ const view = computed<GuideView | null>(() => {
         blocks: resources.ready.value
           ? buildDownloadBlocks(
               env.value,
-              guide.client ?? 'claude-code',
+              guide.client === 'codex' ? 'codex' : 'claude-code',
               { manifest: resources.manifest.value, nodeVersion: resources.nodeVersion.value, siteUrl: window.location.origin },
               c
             )
@@ -371,13 +376,53 @@ const view = computed<GuideView | null>(() => {
         primary: { label: c.manual.done, run: advance },
         secondary: {
           label: c.manual.tutorial,
-          run: () => void router.push(`/tutorials/${guide.client ?? 'claude-code'}`)
+          run: () => void router.push(`/tutorials/${guide.client === 'codex' ? 'codex' : 'claude-code'}`)
         },
         back: { label: c.manual.toDownload, run: () => guide.go('download') },
         resolvers: []
       }
     }
+    case 'chat': {
+      const target = guide.client === 'fortune' ? 'fortune' : 'chat'
+      return {
+        kind: 'modal',
+        key: 'chat',
+        title: c.chatGo.title,
+        body: target === 'fortune' ? c.chatGo.bodyFortune : c.chatGo.body,
+        primary: {
+          label: c.chatGo.open,
+          run: () => {
+            advance()
+            void router.push(chatPathFor(target))
+          }
+        },
+        resolvers: []
+      }
+    }
     case 'finish':
+      if (isChatClient(guide.client)) {
+        const target = guide.client
+        return {
+          kind: 'modal' as const,
+          key: 'finish-chat',
+          collapsible: true,
+          pillLabel: c.finish.pill,
+          title: c.finish.titleChat,
+          body: c.finish.bodyChat,
+          list: target === 'fortune' ? c.finish.stepsFortune : c.finish.stepsChat,
+          blocks: [{ type: 'status', text: c.finish.waiting }],
+          primary: {
+            label: c.finish.openChat,
+            run: () => {
+              chatPillHidden.value = false
+              // 这一步只需回到聊天页，不再新开对话。
+              void router.push('/chat')
+            }
+          },
+          secondary: { label: c.finish.done, run: () => guide.finish() },
+          resolvers: []
+        }
+      }
       return {
         kind: 'modal',
         key: 'finish',
@@ -390,7 +435,7 @@ const view = computed<GuideView | null>(() => {
         primary: {
           label: c.finish.tutorial,
           run: () => {
-            const target = guide.client ?? 'claude-code'
+            const target = guide.client === 'codex' ? 'codex' : 'claude-code'
             guide.finish()
             void router.push(`/tutorials/${target}`)
           }
@@ -431,7 +476,7 @@ const completing = ref<'redeem' | 'key' | null>(null)
 let completeTimer: ReturnType<typeof setTimeout> | undefined
 
 /** 先给一个对勾动画，再进入下一步。 */
-function complete(kind: 'redeem' | 'key', next: 'key' | 'ccs') {
+function complete(kind: 'redeem' | 'key', next: GuideStepId) {
   if (completing.value) return
   completing.value = kind
   completeTimer = setTimeout(() => {
@@ -457,7 +502,7 @@ watch(
 watch(
   () => guide.keyCreatedTick,
   () => {
-    if (guide.active && guide.step === 'key') complete('key', 'ccs')
+    if (guide.active && guide.step === 'key') complete('key', afterKeyStep(ctx.value))
   }
 )
 
@@ -500,8 +545,26 @@ watch(
 
 /** 下载步骤里用户要去装软件：把大卡片收成角落的小胶囊，切回本页时自动展开。 */
 const minimized = ref(false)
-const showPill = computed(() => minimized.value && guide.active && !!view.value?.collapsible)
-watch(() => guide.step, () => (minimized.value = false))
+/**
+ * 聊天类用法在聊天页等第一次调用时，卡片默认收成胶囊，不挡输入框；
+ * 用户点胶囊展开后本步内不再自动收起。
+ */
+const chatPillHidden = ref(false)
+const onChatPage = computed(() => route.path === '/chat' && guide.step === 'finish' && isChatClient(guide.client))
+const showPill = computed(
+  () => guide.active && !!view.value?.collapsible && (minimized.value || (onChatPage.value && !chatPillHidden.value))
+)
+watch(() => guide.step, () => {
+  minimized.value = false
+  chatPillHidden.value = false
+})
+watch(() => route.path, (path) => {
+  if (path === '/chat') chatPillHidden.value = false
+})
+function expandPill() {
+  minimized.value = false
+  chatPillHidden.value = true
+}
 function onVisible() {
   if (document.visibilityState === 'visible' && minimized.value) minimized.value = false
 }
@@ -704,7 +767,7 @@ onBeforeUnmount(() => {
       <GuideConfetti v-if="guide.step === 'success' && !completing" :key="guide.step" />
 
       <Transition name="og-invite">
-        <button v-if="showPill" type="button" class="og-pill" @click="minimized = false">
+        <button v-if="showPill" type="button" class="og-pill" :class="{ 'og-pill--chat': onChatPage }" @click="expandPill">
           <span class="og-pill-dot" aria-hidden="true"></span>{{ view?.pillLabel ?? copy.download.pill }}
         </button>
       </Transition>

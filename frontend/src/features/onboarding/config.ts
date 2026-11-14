@@ -3,12 +3,28 @@
 /** 客服 QQ 群：引导每张卡片底部的「不想配置？」入口展示。 */
 export const SUPPORT_QQ_GROUP = '1127453722'
 
-export type GuideClient = 'codex' | 'claude-code'
+/**
+ * 引导里可选的用法：两个编程工具（要装软件、经 CC Switch 导入），
+ * 以及两个直接在站内聊天页使用的（纯聊天、玄学测算），不用装任何东西。
+ */
+export type GuideClient = 'codex' | 'claude-code' | 'chat' | 'fortune'
 
-/** 引导选的客户端 → 创建 Key 时预选的供应商（与 Key 页的分组供应商一致）。 */
-export const CLIENT_PROVIDER: Record<GuideClient, 'openai' | 'anthropic'> = {
+export const GUIDE_CLIENTS: GuideClient[] = ['codex', 'claude-code', 'chat', 'fortune']
+
+/** 站内聊天类用法：建好密钥后直接去 /chat，跳过安装和导入。 */
+export function isChatClient(client: GuideClient | null | undefined): client is 'chat' | 'fortune' {
+  return client === 'chat' || client === 'fortune'
+}
+
+/** 引导选的客户端 → 创建 Key 时预选的供应商（与 Key 页的分组供应商一致）；聊天类不限定，用默认。 */
+export const CLIENT_PROVIDER: Partial<Record<GuideClient, 'openai' | 'anthropic'>> = {
   codex: 'openai',
   'claude-code': 'anthropic'
+}
+
+/** 聊天类用法在聊天页打开的地址。 */
+export function chatPathFor(client: 'chat' | 'fortune'): string {
+  return client === 'fortune' ? '/chat?mode=fortune' : '/chat'
 }
 
 /** localStorage 键（按账号区分），升版时换后缀即可让所有人重新引导。 */

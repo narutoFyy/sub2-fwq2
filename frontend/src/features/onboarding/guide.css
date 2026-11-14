@@ -125,6 +125,8 @@
 .og-option svg { color: var(--og-muted); transition: transform 0.2s, color 0.2s; }
 .og-option:hover svg { transform: translateX(3px); color: var(--og-ink); }
 .dark .og-root .og-codex-icon path { fill: #ededef; }
+.og-option-glyph { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: color-mix(in oklab, var(--og-accent) 14%, transparent); }
+.og-option .og-option-glyph svg, .og-option:hover .og-option-glyph svg { color: var(--og-accent); transform: none; }
 
 /* 完成：对勾描线 */
 .og-done { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 14px 0 10px; font-size: 16px; font-weight: 600; }
@@ -202,11 +204,14 @@
 /* ---------- 收起后的角落胶囊 ---------- */
 .og-pill { pointer-events: auto; position: fixed; right: 24px; bottom: 24px; display: inline-flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 12px 18px; border-radius: 999px; background: var(--og-bg); color: var(--og-ink); box-shadow: var(--og-shadow); font-size: 13.5px; font-weight: 500; }
 .og-pill:hover { transform: translateY(-1px); }
+/* 聊天页右下角是发送按钮：胶囊挪到顶栏下方，手机上挪到输入框上方。 */
+.og-pill--chat { top: 72px; bottom: auto; }
 .og-pill-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--og-accent); box-shadow: 0 0 0 0 var(--og-glow); animation: og-pill-pulse 2s ease-out infinite; }
 @keyframes og-pill-pulse { 0% { box-shadow: 0 0 0 0 var(--og-glow); } 70% { box-shadow: 0 0 0 9px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
 @media (max-width: 640px) {
   .og-pill { left: 12px; right: 12px; bottom: 12px; justify-content: center; }
+  .og-pill--chat { top: auto; bottom: 128px; }
   .og-block { padding: 12px 12px; }
   .og-dl { padding: 11px 14px; }
 }

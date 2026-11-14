@@ -61,6 +61,7 @@ describe('sanitizeConversation', () => {
       updatedAt: 2,
       keyId: 40,
       model: 'claude-sonnet-4',
+      mode: 'chat',
       messages: [
         {
           id: 'm1',
@@ -116,5 +117,13 @@ describe('createMemoryChatRepository', () => {
     await repo.savePrefs(3, { selectedKeyId: 40, selectedModel: 'gpt-4.1' })
     expect(await repo.getPrefs(3)).toEqual({ selectedKeyId: 40, selectedModel: 'gpt-4.1' })
     expect(await repo.getPrefs(9)).toEqual({ selectedKeyId: null, selectedModel: '' })
+  })
+})
+
+describe('conversation mode', () => {
+  it('keeps fortune mode and defaults anything else to chat', () => {
+    expect(sanitizeConversation({ id: 'a', mode: 'fortune' }).mode).toBe('fortune')
+    expect(sanitizeConversation({ id: 'b', mode: 'weird' }).mode).toBe('chat')
+    expect(sanitizeConversation({ id: 'c' }).mode).toBe('chat')
   })
 })

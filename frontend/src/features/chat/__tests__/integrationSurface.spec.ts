@@ -16,13 +16,12 @@ describe('chat integration surface', () => {
     expect(sidebar).toMatch(/\{ path: '\/chat', label: t\('nav\.chat'\), icon: ChatIcon \}/)
   })
 
-  it('does not wrap chat in the dashboard AppLayout and uses the chat typefaces', () => {
+  it('does not wrap chat in the dashboard AppLayout and uses the site typeface', () => {
     const view = readFileSync(resolve(root, 'features/chat/ChatView.vue'), 'utf8')
     const css = readFileSync(resolve(root, 'features/chat/chat.css'), 'utf8')
     expect(view).toContain('chat-shell')
     expect(view).not.toContain('AppLayout')
-    expect(css).toContain('Instrument Sans')
-    expect(css).toContain('Noto Serif SC')
-    expect(css).toContain('Source Serif 4')
+    expect(css).toContain('Geist Variable')
+    expect(css).not.toContain('fonts.googleapis.com')
   })
 })

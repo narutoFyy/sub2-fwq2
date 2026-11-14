@@ -68,6 +68,7 @@ export function sanitizeConversation(input: unknown): ChatConversation {
     updatedAt: typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt) ? raw.updatedAt : Date.now(),
     keyId: typeof raw.keyId === 'number' && Number.isFinite(raw.keyId) ? raw.keyId : null,
     model: typeof raw.model === 'string' ? raw.model : '',
+    mode: raw.mode === 'fortune' ? 'fortune' : 'chat',
     messages,
   }
 }
@@ -89,6 +90,7 @@ export function emptyConversation(overrides: Partial<ChatConversation> = {}): Ch
     updatedAt: now,
     keyId: null,
     model: '',
+    mode: 'chat',
     messages: [],
     ...overrides,
   })

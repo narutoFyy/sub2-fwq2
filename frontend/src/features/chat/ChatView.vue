@@ -1,151 +1,195 @@
 <template>
-  <div class="chat-shell">
-    <div class="flex min-h-screen">
-      <div
-        v-if="railOpen"
-        class="fixed inset-0 z-20 bg-black/20 md:hidden"
-        @click="railOpen = false"
-      />
-      <aside
-        class="z-30 flex w-[17.5rem] shrink-0 flex-col border-r px-3 py-4 max-md:fixed max-md:inset-y-0 max-md:left-0"
-        :class="railOpen ? 'max-md:flex' : 'max-md:hidden md:flex'"
-        :style="{ borderColor: 'var(--chat-line)', background: 'var(--chat-bg-raised)' }"
-      >
-        <div class="mb-5 flex items-center justify-between gap-2 px-1">
-          <router-link :to="consolePath" class="text-[13px] tracking-wide" :style="{ color: 'var(--chat-muted)' }">
-            {{ t('chat.console') }}
+  <div class="chat-shell" :class="{ 'is-fortune': mode === 'fortune' }">
+    <div class="chat-glow" aria-hidden="true" />
+    <div class="relative flex h-screen min-h-0">
+      <Transition name="chat-fade">
+        <div v-if="railOpen" class="chat-scrim md:hidden" @click="railOpen = false" />
+      </Transition>
+
+      <!-- 侧栏：品牌、新建、会话列表 -->
+      <aside class="chat-rail" :class="{ 'is-open': railOpen }">
+        <div class="flex items-center justify-between gap-2 px-2 pb-5 pt-1">
+          <router-link :to="consolePath" class="chat-brand" :title="t('chat.console')">
+            <BrandLogo :name="brandName" :size="22" />
           </router-link>
-          <div class="flex items-center gap-1">
-            <button type="button" class="chat-icon-btn" :title="isDark ? t('nav.lightMode') : t('nav.darkMode')" @click="toggleTheme">
-              {{ isDark ? 'Light' : 'Dark' }}
-            </button>
-            <button type="button" class="chat-icon-btn" @click="toggleLocale">
-              {{ locale === 'zh' ? 'EN' : '中' }}
-            </button>
+          <div class="flex items-center gap-0.5">
+            <LocaleToggle />
+            <ThemeToggleIcon />
           </div>
         </div>
 
-        <button type="button" class="chat-new-btn mb-4" @click="newConversation">
-          {{ t('chat.newChat') }}
-        </button>
+        <div class="grid gap-2 px-1">
+          <button type="button" class="chat-new-btn" @click="newConversation('chat')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            <span>{{ t('chat.newChat') }}</span>
+          </button>
+          <button type="button" class="chat-new-btn chat-new-btn--fortune" @click="newConversation('fortune')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" /></svg>
+            <span>{{ t('chat.fortuneNew') }}</span>
+          </button>
+        </div>
 
-        <p v-if="!conversations.length" class="px-2 text-sm" :style="{ color: 'var(--chat-muted)' }">
+        <p v-if="!conversations.length" class="mt-6 px-3 text-[13px]" :style="{ color: 'var(--chat-muted)' }">
           {{ t('chat.noConversations') }}
         </p>
-        <nav class="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
+        <nav class="chat-conv-list">
           <div
             v-for="item in conversations"
             :key="item.id"
-            class="group flex items-center rounded-lg px-2 py-2 text-sm"
-            :class="item.id === activeId ? 'chat-conv-active' : 'chat-conv'"
+            class="chat-conv group"
+            :class="{ 'is-active': item.id === activeId }"
           >
             <button
               type="button"
-              class="min-w-0 flex-1 truncate text-left"
+              class="flex min-w-0 flex-1 items-center gap-2 text-left"
               @click="selectConversation(item.id)"
               @dblclick="onRename(item)"
             >
-              {{ item.title }}
+              <span class="chat-conv-dot" :class="{ 'is-fortune': item.mode === 'fortune' }" aria-hidden="true" />
+              <span class="truncate">{{ titleOf(item) }}</span>
             </button>
             <button
               type="button"
-              class="ml-1 hidden text-[11px] group-hover:inline"
-              :style="{ color: 'var(--chat-muted)' }"
+              class="chat-conv-del"
+              :title="t('chat.delete')"
+              :aria-label="t('chat.delete')"
               @click.stop="onDelete(item.id)"
             >
-              {{ t('chat.delete') }}
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>
             </button>
           </div>
         </nav>
+
+        <router-link :to="consolePath" class="chat-console-link">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+          {{ t('chat.console') }}
+        </router-link>
       </aside>
 
       <main class="flex min-w-0 flex-1 flex-col">
-        <header class="flex flex-wrap items-center gap-3 border-b px-6 py-3" :style="{ borderColor: 'var(--chat-line)' }">
-          <button type="button" class="chat-icon-btn md:hidden" @click="railOpen = true">{{ t('chat.nav') }}</button>
-          <label class="flex min-w-[12rem] flex-1 items-center gap-2 text-xs" :style="{ color: 'var(--chat-muted)' }">
-            <span class="shrink-0 whitespace-nowrap">{{ t('chat.key') }}</span>
-            <select
-              class="chat-select"
-              :value="selectedKeyId ?? ''"
-              :disabled="!keys.length"
-              @change="onKeyChange"
-            >
+        <!-- 顶栏：会话标题、密钥、模型 -->
+        <header class="chat-header">
+          <button type="button" class="chat-icon-btn chat-menu-btn" :aria-label="t('chat.nav')" @click="railOpen = true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" /></svg>
+          </button>
+          <div class="chat-header-title flex min-w-0 flex-1 items-center gap-2">
+            <span v-if="mode === 'fortune'" class="chat-badge">{{ t('chat.fortuneBadge') }}</span>
+            <span class="truncate text-sm font-medium">{{ headerTitle }}</span>
+          </div>
+          <label class="chat-pill-select" :title="t('chat.key')">
+            <span class="chat-pill-label">{{ t('chat.key') }}</span>
+            <select :value="selectedKeyId ?? ''" :disabled="!keys.length" @change="onKeyChange">
               <option v-if="!keys.length" value="">{{ t('chat.noKey') }}</option>
               <option v-for="item in keys" :key="item.id" :value="item.id">{{ item.name }}</option>
             </select>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" /></svg>
           </label>
-          <label class="flex min-w-[12rem] flex-1 items-center gap-2 text-xs" :style="{ color: 'var(--chat-muted)' }">
-            <span class="shrink-0 whitespace-nowrap">{{ t('chat.model') }}</span>
-            <select
-              class="chat-select"
-              :value="selectedModel"
-              :disabled="!models.length"
-              @change="onModelChange"
-            >
+          <label class="chat-pill-select chat-pill-select--model" :title="t('chat.model')">
+            <span class="chat-pill-label">{{ t('chat.model') }}</span>
+            <select :value="selectedModel" :disabled="!models.length" @change="onModelChange">
               <option v-if="modelsLoading" value="">{{ t('chat.modelsLoading') }}</option>
               <option v-else-if="!models.length" value="">{{ t('chat.noModel') }}</option>
               <option v-for="model in models" :key="model" :value="model">{{ model }}</option>
             </select>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" /></svg>
           </label>
         </header>
 
-        <p v-if="persistenceWarning" class="px-6 pt-3 text-xs" :style="{ color: 'var(--chat-muted)' }">
-          {{ t('chat.persistenceWarning') }}
-        </p>
+        <p v-if="persistenceWarning" class="chat-notice">{{ t('chat.persistenceWarning') }}</p>
 
-        <section ref="scrollerRef" class="min-h-0 flex-1 overflow-y-auto px-6 py-8">
-          <div v-if="loading" class="pt-24 text-center text-sm" :style="{ color: 'var(--chat-muted)' }">
-            {{ t('chat.loading') }}
+        <section ref="scrollerRef" class="chat-scroller">
+          <div v-if="loading" class="chat-empty">
+            <span class="chat-typing" aria-hidden="true"><i /><i /><i /></span>
+            <p class="mt-4 text-sm" :style="{ color: 'var(--chat-muted)' }">{{ t('chat.loading') }}</p>
           </div>
-          <div v-else-if="!keys.length" class="mx-auto max-w-xl pt-24">
+
+          <div v-else-if="!keys.length" class="chat-empty">
             <p class="chat-greeting">{{ t('chat.noKey') }}</p>
-            <router-link to="/keys" class="mt-4 inline-block text-sm">{{ t('chat.createKey') }}</router-link>
+            <router-link to="/keys" class="chat-cta">{{ t('chat.createKey') }}</router-link>
           </div>
-          <div v-else-if="!active?.messages.length" class="mx-auto max-w-2xl pt-24">
-            <p class="chat-greeting">{{ t('chat.greeting') }}</p>
+
+          <div v-else-if="!active?.messages.length" class="chat-empty">
+            <div class="chat-orb" aria-hidden="true">
+              <svg v-if="mode === 'fortune'" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" /><path d="M16.5 3.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" /></svg>
+              <svg v-else viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
+            </div>
+            <p class="chat-greeting">{{ mode === 'fortune' ? t('chat.fortuneGreeting') : t('chat.greeting') }}</p>
+            <p class="chat-subtitle">{{ mode === 'fortune' ? t('chat.fortuneSubtitle') : t('chat.chatSubtitle') }}</p>
+            <div class="chat-suggestions" :class="{ 'is-six': suggestions.length > 4 }">
+              <button
+                v-for="(item, i) in suggestions"
+                :key="item.title"
+                type="button"
+                class="chat-suggestion"
+                :style="{ '--i': i }"
+                @click="useSuggestion(item.prompt)"
+              >
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.prompt }}</span>
+              </button>
+            </div>
           </div>
-          <ol v-else class="mx-auto max-w-2xl list-none space-y-8 p-0">
-            <li v-for="message in active.messages" :key="message.id" class="group">
-              <div class="mb-2 flex items-baseline justify-between gap-3 text-[11px] uppercase tracking-[0.14em]" :style="{ color: 'var(--chat-muted)' }">
-                <span>{{ message.role === 'user' ? t('chat.you') : t('chat.assistant') }}</span>
-                <button
-                  v-if="message.content"
-                  type="button"
-                  class="opacity-0 group-hover:opacity-100"
-                  @click="copyMessage(message.content)"
-                >
-                  {{ copied === message.content ? t('chat.copied') : t('chat.copy') }}
-                </button>
-              </div>
-              <div
-                v-if="message.role === 'assistant'"
-                class="chat-md"
-                v-html="renderChatMarkdown(message.content || (message.status === 'streaming' ? '' : t('chat.emptyAssistant')))"
-              />
-              <div v-else class="chat-user">{{ message.content }}</div>
-              <span v-if="message.status === 'streaming'" class="chat-caret" aria-hidden="true" />
+
+          <ol v-else class="chat-thread">
+            <li
+              v-for="message in active.messages"
+              :key="message.id"
+              class="chat-msg group"
+              :class="message.role === 'user' ? 'is-user' : 'is-assistant'"
+            >
+              <template v-if="message.role === 'assistant'">
+                <div class="chat-avatar" :class="{ 'is-fortune': mode === 'fortune' }" aria-hidden="true">
+                  <svg v-if="mode === 'fortune'" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" /></svg>
+                  <svg v-else viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="chat-msg-name">{{ mode === 'fortune' ? t('chat.fortuneName') : t('chat.assistant') }}</div>
+                  <span v-if="message.status === 'streaming' && !message.content" class="chat-typing" aria-hidden="true"><i /><i /><i /></span>
+                  <div
+                    v-else
+                    class="chat-md"
+                    :class="{ 'is-error': message.status === 'error' }"
+                    v-html="renderChatMarkdown(message.content || (message.status === 'streaming' ? '' : t('chat.emptyAssistant')))"
+                  />
+                  <span v-if="message.status === 'streaming' && message.content" class="chat-caret" aria-hidden="true" />
+                  <div v-if="message.content && message.status !== 'streaming'" class="chat-msg-actions">
+                    <button type="button" @click="copyMessage(message.content)">
+                      {{ copied === message.content ? t('chat.copied') : t('chat.copy') }}
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <div class="chat-user">{{ message.content }}</div>
+              </template>
             </li>
           </ol>
         </section>
 
-        <footer class="px-6 pb-6 pt-2">
-          <p v-if="sendError" class="mx-auto mb-2 max-w-2xl text-sm" :style="{ color: 'var(--chat-danger)' }">
-            {{ errorText }}
-          </p>
-          <form class="chat-composer mx-auto max-w-2xl" @submit.prevent="onSend">
+        <footer class="chat-footer">
+          <p v-if="sendError" class="chat-error">{{ errorText }}</p>
+          <form class="chat-composer" @submit.prevent="onSend">
             <textarea
+              ref="inputRef"
               v-model="draft"
               rows="1"
               class="chat-input"
-              :placeholder="t('chat.composerPlaceholder')"
+              :placeholder="mode === 'fortune' ? t('chat.fortunePlaceholder') : t('chat.composerPlaceholder')"
               :disabled="!keys.length || streaming"
               @keydown="onComposerKeydown"
               @input="resizeComposer"
             />
-            <div class="flex items-center justify-end gap-2 px-2 pb-2">
-              <button v-if="canRetry" type="button" class="chat-text-btn" @click="retry">{{ t('chat.retry') }}</button>
-              <button v-if="streaming" type="button" class="chat-text-btn" @click="stop">{{ t('chat.stop') }}</button>
-              <button v-else type="submit" class="chat-send" :disabled="!canSend">{{ t('chat.send') }}</button>
+            <div class="flex items-center justify-between gap-2 px-3 pb-2.5">
+              <span class="chat-hint">{{ t('chat.sendHint') }}</span>
+              <div class="flex items-center gap-1.5">
+                <button v-if="canRetry" type="button" class="chat-text-btn" @click="retry">{{ t('chat.retry') }}</button>
+                <button v-if="streaming" type="button" class="chat-send is-stop" :aria-label="t('chat.stop')" :title="t('chat.stop')" @click="stop">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" /></svg>
+                </button>
+                <button v-else type="submit" class="chat-send" :disabled="!canSend" :aria-label="t('chat.send')" :title="t('chat.send')">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+                </button>
+              </div>
             </div>
           </form>
         </footer>
@@ -156,14 +200,21 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { getLocale, setLocale } from '@/i18n'
+import BrandLogo from '@/components/brand/BrandLogo.vue'
+import LocaleToggle from '@/components/brand/LocaleToggle.vue'
+import ThemeToggleIcon from '@/components/common/ThemeToggleIcon.vue'
 import { renderChatMarkdown } from './markdown'
+import { suggestionsFor } from './suggestions'
+import type { ChatMode } from './types'
 import { useChatSession } from './useChatSession'
 import './chat.css'
 
 const { t, locale } = useI18n()
+const route = useRoute() as ReturnType<typeof useRoute> | undefined
+const router = useRouter() as ReturnType<typeof useRouter> | undefined
 const authStore = useAuthStore()
 const session = useChatSession()
 const {
@@ -182,12 +233,29 @@ const {
 } = session
 
 const scrollerRef = ref<HTMLElement | null>(null)
+const inputRef = ref<HTMLTextAreaElement | null>(null)
 const copied = ref('')
 const railOpen = ref(false)
-const isDark = ref(document.documentElement.classList.contains('dark'))
 
+const brandName = computed(() => {
+  const name = t('home.landing.brandName')
+  return name === 'home.landing.brandName' ? 'yf-mail' : name
+})
 const consolePath = computed(() => (authStore.isAdmin ? '/admin/dashboard' : '/dashboard'))
 const active = computed(() => session.activeConversation())
+const mode = computed<ChatMode>(() => active.value?.mode ?? 'chat')
+const suggestions = computed(() => suggestionsFor(locale.value, mode.value))
+const headerTitle = computed(() => {
+  const conv = active.value
+  if (conv && conv.messages.length) return conv.title
+  return mode.value === 'fortune' ? t('chat.fortuneNew') : t('chat.newChat')
+})
+
+/** 还没发消息的对话标题是存储层的占位 "New chat"，按模式显示成当前语言的名字。 */
+function titleOf(item: { title: string; mode: ChatMode; messages: unknown[] }) {
+  if (item.messages.length || item.title !== 'New chat') return item.title
+  return item.mode === 'fortune' ? t('chat.fortuneNew') : t('chat.newChat')
+}
 const canSend = computed(() => Boolean(draft.value.trim() && keys.value.length && selectedModel.value && !streaming.value))
 const canRetry = computed(() => {
   const last = active.value?.messages.at(-1)
@@ -198,16 +266,6 @@ const errorText = computed(() => {
   const mapped = t(`chat.errors.${sendError.value.code}`)
   return mapped === `chat.errors.${sendError.value.code}` ? sendError.value.message : mapped
 })
-
-function toggleTheme() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
-}
-
-async function toggleLocale() {
-  await setLocale(getLocale() === 'zh' ? 'en' : 'zh')
-}
 
 function onKeyChange(event: Event) {
   const value = Number((event.target as HTMLSelectElement).value)
@@ -224,7 +282,7 @@ function onModelChange(event: Event) {
 }
 
 function onComposerKeydown(event: KeyboardEvent) {
-  if (event.key === 'Enter' && !event.shiftKey) {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault()
     void onSend()
   }
@@ -245,17 +303,28 @@ function stop() {
   session.stop()
 }
 
-function resizeComposer(event?: Event) {
-  const el = (event?.target as HTMLTextAreaElement | undefined) ?? document.querySelector<HTMLTextAreaElement>('.chat-input')
+function resizeComposer() {
+  const el = inputRef.value
   if (!el) return
   el.style.height = 'auto'
-  el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+  el.style.height = `${Math.min(el.scrollHeight, 220)}px`
 }
 
 function scrollToBottom() {
   const root = scrollerRef.value
   if (!root) return
   root.scrollTop = root.scrollHeight
+}
+
+async function useSuggestion(prompt: string) {
+  draft.value = prompt
+  await nextTick()
+  resizeComposer()
+  const el = inputRef.value
+  if (el) {
+    el.focus()
+    el.setSelectionRange(prompt.length, prompt.length)
+  }
 }
 
 async function copyMessage(content: string) {
@@ -276,8 +345,12 @@ async function onDelete(id: string) {
   }
 }
 
-function newConversation() {
-  void session.newConversation()
+async function newConversation(next: ChatMode) {
+  railOpen.value = false
+  // 当前就是同类型的空对话：不再新建一个，直接用它。
+  const current = active.value
+  if (current && !current.messages.length && current.mode === next) return
+  await session.newConversation(next)
 }
 
 function selectConversation(id: string) {
@@ -292,6 +365,28 @@ async function onRename(item: { id: string; title: string }) {
   }
 }
 
+/** 从新手引导或外部链接带 ?mode=fortune 进来：加载完成后开一个玄学测算对话，再把参数去掉，刷新不会重复新建。 */
+async function applyRequestedMode() {
+  const requested = route?.query.mode
+  if (requested !== 'fortune' && requested !== 'chat') return
+  await newConversation(requested)
+  void router?.replace({ path: '/chat' })
+}
+
+watch(
+  loading,
+  (now, before) => {
+    if (before && !now) void applyRequestedMode()
+  },
+)
+// 已在聊天页时再从引导跳过来（只改了查询参数）。
+watch(
+  () => route?.query.mode,
+  (value) => {
+    if (value && !loading.value) void applyRequestedMode()
+  },
+)
+
 watch(
   () => active.value?.messages.map((item) => item.content).join('\0'),
   () => {
@@ -299,106 +394,3 @@ watch(
   },
 )
 </script>
-
-<style scoped>
-.chat-icon-btn,
-.chat-text-btn {
-  border: 0;
-  background: transparent;
-  color: var(--chat-muted);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.chat-new-btn,
-.chat-send {
-  border: 1px solid var(--chat-line);
-  background: transparent;
-  color: var(--chat-ink);
-  border-radius: 999px;
-  padding: 0.55rem 0.9rem;
-  font-size: 0.8125rem;
-  cursor: pointer;
-}
-
-.chat-new-btn {
-  width: 100%;
-  text-align: left;
-}
-
-.chat-send:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.chat-select {
-  width: 100%;
-  border: 0;
-  border-bottom: 1px solid var(--chat-line);
-  background: transparent;
-  color: var(--chat-ink);
-  padding: 0.35rem 0;
-  font-size: 0.875rem;
-}
-
-.chat-conv {
-  color: var(--chat-muted);
-}
-
-.chat-conv-active {
-  background: color-mix(in oklch, var(--chat-line) 55%, transparent);
-  color: var(--chat-ink);
-}
-
-.chat-greeting {
-  font-family: var(--chat-serif);
-  font-size: clamp(2rem, 4vw, 3.25rem);
-  font-weight: 400;
-  line-height: 1.2;
-  letter-spacing: -0.03em;
-}
-
-.chat-user {
-  font-family: var(--chat-serif);
-  font-size: 1.0625rem;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-
-.chat-composer {
-  border: 1px solid var(--chat-line);
-  border-radius: 1.15rem;
-  background: var(--chat-bg-raised);
-}
-
-.chat-input {
-  width: 100%;
-  resize: none;
-  border: 0;
-  background: transparent;
-  color: var(--chat-ink);
-  padding: 0.95rem 1rem 0.35rem;
-  font-family: var(--chat-serif);
-  font-size: 1.05rem;
-  line-height: 1.6;
-  outline: none;
-}
-
-.chat-caret {
-  display: inline-block;
-  width: 0.45rem;
-  height: 1.05em;
-  margin-left: 0.15rem;
-  background: var(--chat-ink);
-  animation: chat-blink 1s steps(1) infinite;
-  vertical-align: text-bottom;
-}
-
-@keyframes chat-blink {
-  50% {
-    opacity: 0;
-  }
-}
-</style>

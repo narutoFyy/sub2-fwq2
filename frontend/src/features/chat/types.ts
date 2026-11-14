@@ -1,5 +1,7 @@
 export type ChatRole = 'user' | 'assistant'
 export type ChatMessageStatus = 'complete' | 'streaming' | 'error' | 'aborted'
+/** chat：普通对话；fortune：玄学测算（请求时带上测算用的系统提示词）。 */
+export type ChatMode = 'chat' | 'fortune'
 
 export interface ChatMessage {
   id: string
@@ -16,6 +18,7 @@ export interface ChatConversation {
   updatedAt: number
   keyId: number | null
   model: string
+  mode: ChatMode
   messages: ChatMessage[]
 }
 

@@ -8,21 +8,23 @@ export function useGuideCopy() {
 }
 
 export const guideCopyZh = {
-  stages: ['选工具', '兑换额度', '创建密钥', '接入工具'],
+  stages: ['选用法', '兑换额度', '创建密钥', '开始使用'],
   stageDone: '全部完成',
-  clientName: (c: GuideClient) => (c === 'codex' ? 'Codex' : 'Claude Code'),
+  clientName: (c: GuideClient) => ({ codex: 'Codex', 'claude-code': 'Claude Code', chat: '纯聊天', fortune: '玄学测算' })[c],
 
   welcome: {
-    title: '几分钟，把 AI 编程工具接上来',
-    body: '跟着引导走：兑换额度、创建密钥、接入工具。每一步都有指引，随时可以跳过。',
+    title: '几分钟，把 AI 用起来',
+    body: '跟着引导走：兑换额度、创建密钥，然后接上编程工具，或者直接在网页里聊天。每一步都有指引，随时可以跳过。',
     start: '开始',
     skip: '跳过引导'
   },
   client: {
-    title: '你想用哪个工具？',
-    body: '选好后，创建密钥时会自动帮你选对类型。',
+    title: '你想怎么用？',
+    body: '选好后，后面的步骤会按你的选择来。',
     codex: 'OpenAI 的编程助手，有桌面版，装好就能用。',
-    claude: 'Anthropic 的命令行编程助手。'
+    claude: 'Anthropic 的命令行编程助手。',
+    chat: '不用装软件，直接在网页里和 AI 对话。',
+    fortune: '八字、塔罗、星座、解梦，网页里直接问。'
   },
   buy: {
     title: '先买一个兑换码',
@@ -58,7 +60,14 @@ export const guideCopyZh = {
   },
   keyForm: {
     title: '确认类型并选择分组',
-    body: (client: string) => `已按你选的 ${client} 选好类型。选一个分组（倍率越低越便宜），然后点「创建」。`
+    body: (client: string) => `已按你选的 ${client} 选好类型。选一个分组（倍率越低越便宜），然后点「创建」。`,
+    bodyChat: '选一个分组（倍率越低越便宜），然后点「创建」。'
+  },
+  chatGo: {
+    title: '密钥好了，去聊天吧',
+    body: '聊天页会自动用上你刚建的密钥，选个模型、发一句话就行。',
+    bodyFortune: '已为你备好「玄学测算」：报上出生日期和时辰，或者点一个快捷问题就能开始。',
+    open: '打开聊天页'
   },
   ccs: {
     title: (tool: string) => `${tool} 和 CC Switch 都装好了吗？`,
@@ -139,6 +148,11 @@ export const guideCopyZh = {
     stepsCodex: ['在 CC Switch 左边选「Codex」，点刚导入的供应商右边的 ▶，变成「使用中」', '打开 Codex 桌面版，新建一个对话', '随便问一句，能回复就接通了'],
     stepsClaude: ['在 CC Switch 左边选「Claude Code」，点刚导入的供应商右边的 ▶，变成「使用中」', '打开终端，进入项目文件夹，运行 claude', '随便问一句，能回复就接通了'],
     waiting: '正在等待你的第一次调用…试一句，这里会自动提示',
+    titleChat: '发一句话试试',
+    bodyChat: '在聊天页发出第一条消息，收到回复就说明一切正常。',
+    stepsChat: ['在顶部确认密钥和模型', '在输入框里随便说一句，按回车发送', '看到回复就接通了'],
+    stepsFortune: ['在顶部确认密钥和模型', '点一个快捷问题，或者报上你的出生日期和时辰', '看到回复就接通了'],
+    openChat: '打开聊天页',
     pill: '等待第一次调用 · 点这里查看',
     tutorial: '查看图文教程',
     done: '完成'
@@ -151,7 +165,7 @@ export const guideCopyZh = {
   },
   reopen: {
     title: '新手引导',
-    desc: '重新走一遍：兑换额度、创建密钥、接入工具'
+    desc: '重新走一遍：兑换额度、创建密钥、接入工具或开始聊天'
   },
   haveKey: '我已有密钥，跳过这步',
   importAny: '点你要用的那把密钥的「导入到 CC Switch」。',
@@ -174,7 +188,7 @@ export const guideCopyZh = {
 
   invite: {
     title: '还没创建密钥？',
-    body: '几步就能把 Codex / Claude Code 接上来。',
+    body: '几步就能接上 Codex / Claude Code，或直接在网页里聊天。',
     start: '开始',
     no: '不用了'
   }
@@ -183,21 +197,23 @@ export const guideCopyZh = {
 export type GuideCopy = typeof guideCopyZh
 
 export const guideCopyEn: GuideCopy = {
-  stages: ['Pick a tool', 'Add credit', 'Create key', 'Connect'],
+  stages: ['Pick a use', 'Add credit', 'Create key', 'Get going'],
   stageDone: 'All done',
-  clientName: (c: GuideClient) => (c === 'codex' ? 'Codex' : 'Claude Code'),
+  clientName: (c: GuideClient) => ({ codex: 'Codex', 'claude-code': 'Claude Code', chat: 'Chat', fortune: 'Fortune reading' })[c],
 
   welcome: {
-    title: 'Connect your AI coding tool in minutes',
-    body: 'Follow along: add credit, create a key, connect your tool. Every step is guided, and you can skip any time.',
+    title: 'Put AI to work in minutes',
+    body: 'Follow along: add credit, create a key, then connect a coding tool or just chat in the browser. Every step is guided, and you can skip any time.',
     start: 'Start',
     skip: 'Skip guide'
   },
   client: {
-    title: 'Which tool do you use?',
-    body: "We'll pick the right key type for you later.",
+    title: 'How do you want to use it?',
+    body: 'The next steps follow your choice.',
     codex: "OpenAI's coding assistant, with a desktop app.",
-    claude: "Anthropic's command-line coding assistant."
+    claude: "Anthropic's command-line coding assistant.",
+    chat: 'Nothing to install — chat with AI right in your browser.',
+    fortune: 'BaZi, tarot, astrology and dreams — ask in the browser.'
   },
   buy: {
     title: 'First, get a redeem code',
@@ -233,7 +249,14 @@ export const guideCopyEn: GuideCopy = {
   },
   keyForm: {
     title: 'Confirm type and pick a group',
-    body: (client: string) => `We preselected the type for ${client}. Pick a group (lower rate = cheaper), then click Create.`
+    body: (client: string) => `We preselected the type for ${client}. Pick a group (lower rate = cheaper), then click Create.`,
+    bodyChat: 'Pick a group (lower rate = cheaper), then click Create.'
+  },
+  chatGo: {
+    title: 'Key ready — let\'s chat',
+    body: 'The chat page uses the key you just created. Pick a model and send a message.',
+    bodyFortune: 'A fortune-reading chat is ready: share your birth date and time, or tap a quick question to begin.',
+    open: 'Open chat'
   },
   ccs: {
     title: (tool: string) => `Are ${tool} and CC Switch installed?`,
@@ -314,6 +337,11 @@ export const guideCopyEn: GuideCopy = {
     stepsCodex: ['In CC Switch pick “Codex” on the left and click ▶ next to the imported provider until it says “In use”', 'Open the Codex desktop app and start a chat', 'Ask anything — if it answers, you are connected'],
     stepsClaude: ['In CC Switch pick “Claude Code” on the left and click ▶ next to the imported provider until it says “In use”', 'Open a terminal, go to your project folder and run claude', 'Ask anything — if it answers, you are connected'],
     waiting: 'Waiting for your first call… send one message and this will notice',
+    titleChat: 'Send a message',
+    bodyChat: 'Send your first message on the chat page. A reply means everything works.',
+    stepsChat: ['Check the key and model at the top', 'Type anything and press Enter', 'If it answers, you are connected'],
+    stepsFortune: ['Check the key and model at the top', 'Tap a quick question, or share your birth date and time', 'If it answers, you are connected'],
+    openChat: 'Open chat',
     pill: 'Waiting for first call · click to view',
     tutorial: 'Open the illustrated guide',
     done: 'Done'
@@ -326,7 +354,7 @@ export const guideCopyEn: GuideCopy = {
   },
   reopen: {
     title: 'Getting started guide',
-    desc: 'Walk through it again: add credit, create a key, connect your tool'
+    desc: 'Walk through it again: add credit, create a key, connect a tool or start chatting'
   },
   haveKey: 'I already have a key — skip',
   importAny: 'Click “Import to CC Switch” on the key you want to use.',
@@ -349,7 +377,7 @@ export const guideCopyEn: GuideCopy = {
 
   invite: {
     title: 'No API key yet?',
-    body: 'A few steps to connect Codex or Claude Code.',
+    body: 'A few steps to connect Codex or Claude Code, or just chat in the browser.',
     start: 'Start',
     no: 'No thanks'
   }

@@ -4,6 +4,7 @@
  * 流程：欢迎 → 选工具 → 买码并兑换 → 创建 Key → 问「装了吗」→（下载）→ 一键导入 → 完成。
  * 「买码并兑换」拆成 buy（去小铺）/ returned（问买好没）/ redeem（去兑换）三步；
  * 「创建 Key」是一步，具体高亮哪个按钮由页面当前状态决定（见 GuideLayer）。
+ * 选了站内聊天类用法（纯聊天 / 玄学测算）：创建 Key 之后进 chat（去聊天页），再到 finish 等第一次调用。
  */
 export type GuideStepId =
   | 'welcome'
@@ -17,11 +18,12 @@ export type GuideStepId =
   | 'import'
   | 'imported'
   | 'manual'
+  | 'chat'
   | 'finish'
   | 'success'
 
 export const STEP_ORDER: GuideStepId[] = [
-  'welcome', 'client', 'buy', 'returned', 'redeem', 'key', 'ccs', 'download', 'import', 'imported', 'manual', 'finish', 'success'
+  'welcome', 'client', 'buy', 'returned', 'redeem', 'key', 'ccs', 'download', 'import', 'imported', 'manual', 'chat', 'finish', 'success'
 ]
 
 /** 进度条的四个阶段（欢迎页不算）。 */
@@ -40,7 +42,7 @@ export function stageOf(step: GuideStepId): number {
     case 'key':
       return 2
     default:
-      // 问「装了吗」、下载、导入、手动配置、完成都属于「接入工具」。
+      // 问「装了吗」、下载、导入、手动配置、去聊天、完成都属于「接入工具 / 开始聊天」。
       return 3
   }
 }
@@ -54,6 +56,13 @@ export interface GuideContext {
   purchaseMode: PurchaseMode
   /** 兑换页是否可用（简易模式会隐藏）。 */
   redeemAvailable: boolean
+  /** 选的是站内聊天类用法：建好 Key 直接去聊天页，不用安装和导入。 */
+  chatOnly?: boolean
+}
+
+/** 创建 Key 之后的下一步。 */
+export function afterKeyStep(ctx: Pick<GuideContext, 'chatOnly'>): GuideStepId {
+  return ctx.chatOnly ? 'chat' : 'ccs'
 }
 
 /** 充值阶段的第一步：有入口就先去买，没有入口直接去兑换，没有兑换页也跳过。 */
@@ -77,7 +86,9 @@ export function nextStep(current: GuideStepId, ctx: GuideContext): GuideStepId {
     case 'redeem':
       return 'key'
     case 'key':
-      return 'ccs'
+      return afterKeyStep(ctx)
+    case 'chat': // 打开了聊天页
+      return 'finish'
     case 'ccs': // 「都装好了」
     case 'download': // 「我装好了，继续」
       return 'import'

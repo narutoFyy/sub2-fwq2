@@ -1555,7 +1555,7 @@ watch([showCreateModal, createProviderOptions], ([isOpen, providers], [wasOpen])
   if (!isOpen) return
   if (!wasOpen || !providers.some((provider) => provider.value === createProvider.value && provider.count > 0)) {
     // 新手引导里选了 Codex / Claude Code：创建弹窗打开时预选对应的供应商。
-    const guided = guideStore.active && guideStore.step === 'key' && guideStore.client ? CLIENT_PROVIDER[guideStore.client] : null
+    const guided = guideStore.active && guideStore.step === 'key' && guideStore.client ? (CLIENT_PROVIDER[guideStore.client] ?? null) : null
     const guidedUsable = guided !== null && providers.some((provider) => provider.value === guided && provider.count > 0)
     selectCreateProvider(guidedUsable ? guided : (providers.find((provider) => provider.count > 0)?.value ?? 'anthropic'))
   }

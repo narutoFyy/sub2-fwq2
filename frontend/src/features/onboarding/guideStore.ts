@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { GUIDE_STORAGE_PREFIX, type GuideClient } from './config'
+import { GUIDE_CLIENTS, GUIDE_STORAGE_PREFIX, type GuideClient } from './config'
 import type { GuideStepId } from './steps'
 
 /**
@@ -28,7 +28,7 @@ function read(userId: number): Persisted {
     return {
       status: parsed.status ?? 'idle',
       step: parsed.step ?? 'welcome',
-      client: parsed.client === 'codex' || parsed.client === 'claude-code' ? parsed.client : null,
+      client: parsed.client && GUIDE_CLIENTS.includes(parsed.client) ? parsed.client : null,
       keyId: typeof parsed.keyId === 'number' ? parsed.keyId : null
     }
   } catch {
