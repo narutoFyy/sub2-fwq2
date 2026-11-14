@@ -19,6 +19,8 @@ export type GuideBlock =
 export interface GuideAction {
   label: string
   run: () => void
+  /** 「跳过这步 / 我已经有…」这类次要出口：用安静的小字链接样式，不和主操作抢眼。 */
+  quiet?: boolean
 }
 
 export interface GuideClientOption {

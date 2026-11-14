@@ -104,6 +104,10 @@
 .og-btn--ghost:hover { background: var(--og-line); }
 .og-btn--text { background: transparent; color: var(--og-muted); padding: 0 10px; margin-right: auto; }
 .og-btn--text:hover { color: var(--og-ink); }
+/* 安静的次要出口：小字、无底色、下划线，只在需要时才会被注意到 */
+.og-btn--quiet { min-height: 26px; padding: 0 6px; font-size: 12px; font-weight: 400; background: transparent; color: var(--og-muted); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--og-muted) 40%, transparent); }
+.og-btn--quiet:hover { color: var(--og-ink); text-decoration-color: currentColor; }
+.og-actions:has(> .og-btn--quiet:only-child) { margin-top: 8px; }
 
 /* 欢迎：四个阶段依次浮现 */
 .og-path { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
@@ -131,8 +135,8 @@
 @keyframes og-draw { to { stroke-dashoffset: 0; } }
 
 /* 页脚：跳过 + 客服入口 */
-.og-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--og-line); min-height: 38px; }
-.og-link { background: none; border: 0; padding: 4px 0; font-size: 12px; color: var(--og-muted); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--og-muted) 40%, transparent); }
+.og-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-top: 12px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--og-line) 70%, transparent); }
+.og-link { background: none; border: 0; padding: 2px 0; font-size: 11px; color: color-mix(in srgb, var(--og-muted) 85%, transparent); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--og-muted) 40%, transparent); }
 .og-link:hover { color: var(--og-ink); }
 .og-link--quiet { text-decoration: none; white-space: nowrap; flex-shrink: 0; }
 .og-support { min-width: 0; text-align: right; }

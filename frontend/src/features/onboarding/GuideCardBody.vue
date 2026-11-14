@@ -87,7 +87,7 @@ const stageLabel = computed(() => {
         <div v-if="view.primary || view.secondary || view.fallback || view.back" class="og-actions">
           <button v-if="view.back" type="button" class="og-btn og-btn--text" @click="view.back.run()">{{ view.back.label }}</button>
           <button v-if="view.collapsible" type="button" class="og-btn og-btn--ghost" @click="emit('collapse')">{{ copy.download.collapse }}</button>
-          <button v-if="view.secondary" type="button" class="og-btn og-btn--ghost" @click="view.secondary.run()">{{ view.secondary.label }}</button>
+          <button v-if="view.secondary" type="button" class="og-btn" :class="view.secondary.quiet ? 'og-btn--quiet' : 'og-btn--ghost'" @click="view.secondary.run()">{{ view.secondary.label }}</button>
           <button v-if="view.fallback" type="button" class="og-btn og-btn--ghost" @click="view.fallback.run()">{{ view.fallback.label }}</button>
           <button v-if="view.primary" type="button" class="og-btn og-btn--primary" data-og-autofocus @click="view.primary.run()">{{ view.primary.label }}</button>
         </div>

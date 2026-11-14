@@ -228,7 +228,7 @@ const view = computed<GuideView | null>(() => {
         title: c.buy.title,
         body: c.buy.body(label),
         hint: c.buy.hint,
-        secondary: { label: c.buy.already, run: () => guide.go(ctx.value.redeemAvailable ? 'redeem' : 'key') },
+        secondary: { label: c.buy.already, run: () => guide.go(ctx.value.redeemAvailable ? 'redeem' : 'key'), quiet: true },
         click: true,
         inSidebar: true,
         resolvers: resolvers.value
@@ -273,7 +273,7 @@ const view = computed<GuideView | null>(() => {
         click: phase !== 'form',
         dim: phase !== 'form',
         inSidebar: phase === 'nav',
-        secondary: hasKey.value && phase !== 'form' ? { label: c.haveKey, run: () => guide.go('ccs') } : undefined,
+        secondary: hasKey.value && phase !== 'form' ? { label: c.haveKey, run: () => guide.go('ccs'), quiet: true } : undefined,
         fallback: missing.value ? go('/keys', c.pageKeys) : undefined,
         resolvers: resolvers.value
       }
@@ -321,7 +321,7 @@ const view = computed<GuideView | null>(() => {
         click: true,
         inSidebar: !onButton,
         // 站点关闭了一键导入、或按钮找不到时，不让用户卡住。
-        secondary: { label: c.imported.no, run: () => guide.go('manual') },
+        secondary: { label: c.imported.no, run: () => guide.go('manual'), quiet: true },
         fallback: missing.value ? go('/keys', c.pageKeys) : undefined,
         resolvers: resolvers.value
       }
