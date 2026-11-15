@@ -64,11 +64,13 @@ const (
 // 若编辑 Key 时无条件整行回写，并发累计的配额与限流计数就会被旧快照覆盖。
 // 因此调用方必须显式声明要改的列。
 type APIKeyUpdateFields struct {
-	Name      bool
-	Status    bool
-	Quota     bool
-	GroupID   bool
-	ExpiresAt bool
+	Name    bool
+	Status  bool
+	Quota   bool
+	GroupID bool
+	// ExtraGroupIDs 覆盖 extra_group_ids（附加分组）。
+	ExtraGroupIDs bool
+	ExpiresAt     bool
 	// QuotaUsed 仅供"重置配额用量"路径声明；常规计费走 IncrementQuotaUsed。
 	QuotaUsed bool
 	// RateLimits 覆盖 rate_limit_5h / _1d / _7d 三个阈值。
@@ -214,8 +216,11 @@ type APIKeyAuthCacheInvalidator interface {
 
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
-	Name        string   `json:"name"`
-	GroupID     *int64   `json:"group_id"`
+	Name    string `json:"name"`
+	GroupID *int64 `json:"group_id"`
+	// GroupIDs 一把 Key 绑定多个分组（第一个为主分组，其余为附加分组，顺序即优先级）。
+	// 传了 GroupIDs 就忽略 GroupID。
+	GroupIDs    []int64  `json:"group_ids"`
 	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
 	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
 	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
@@ -234,6 +239,7 @@ type CreateAPIKeyRequest struct {
 type UpdateAPIKeyRequest struct {
 	Name        *string   `json:"name"`
 	GroupID     *int64    `json:"group_id"`
+	GroupIDs    *[]int64  `json:"group_ids"` // 多分组绑定（nil 不修改）；传了就忽略 GroupID
 	Status      *string   `json:"status"`
 	IPWhitelist *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
 	IPBlacklist *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
@@ -516,7 +522,14 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	}
 
 	// 验证分组权限（如果指定了分组）
-	if req.GroupID != nil {
+	primaryGroupID := req.GroupID
+	var extraGroupIDs []int64
+	if len(req.GroupIDs) > 0 {
+		primaryGroupID, extraGroupIDs, err = s.resolveBindableGroups(ctx, user, req.GroupIDs)
+		if err != nil {
+			return nil, err
+		}
+	} else if req.GroupID != nil {
 		group, err := s.groupRepo.GetByID(ctx, *req.GroupID)
 		if err != nil {
 			return nil, fmt.Errorf("get group: %w", err)
@@ -572,7 +585,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		UserID:      userID,
 		Key:         key,
 		Name:        html.EscapeString(req.Name),
-		GroupID:     req.GroupID,
+		GroupID:     primaryGroupID,
 		Status:      StatusActive,
 		IPWhitelist: req.IPWhitelist,
 		IPBlacklist: req.IPBlacklist,
@@ -581,6 +594,8 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		RateLimit5h: req.RateLimit5h,
 		RateLimit1d: req.RateLimit1d,
 		RateLimit7d: req.RateLimit7d,
+
+		ExtraGroupIDs: extraGroupIDs,
 	}
 
 	// Set expiration time if specified
@@ -830,7 +845,20 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		fields.Name = true
 	}
 
-	if req.GroupID != nil {
+	if req.GroupIDs != nil && len(*req.GroupIDs) > 0 {
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("get user: %w", err)
+		}
+		primary, extras, err := s.resolveBindableGroups(ctx, user, *req.GroupIDs)
+		if err != nil {
+			return nil, err
+		}
+		apiKey.GroupID = primary
+		apiKey.ExtraGroupIDs = extras
+		fields.GroupID = true
+		fields.ExtraGroupIDs = true
+	} else if req.GroupID != nil {
 		// 验证分组权限
 		user, err := s.userRepo.GetByID(ctx, userID)
 		if err != nil {
@@ -848,6 +876,11 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 
 		apiKey.GroupID = req.GroupID
 		fields.GroupID = true
+		// 旧的单分组写法表示"这把 Key 只绑这个分组"，同时清掉附加分组。
+		if len(apiKey.ExtraGroupIDs) > 0 {
+			apiKey.ExtraGroupIDs = nil
+			fields.ExtraGroupIDs = true
+		}
 	}
 
 	if req.Status != nil {
@@ -1211,4 +1244,45 @@ func (s *APIKeyService) UpdateRateLimitUsage(ctx context.Context, apiKeyID int64
 		return nil
 	}
 	return s.apiKeyRepo.IncrementRateLimitUsage(ctx, apiKeyID, cost)
+}
+
+// MaxAPIKeyGroups 是一把 Key 最多能绑定的分组数（含主分组）。
+const MaxAPIKeyGroups = 10
+
+// resolveBindableGroups 校验请求里的分组列表并拆成「主分组 + 附加分组」。
+// 列表去重并保持顺序；每个分组都要通过与单分组绑定相同的权限检查。
+func (s *APIKeyService) resolveBindableGroups(ctx context.Context, user *User, groupIDs []int64) (*int64, []int64, error) {
+	ordered := make([]int64, 0, len(groupIDs))
+	seen := make(map[int64]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		if id <= 0 {
+			return nil, nil, infraerrors.BadRequest("API_KEY_GROUP_INVALID", "group_ids must be positive")
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		ordered = append(ordered, id)
+	}
+	if len(ordered) == 0 {
+		return nil, nil, nil
+	}
+	if len(ordered) > MaxAPIKeyGroups {
+		return nil, nil, infraerrors.BadRequest("API_KEY_TOO_MANY_GROUPS", fmt.Sprintf("an API key can bind at most %d groups", MaxAPIKeyGroups))
+	}
+	for _, id := range ordered {
+		group, err := s.groupRepo.GetByID(ctx, id)
+		if err != nil {
+			return nil, nil, fmt.Errorf("get group: %w", err)
+		}
+		if !s.canUserBindGroup(ctx, user, group) {
+			return nil, nil, ErrGroupNotAllowed
+		}
+	}
+	primary := ordered[0]
+	var extras []int64
+	if len(ordered) > 1 {
+		extras = ordered[1:]
+	}
+	return &primary, extras, nil
 }

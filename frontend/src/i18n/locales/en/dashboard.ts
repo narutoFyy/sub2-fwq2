@@ -107,6 +107,14 @@ export default {
     noGroup: 'No group',
     searchGroup: 'Search groups...',
     noGroupFound: 'No groups found',
+    extraGroups: {
+      title: 'Also use other groups (optional)',
+      hint: 'When checked, this key can call the models of these groups too: each request picks a group by model name (gpt-* goes to your OpenAI group, claude-* to your Claude group). The group above is the primary one; model names that cannot be recognised use it.',
+      empty: 'No other groups available',
+      selected: '{count} extra selected',
+      more: '+{count} groups',
+      moreTitle: 'Also bound: {names}'
+    },
     created: 'Created',
     copyToClipboard: 'Copy to clipboard',
     copied: 'Copied!',

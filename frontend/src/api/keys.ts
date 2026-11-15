@@ -55,6 +55,7 @@ export async function getById(id: number): Promise<ApiKey> {
  * @param quota - Optional quota limit in USD (0 = unlimited)
  * @param expiresInDays - Optional days until expiry (undefined = never expires)
  * @param rateLimitData - Optional rate limit fields
+ * @param extraGroupIds - Optional extra groups bound after the primary one (request picks by model)
  * @returns Created API key
  */
 export async function create(
@@ -65,11 +66,15 @@ export async function create(
   ipBlacklist?: string[],
   quota?: number,
   expiresInDays?: number,
-  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number }
+  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
+  extraGroupIds?: number[]
 ): Promise<ApiKey> {
   const payload: CreateApiKeyRequest = { name }
   if (groupId !== undefined) {
     payload.group_id = groupId
+  }
+  if (groupId != null && extraGroupIds && extraGroupIds.length > 0) {
+    payload.group_ids = [groupId, ...extraGroupIds.filter((id) => id !== groupId)]
   }
   if (customKey) {
     payload.custom_key = customKey

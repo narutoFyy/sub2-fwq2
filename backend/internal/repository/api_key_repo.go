@@ -70,6 +70,11 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		key.LastUsedAt = created.LastUsedAt
 		key.CreatedAt = created.CreatedAt
 		key.UpdatedAt = created.UpdatedAt
+		if len(key.ExtraGroupIDs) > 0 {
+			if setErr := r.setExtraGroupIDs(ctx, key.ID, key.ExtraGroupIDs); setErr != nil {
+				return setErr
+			}
+		}
 	}
 	return translatePersistenceError(err, nil, service.ErrAPIKeyExists)
 }
@@ -86,7 +91,11 @@ func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIK
 		}
 		return nil, err
 	}
-	return apiKeyEntityToService(m), nil
+	out := apiKeyEntityToService(m)
+	if err := r.attachExtraGroupIDs(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // GetKeyAndOwnerID 根据 API Key ID 获取其 key 与所有者（用户）ID。
@@ -124,7 +133,11 @@ func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.A
 		}
 		return nil, err
 	}
-	return apiKeyEntityToService(m), nil
+	out := apiKeyEntityToService(m)
+	if err := r.attachExtraGroupIDs(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*service.APIKey, error) {
@@ -169,70 +182,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				gq.Select(group.FieldID)
 			})
 		}).
-		WithGroup(func(q *dbent.GroupQuery) {
-			q.Select(
-				group.FieldID,
-				group.FieldName,
-				group.FieldPlatform,
-				group.FieldIsExclusive,
-				group.FieldStatus,
-				group.FieldSubscriptionType,
-				group.FieldRateMultiplier,
-				group.FieldDailyLimitUsd,
-				group.FieldWeeklyLimitUsd,
-				group.FieldMonthlyLimitUsd,
-				group.FieldAllowImageGeneration,
-				group.FieldAllowBatchImageGeneration,
-				group.FieldImageCountBilling,
-				group.FieldImageRateIndependent,
-				group.FieldImageRateMultiplier,
-				group.FieldImagePrice1k,
-				group.FieldImagePrice2k,
-				group.FieldImagePrice4k,
-				group.FieldVideoRateIndependent,
-				group.FieldVideoRateMultiplier,
-				group.FieldVideoPrice480p,
-				group.FieldVideoPrice720p,
-				group.FieldVideoPrice1080p,
-				group.FieldVideoModelPrices,
-				group.FieldWebSearchPricePerCall,
-				group.FieldSearchPricePer1k,
-				group.FieldAudioRealtimePricePerMin,
-				group.FieldAudioTtsPricePerMillionChars,
-				group.FieldAudioSttPricePerHour,
-				group.FieldLongContextPricingEnabled,
-				group.FieldModelPricing,
-				group.FieldClaudeCodeOnly,
-				group.FieldFallbackGroupID,
-				group.FieldFallbackGroupIDOnInvalidRequest,
-				group.FieldModelRoutingEnabled,
-				group.FieldModelRouting,
-				group.FieldMcpXMLInject,
-				group.FieldSupportedModelScopes,
-				group.FieldAllowMessagesDispatch,
-				group.FieldAllowLive,
-				group.FieldForceOpenaiFast,
-				group.FieldFreeOpenaiFast,
-				group.FieldDefaultMappedModel,
-				group.FieldMessagesDispatchModelConfig,
-				group.FieldModelAllowlist,
-				group.FieldCodexModelsManifestConfig,
-				group.FieldRpmLimit,
-				group.FieldMaxReasoningEffort,
-				group.FieldMaxReasoningEffortOverLimit,
-				group.FieldReasoningEffortMappings,
-				group.FieldPeakRateEnabled,
-				group.FieldPeakStart,
-				group.FieldPeakEnd,
-				group.FieldPeakRateMultiplier,
-				// 分组利润控制：认证快照是调度门 enable 判定的直接来源，
-				// 漏选会让门静默失效；新增快照分组字段时必须同步本投影，
-				// 集成测试对账兜底。
-				group.FieldProfitControlEnabled,
-				group.FieldProfitMinMargin,
-				group.FieldProfitSafetyBuffer,
-			)
-		}).
+		WithGroup(selectAuthGroupFields).
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
@@ -240,7 +190,14 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 		}
 		return nil, err
 	}
-	return apiKeyEntityToService(m), nil
+	out := apiKeyEntityToService(m)
+	if err := r.attachExtraGroupIDs(ctx, out); err != nil {
+		return nil, err
+	}
+	if err := r.attachExtraGroups(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fields service.APIKeyUpdateFields) error {
@@ -338,6 +295,11 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 	if affected == 0 {
 		// 更新影响行数为 0，说明记录不存在或已被软删除。
 		return service.ErrAPIKeyNotFound
+	}
+	if fields.ExtraGroupIDs {
+		if err := r.setExtraGroupIDs(ctx, key.ID, key.ExtraGroupIDs); err != nil {
+			return err
+		}
 	}
 
 	// 使用同一时间戳回填，避免并发删除导致二次查询失败。
@@ -481,6 +443,9 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 	for i := range keys {
 		outKeys = append(outKeys, *apiKeyEntityToService(keys[i]))
 	}
+	if err := r.attachExtraGroupIDsToList(ctx, outKeys); err != nil {
+		return nil, nil, err
+	}
 	if err := r.attachLastUsedIPs(ctx, outKeys); err != nil {
 		return nil, nil, err
 	}
@@ -500,6 +465,9 @@ func (r *apiKeyRepository) ListAllByUserID(ctx context.Context, userID int64, fi
 	outKeys := make([]service.APIKey, 0, len(keys))
 	for i := range keys {
 		outKeys = append(outKeys, *apiKeyEntityToService(keys[i]))
+	}
+	if err := r.attachExtraGroupIDsToList(ctx, outKeys); err != nil {
+		return nil, err
 	}
 	if err := r.attachLastUsedIPs(ctx, outKeys); err != nil {
 		return nil, err
@@ -763,7 +731,12 @@ func (r *apiKeyRepository) ListKeysByGroupID(ctx context.Context, groupID int64)
 	if err != nil {
 		return nil, err
 	}
-	return keys, nil
+	// 把该分组当作附加分组的 Key 也要一起失效缓存。
+	extraKeys, err := r.listKeysByExtraGroupID(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	return append(keys, extraKeys...), nil
 }
 
 // IncrementQuotaUsed 使用 Ent 原子递增 quota_used 字段并返回新值
@@ -1054,4 +1027,71 @@ func derefString(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// selectAuthGroupFields 是认证路径上分组的列投影（主分组与附加分组共用）。
+// 新增认证快照分组字段时必须同步这里，集成测试对账兜底。
+func selectAuthGroupFields(q *dbent.GroupQuery) {
+	q.Select(
+		group.FieldID,
+		group.FieldName,
+		group.FieldPlatform,
+		group.FieldIsExclusive,
+		group.FieldStatus,
+		group.FieldSubscriptionType,
+		group.FieldRateMultiplier,
+		group.FieldDailyLimitUsd,
+		group.FieldWeeklyLimitUsd,
+		group.FieldMonthlyLimitUsd,
+		group.FieldAllowImageGeneration,
+		group.FieldAllowBatchImageGeneration,
+		group.FieldImageCountBilling,
+		group.FieldImageRateIndependent,
+		group.FieldImageRateMultiplier,
+		group.FieldImagePrice1k,
+		group.FieldImagePrice2k,
+		group.FieldImagePrice4k,
+		group.FieldVideoRateIndependent,
+		group.FieldVideoRateMultiplier,
+		group.FieldVideoPrice480p,
+		group.FieldVideoPrice720p,
+		group.FieldVideoPrice1080p,
+		group.FieldVideoModelPrices,
+		group.FieldWebSearchPricePerCall,
+		group.FieldSearchPricePer1k,
+		group.FieldAudioRealtimePricePerMin,
+		group.FieldAudioTtsPricePerMillionChars,
+		group.FieldAudioSttPricePerHour,
+		group.FieldLongContextPricingEnabled,
+		group.FieldModelPricing,
+		group.FieldClaudeCodeOnly,
+		group.FieldFallbackGroupID,
+		group.FieldFallbackGroupIDOnInvalidRequest,
+		group.FieldModelRoutingEnabled,
+		group.FieldModelRouting,
+		group.FieldMcpXMLInject,
+		group.FieldSupportedModelScopes,
+		group.FieldAllowMessagesDispatch,
+		group.FieldAllowLive,
+		group.FieldForceOpenaiFast,
+		group.FieldFreeOpenaiFast,
+		group.FieldDefaultMappedModel,
+		group.FieldMessagesDispatchModelConfig,
+		group.FieldModelAllowlist,
+		group.FieldCodexModelsManifestConfig,
+		group.FieldRpmLimit,
+		group.FieldMaxReasoningEffort,
+		group.FieldMaxReasoningEffortOverLimit,
+		group.FieldReasoningEffortMappings,
+		group.FieldPeakRateEnabled,
+		group.FieldPeakStart,
+		group.FieldPeakEnd,
+		group.FieldPeakRateMultiplier,
+		// 分组利润控制：认证快照是调度门 enable 判定的直接来源，
+		// 漏选会让门静默失效；新增快照分组字段时必须同步本投影，
+		// 集成测试对账兜底。
+		group.FieldProfitControlEnabled,
+		group.FieldProfitMinMargin,
+		group.FieldProfitSafetyBuffer,
+	)
 }

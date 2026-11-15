@@ -28,11 +28,16 @@ func IsWindowExpired(windowStart *time.Time, duration time.Duration) bool {
 }
 
 type APIKey struct {
-	ID          int64
-	UserID      int64
-	Key         string
-	Name        string
-	GroupID     *int64
+	ID      int64
+	UserID  int64
+	Key     string
+	Name    string
+	GroupID *int64
+	// ExtraGroupIDs 是主分组（GroupID）之外附加绑定的分组，按优先级排序。
+	// 请求按模型所属平台在 主分组 + 附加分组 里选一个来服务（见 SelectGroupForModel）。
+	ExtraGroupIDs []int64
+	// ExtraGroups 仅在认证路径上填充（来自认证快照），列表接口不加载。
+	ExtraGroups []*Group `json:"-"`
 	Status      string
 	IPWhitelist []string
 	IPBlacklist []string
@@ -142,4 +147,30 @@ type APIKeyListFilters struct {
 	Search  string
 	Status  string
 	GroupID *int64 // nil=不筛选, 0=无分组, >0=指定分组
+}
+
+// AllGroupIDs 返回主分组 + 附加分组的 ID（主分组在前，去重）。
+func (k *APIKey) AllGroupIDs() []int64 {
+	if k == nil {
+		return nil
+	}
+	ids := make([]int64, 0, 1+len(k.ExtraGroupIDs))
+	seen := make(map[int64]struct{}, 1+len(k.ExtraGroupIDs))
+	if k.GroupID != nil {
+		ids = append(ids, *k.GroupID)
+		seen[*k.GroupID] = struct{}{}
+	}
+	for _, id := range k.ExtraGroupIDs {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// HasExtraGroups 报告该 Key 是否绑定了多个分组。
+func (k *APIKey) HasExtraGroups() bool {
+	return k != nil && len(k.ExtraGroups) > 0
 }
