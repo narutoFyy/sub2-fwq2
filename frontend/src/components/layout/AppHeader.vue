@@ -158,6 +158,11 @@
                   {{ t('nav.apiKeys') }}
                 </router-link>
 
+                <router-link v-if="!authStore.isAdmin" to="/tutorials" @click="closeDropdown" class="dropdown-item">
+                  <Icon name="book" size="sm" />
+                  {{ t('nav.tutorials') }}
+                </router-link>
+
                 <!-- 用户版新手引导（兑换、创建密钥、接入工具）：跳过或关掉后从这里随时重开 -->
                 <button v-if="showUserGuideEntry" @click="handleStartUserGuide" data-testid="header-reopen-guide" class="dropdown-item w-full">
                   <Icon name="sparkles" size="sm" />

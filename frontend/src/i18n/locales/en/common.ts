@@ -167,6 +167,7 @@ export default {
     chat: 'Chat',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
+    tutorials: 'Setup guides',
     batchImage: 'Batch Images',
     usage: 'Usage',
     redeem: 'Redeem',

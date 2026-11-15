@@ -13,7 +13,7 @@ export function useTutorialCopy() {
 
 /** 页面框架、目录、常见问题等文案；每一步的具体内容在 tutorialSteps.ts。 */
 const zh = {
-  nav: '接入教程', home: '返回首页', title: '从这里，开始第一轮对话。',
+  nav: '接入教程', home: '返回首页', console: '回到控制台', title: '从这里，开始第一轮对话。',
   intro: '买兑换码、创建密钥、装好软件、一键导入。照着真实界面的截图，一步一步把你的编程工具接上来。',
   entryTitle: '第一次接入？跟着做就好。', entryDesc: '从买兑换码到第一轮对话，两份带真实截图的教程。',
   read: '查看图文教程', claudeDesc: '用 Claude 理解代码、编写功能、解决问题。', codexDesc: '让 Codex 进入你的项目，开始协作。',
@@ -44,7 +44,7 @@ const zh = {
 
 // Kept in the same shape so both language versions exercise the same interface.
 const en: typeof zh = {
-  nav: 'Setup guides', home: 'Back to home', title: 'Start your first conversation.',
+  nav: 'Setup guides', home: 'Back to home', console: 'Back to console', title: 'Start your first conversation.',
   intro: 'Get a redeem code, create a key, install the software, import in one click. Follow the real screenshots to connect your coding tool.',
   entryTitle: 'Your first connection, step by step.', entryDesc: 'Two guides with real screenshots, from redeem code to first reply.',
   read: 'Read the guide', claudeDesc: 'Understand code, build features, and solve problems with Claude.', codexDesc: 'Bring Codex into your project and start working together.',

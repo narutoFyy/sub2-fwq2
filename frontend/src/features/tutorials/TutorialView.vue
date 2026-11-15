@@ -77,7 +77,7 @@ onBeforeUnmount(() => observer?.disconnect())
     <header class="guide-header">
       <nav class="guide-nav" :aria-label="copy.nav">
         <BrandLogo to="/home" :name="siteName" />
-        <div class="guide-nav-actions"><RouterLink to="/home" class="back-home">{{ copy.home }}</RouterLink><LocaleToggle /><ThemeToggleIcon /></div>
+        <div class="guide-nav-actions"><RouterLink :to="auth.isAuthenticated ? '/dashboard' : '/home'" class="back-home">{{ auth.isAuthenticated ? copy.console : copy.home }}</RouterLink><LocaleToggle /><ThemeToggleIcon /></div>
       </nav>
     </header>
 
