@@ -177,6 +177,12 @@
                 <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{
                   t('keys.noGroup')
                 }}</span>
+                <span
+                  v-if="extraGroupCount(row) > 0"
+                  class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-dark-700 dark:text-gray-300"
+                  :title="t('keys.extraGroups.moreTitle', { names: extraGroupNames(row) })"
+                  data-test="extra-group-count"
+                >{{ t('keys.extraGroups.more', { count: extraGroupCount(row) }) }}</span>
                 <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.selectGroup') }}</span>
                 <svg
                   class="h-3.5 w-3.5 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
@@ -581,6 +587,41 @@
             </template>
           </Select>
         </div>
+
+        <!-- Extra groups: one key can serve several groups, picked per request by model -->
+        <fieldset v-if="formData.group_id !== null" class="space-y-2" data-test="extra-groups">
+          <legend class="input-label">{{ t('keys.extraGroups.title') }}</legend>
+          <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('keys.extraGroups.hint') }}</p>
+          <p v-if="extraGroupCandidates.length === 0" class="text-xs text-gray-400">
+            {{ t('keys.extraGroups.empty') }}
+          </p>
+          <div v-else class="max-h-44 space-y-1 overflow-y-auto rounded-xl p-1">
+            <label
+              v-for="option in extraGroupCandidates"
+              :key="option.value"
+              class="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-dark-700"
+            >
+              <input
+                v-model="formData.extra_group_ids"
+                type="checkbox"
+                class="checkbox"
+                :value="option.value"
+                data-test="extra-group-checkbox"
+              />
+              <GroupBadge
+                :name="option.label"
+                :platform="option.platform"
+                :subscription-type="option.subscriptionType"
+                :rate-multiplier="option.rate"
+                :user-rate-multiplier="option.userRate"
+                :peak-rate-enabled="option.peakRateEnabled"
+                :peak-start="option.peakStart"
+                :peak-end="option.peakEnd"
+                :peak-rate-multiplier="option.peakRateMultiplier"
+              />
+            </label>
+          </div>
+        </fieldset>
 
         <!-- Custom Key Section (only for create) -->
         <div v-if="!showEditModal" class="space-y-3">
@@ -1437,6 +1478,7 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 const formData = ref({
   name: '',
   group_id: null as number | null,
+  extra_group_ids: [] as number[],
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
   custom_key: '',
@@ -1542,6 +1584,11 @@ const createProviderOptions = computed(() => KEY_GROUP_PROVIDERS.map((value) => 
 const formGroupOptions = computed(() => showEditModal.value
   ? groupOptions.value
   : groupOptions.value.filter((group) => getKeyGroupProvider(group.platform) === createProvider.value)
+)
+
+// 可额外勾选的分组：所有分组里除去当前主分组（不限供应商，这正是多分组的用途）。
+const extraGroupCandidates = computed(() =>
+  groupOptions.value.filter((group) => group.value !== formData.value.group_id)
 )
 
 const selectCreateProvider = (provider: KeyGroupProvider) => {
@@ -1701,6 +1748,15 @@ const handleSort = (key: string, order: 'asc' | 'desc') => {
   loadApiKeys()
 }
 
+// 这把 Key 在主分组之外还绑定了几个分组（表格里显示 +N）。
+const extraGroupCount = (key: ApiKey) =>
+  (key.group_ids ?? []).filter((id) => id !== key.group_id).length
+const extraGroupNames = (key: ApiKey) =>
+  (key.group_ids ?? [])
+    .filter((id) => id !== key.group_id)
+    .map((id) => groups.value.find((group) => group.id === id)?.name ?? `#${id}`)
+    .join('、')
+
 const editKey = (key: ApiKey) => {
   selectedKey.value = key
   const hasIPRestriction = (key.ip_whitelist?.length > 0) || (key.ip_blacklist?.length > 0)
@@ -1708,6 +1764,7 @@ const editKey = (key: ApiKey) => {
   formData.value = {
     name: key.name,
     group_id: key.group_id,
+    extra_group_ids: (key.group_ids ?? []).filter((id) => id !== key.group_id),
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
     use_custom_key: false,
     custom_key: '',
@@ -1859,12 +1916,22 @@ const handleSubmit = async () => {
     rate_limit_7d: formData.value.rate_limit_7d && formData.value.rate_limit_7d > 0 ? formData.value.rate_limit_7d : 0,
   } : { rate_limit_5h: 0, rate_limit_1d: 0, rate_limit_7d: 0 }
 
+  // 附加分组：去掉和主分组重复的、已不存在的，保持勾选顺序。
+  const validGroupIds = new Set(groups.value.map((group) => group.id))
+  const extraGroupIds = formData.value.extra_group_ids.filter(
+    (id) => id !== formData.value.group_id && validGroupIds.has(id)
+  )
+
   submitting.value = true
   try {
     if (showEditModal.value && selectedKey.value) {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
         group_id: formData.value.group_id,
+        // 有附加分组就按「主分组 + 附加」一起提交；没有则沿用 group_id（后端会同时清空附加分组）。
+        ...(extraGroupIds.length > 0
+          ? { group_ids: [formData.value.group_id as number, ...extraGroupIds] }
+          : {}),
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
         quota: quota,
@@ -1888,7 +1955,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        extraGroupIds
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       guideStore.notifyKeyCreated(created?.id)
@@ -1935,6 +2003,7 @@ const closeModals = () => {
   formData.value = {
     name: '',
     group_id: null,
+    extra_group_ids: [],
     status: 'active',
     use_custom_key: false,
     custom_key: '',

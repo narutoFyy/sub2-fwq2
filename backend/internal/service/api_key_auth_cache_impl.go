@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 25 // v25: group image_count_billing switch (per-image billing on image endpoints)
+const apiKeyAuthSnapshotVersion = 26 // v26: extra_group_ids / extra_groups (one key bound to several groups); v25: group image_count_billing switch
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -377,66 +377,13 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		}
 		// 查询失败或无 override 时留 nil，checkRPM 会回退到 DB 查询
 	}
-	if apiKey.Group != nil {
-		snapshot.Group = &APIKeyAuthGroupSnapshot{
-			ID:                              apiKey.Group.ID,
-			Name:                            apiKey.Group.Name,
-			Platform:                        apiKey.Group.Platform,
-			IsExclusive:                     apiKey.Group.IsExclusive,
-			Status:                          apiKey.Group.Status,
-			SubscriptionType:                apiKey.Group.SubscriptionType,
-			RateMultiplier:                  apiKey.Group.RateMultiplier,
-			DailyLimitUSD:                   apiKey.Group.DailyLimitUSD,
-			WeeklyLimitUSD:                  apiKey.Group.WeeklyLimitUSD,
-			MonthlyLimitUSD:                 apiKey.Group.MonthlyLimitUSD,
-			AllowImageGeneration:            apiKey.Group.AllowImageGeneration,
-			AllowBatchImageGeneration:       apiKey.Group.AllowBatchImageGeneration,
-			ImageCountBilling:               apiKey.Group.ImageCountBilling,
-			ImageRateIndependent:            apiKey.Group.ImageRateIndependent,
-			ImageRateMultiplier:             apiKey.Group.ImageRateMultiplier,
-			ImagePrice1K:                    apiKey.Group.ImagePrice1K,
-			ImagePrice2K:                    apiKey.Group.ImagePrice2K,
-			ImagePrice4K:                    apiKey.Group.ImagePrice4K,
-			VideoRateIndependent:            apiKey.Group.VideoRateIndependent,
-			VideoRateMultiplier:             apiKey.Group.VideoRateMultiplier,
-			VideoPrice480P:                  apiKey.Group.VideoPrice480P,
-			VideoPrice720P:                  apiKey.Group.VideoPrice720P,
-			VideoPrice1080P:                 apiKey.Group.VideoPrice1080P,
-			VideoModelPrices:                NormalizeVideoModelPrices(apiKey.Group.VideoModelPrices),
-			WebSearchPricePerCall:           apiKey.Group.WebSearchPricePerCall,
-			SearchPricePer1k:                apiKey.Group.SearchPricePer1k,
-			AudioRealtimePricePerMin:        apiKey.Group.AudioRealtimePricePerMin,
-			AudioTTSPricePerMillionChars:    apiKey.Group.AudioTTSPricePerMillionChars,
-			AudioSTTPricePerHour:            apiKey.Group.AudioSTTPricePerHour,
-			LongContextPricingEnabled:       apiKey.Group.LongContextPricingEnabled,
-			ModelPricing:                    apiKey.Group.ModelPricing,
-			ClaudeCodeOnly:                  apiKey.Group.ClaudeCodeOnly,
-			FallbackGroupID:                 apiKey.Group.FallbackGroupID,
-			FallbackGroupIDOnInvalidRequest: apiKey.Group.FallbackGroupIDOnInvalidRequest,
-			ModelRouting:                    apiKey.Group.ModelRouting,
-			ModelRoutingEnabled:             apiKey.Group.ModelRoutingEnabled,
-			MCPXMLInject:                    apiKey.Group.MCPXMLInject,
-			SupportedModelScopes:            apiKey.Group.SupportedModelScopes,
-			AllowMessagesDispatch:           apiKey.Group.AllowMessagesDispatch,
-			AllowLive:                       apiKey.Group.AllowLive,
-			ForceOpenAIFast:                 apiKey.Group.ForceOpenAIFast,
-			FreeOpenAIFast:                  apiKey.Group.FreeOpenAIFast,
-			DefaultMappedModel:              apiKey.Group.DefaultMappedModel,
-			MessagesDispatchModelConfig:     apiKey.Group.MessagesDispatchModelConfig,
-			ModelAllowlist:                  apiKey.Group.ModelAllowlist,
-			CodexModelsManifestConfig:       apiKey.Group.CodexModelsManifestConfig,
-			RPMLimit:                        apiKey.Group.RPMLimit,
-			MaxReasoningEffort:              apiKey.Group.MaxReasoningEffort,
-			MaxReasoningEffortOverLimit:     apiKey.Group.MaxReasoningEffortOverLimit,
-			ReasoningEffortMappings:         apiKey.Group.ReasoningEffortMappings,
-			PeakRateEnabled:                 apiKey.Group.PeakRateEnabled,
-			PeakStart:                       apiKey.Group.PeakStart,
-			PeakEnd:                         apiKey.Group.PeakEnd,
-			PeakRateMultiplier:              apiKey.Group.PeakRateMultiplier,
-			ProfitControlEnabled:            apiKey.Group.ProfitControlEnabled,
-			ProfitMinMargin:                 apiKey.Group.ProfitMinMargin,
-			ProfitSafetyBuffer:              apiKey.Group.ProfitSafetyBuffer,
+	snapshot.Group = authGroupSnapshotFromGroup(apiKey.Group)
+	snapshot.ExtraGroupIDs = apiKey.ExtraGroupIDs
+	for _, g := range apiKey.ExtraGroups {
+		if g == nil {
+			continue
 		}
+		snapshot.ExtraGroups = append(snapshot.ExtraGroups, authGroupSnapshotFromGroup(g))
 	}
 	return snapshot
 }
@@ -479,68 +426,148 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			UserGroupRPMOverride:       snapshot.User.UserGroupRPMOverride,
 		},
 	}
-	if snapshot.Group != nil {
-		apiKey.Group = &Group{
-			ID:                              snapshot.Group.ID,
-			Name:                            snapshot.Group.Name,
-			Platform:                        snapshot.Group.Platform,
-			IsExclusive:                     snapshot.Group.IsExclusive,
-			Status:                          snapshot.Group.Status,
-			Hydrated:                        true,
-			SubscriptionType:                snapshot.Group.SubscriptionType,
-			RateMultiplier:                  snapshot.Group.RateMultiplier,
-			DailyLimitUSD:                   snapshot.Group.DailyLimitUSD,
-			WeeklyLimitUSD:                  snapshot.Group.WeeklyLimitUSD,
-			MonthlyLimitUSD:                 snapshot.Group.MonthlyLimitUSD,
-			AllowImageGeneration:            snapshot.Group.AllowImageGeneration,
-			AllowBatchImageGeneration:       snapshot.Group.AllowBatchImageGeneration,
-			ImageCountBilling:               snapshot.Group.ImageCountBilling,
-			ImageRateIndependent:            snapshot.Group.ImageRateIndependent,
-			ImageRateMultiplier:             snapshot.Group.ImageRateMultiplier,
-			ImagePrice1K:                    snapshot.Group.ImagePrice1K,
-			ImagePrice2K:                    snapshot.Group.ImagePrice2K,
-			ImagePrice4K:                    snapshot.Group.ImagePrice4K,
-			VideoRateIndependent:            snapshot.Group.VideoRateIndependent,
-			VideoRateMultiplier:             snapshot.Group.VideoRateMultiplier,
-			VideoPrice480P:                  snapshot.Group.VideoPrice480P,
-			VideoPrice720P:                  snapshot.Group.VideoPrice720P,
-			VideoPrice1080P:                 snapshot.Group.VideoPrice1080P,
-			VideoModelPrices:                NormalizeVideoModelPrices(snapshot.Group.VideoModelPrices),
-			WebSearchPricePerCall:           snapshot.Group.WebSearchPricePerCall,
-			SearchPricePer1k:                snapshot.Group.SearchPricePer1k,
-			AudioRealtimePricePerMin:        snapshot.Group.AudioRealtimePricePerMin,
-			AudioTTSPricePerMillionChars:    snapshot.Group.AudioTTSPricePerMillionChars,
-			AudioSTTPricePerHour:            snapshot.Group.AudioSTTPricePerHour,
-			LongContextPricingEnabled:       snapshot.Group.LongContextPricingEnabled,
-			ModelPricing:                    snapshot.Group.ModelPricing,
-			ClaudeCodeOnly:                  snapshot.Group.ClaudeCodeOnly,
-			FallbackGroupID:                 snapshot.Group.FallbackGroupID,
-			FallbackGroupIDOnInvalidRequest: snapshot.Group.FallbackGroupIDOnInvalidRequest,
-			ModelRouting:                    snapshot.Group.ModelRouting,
-			ModelRoutingEnabled:             snapshot.Group.ModelRoutingEnabled,
-			MCPXMLInject:                    snapshot.Group.MCPXMLInject,
-			SupportedModelScopes:            snapshot.Group.SupportedModelScopes,
-			AllowMessagesDispatch:           snapshot.Group.AllowMessagesDispatch,
-			AllowLive:                       snapshot.Group.AllowLive,
-			ForceOpenAIFast:                 snapshot.Group.ForceOpenAIFast,
-			FreeOpenAIFast:                  snapshot.Group.FreeOpenAIFast,
-			DefaultMappedModel:              snapshot.Group.DefaultMappedModel,
-			MessagesDispatchModelConfig:     snapshot.Group.MessagesDispatchModelConfig,
-			ModelAllowlist:                  snapshot.Group.ModelAllowlist,
-			CodexModelsManifestConfig:       snapshot.Group.CodexModelsManifestConfig,
-			RPMLimit:                        snapshot.Group.RPMLimit,
-			MaxReasoningEffort:              snapshot.Group.MaxReasoningEffort,
-			MaxReasoningEffortOverLimit:     snapshot.Group.MaxReasoningEffortOverLimit,
-			ReasoningEffortMappings:         snapshot.Group.ReasoningEffortMappings,
-			PeakRateEnabled:                 snapshot.Group.PeakRateEnabled,
-			PeakStart:                       snapshot.Group.PeakStart,
-			PeakEnd:                         snapshot.Group.PeakEnd,
-			PeakRateMultiplier:              snapshot.Group.PeakRateMultiplier,
-			ProfitControlEnabled:            snapshot.Group.ProfitControlEnabled,
-			ProfitMinMargin:                 snapshot.Group.ProfitMinMargin,
-			ProfitSafetyBuffer:              snapshot.Group.ProfitSafetyBuffer,
+	apiKey.Group = groupFromAuthGroupSnapshot(snapshot.Group)
+	apiKey.ExtraGroupIDs = snapshot.ExtraGroupIDs
+	for _, g := range snapshot.ExtraGroups {
+		if g == nil {
+			continue
 		}
+		apiKey.ExtraGroups = append(apiKey.ExtraGroups, groupFromAuthGroupSnapshot(g))
 	}
 	s.compileAPIKeyIPRules(apiKey)
 	return apiKey
+}
+
+// authGroupSnapshotFromGroup 把分组物化成认证快照里的分组快照；主分组与附加分组共用。
+// 新增快照分组字段时只改这里与 groupFromAuthGroupSnapshot，以及仓储里的认证投影。
+func authGroupSnapshotFromGroup(g *Group) *APIKeyAuthGroupSnapshot {
+	if g == nil {
+		return nil
+	}
+	return &APIKeyAuthGroupSnapshot{
+		ID:                              g.ID,
+		Name:                            g.Name,
+		Platform:                        g.Platform,
+		IsExclusive:                     g.IsExclusive,
+		Status:                          g.Status,
+		SubscriptionType:                g.SubscriptionType,
+		RateMultiplier:                  g.RateMultiplier,
+		DailyLimitUSD:                   g.DailyLimitUSD,
+		WeeklyLimitUSD:                  g.WeeklyLimitUSD,
+		MonthlyLimitUSD:                 g.MonthlyLimitUSD,
+		AllowImageGeneration:            g.AllowImageGeneration,
+		AllowBatchImageGeneration:       g.AllowBatchImageGeneration,
+		ImageCountBilling:               g.ImageCountBilling,
+		ImageRateIndependent:            g.ImageRateIndependent,
+		ImageRateMultiplier:             g.ImageRateMultiplier,
+		ImagePrice1K:                    g.ImagePrice1K,
+		ImagePrice2K:                    g.ImagePrice2K,
+		ImagePrice4K:                    g.ImagePrice4K,
+		VideoRateIndependent:            g.VideoRateIndependent,
+		VideoRateMultiplier:             g.VideoRateMultiplier,
+		VideoPrice480P:                  g.VideoPrice480P,
+		VideoPrice720P:                  g.VideoPrice720P,
+		VideoPrice1080P:                 g.VideoPrice1080P,
+		VideoModelPrices:                NormalizeVideoModelPrices(g.VideoModelPrices),
+		WebSearchPricePerCall:           g.WebSearchPricePerCall,
+		SearchPricePer1k:                g.SearchPricePer1k,
+		AudioRealtimePricePerMin:        g.AudioRealtimePricePerMin,
+		AudioTTSPricePerMillionChars:    g.AudioTTSPricePerMillionChars,
+		AudioSTTPricePerHour:            g.AudioSTTPricePerHour,
+		LongContextPricingEnabled:       g.LongContextPricingEnabled,
+		ModelPricing:                    g.ModelPricing,
+		ClaudeCodeOnly:                  g.ClaudeCodeOnly,
+		FallbackGroupID:                 g.FallbackGroupID,
+		FallbackGroupIDOnInvalidRequest: g.FallbackGroupIDOnInvalidRequest,
+		ModelRouting:                    g.ModelRouting,
+		ModelRoutingEnabled:             g.ModelRoutingEnabled,
+		MCPXMLInject:                    g.MCPXMLInject,
+		SupportedModelScopes:            g.SupportedModelScopes,
+		AllowMessagesDispatch:           g.AllowMessagesDispatch,
+		AllowLive:                       g.AllowLive,
+		ForceOpenAIFast:                 g.ForceOpenAIFast,
+		FreeOpenAIFast:                  g.FreeOpenAIFast,
+		DefaultMappedModel:              g.DefaultMappedModel,
+		MessagesDispatchModelConfig:     g.MessagesDispatchModelConfig,
+		ModelAllowlist:                  g.ModelAllowlist,
+		CodexModelsManifestConfig:       g.CodexModelsManifestConfig,
+		RPMLimit:                        g.RPMLimit,
+		MaxReasoningEffort:              g.MaxReasoningEffort,
+		MaxReasoningEffortOverLimit:     g.MaxReasoningEffortOverLimit,
+		ReasoningEffortMappings:         g.ReasoningEffortMappings,
+		PeakRateEnabled:                 g.PeakRateEnabled,
+		PeakStart:                       g.PeakStart,
+		PeakEnd:                         g.PeakEnd,
+		PeakRateMultiplier:              g.PeakRateMultiplier,
+		ProfitControlEnabled:            g.ProfitControlEnabled,
+		ProfitMinMargin:                 g.ProfitMinMargin,
+		ProfitSafetyBuffer:              g.ProfitSafetyBuffer,
+	}
+}
+
+// groupFromAuthGroupSnapshot 是 authGroupSnapshotFromGroup 的逆操作。
+func groupFromAuthGroupSnapshot(sn *APIKeyAuthGroupSnapshot) *Group {
+	if sn == nil {
+		return nil
+	}
+	return &Group{
+		ID:                              sn.ID,
+		Name:                            sn.Name,
+		Platform:                        sn.Platform,
+		IsExclusive:                     sn.IsExclusive,
+		Status:                          sn.Status,
+		Hydrated:                        true,
+		SubscriptionType:                sn.SubscriptionType,
+		RateMultiplier:                  sn.RateMultiplier,
+		DailyLimitUSD:                   sn.DailyLimitUSD,
+		WeeklyLimitUSD:                  sn.WeeklyLimitUSD,
+		MonthlyLimitUSD:                 sn.MonthlyLimitUSD,
+		AllowImageGeneration:            sn.AllowImageGeneration,
+		AllowBatchImageGeneration:       sn.AllowBatchImageGeneration,
+		ImageCountBilling:               sn.ImageCountBilling,
+		ImageRateIndependent:            sn.ImageRateIndependent,
+		ImageRateMultiplier:             sn.ImageRateMultiplier,
+		ImagePrice1K:                    sn.ImagePrice1K,
+		ImagePrice2K:                    sn.ImagePrice2K,
+		ImagePrice4K:                    sn.ImagePrice4K,
+		VideoRateIndependent:            sn.VideoRateIndependent,
+		VideoRateMultiplier:             sn.VideoRateMultiplier,
+		VideoPrice480P:                  sn.VideoPrice480P,
+		VideoPrice720P:                  sn.VideoPrice720P,
+		VideoPrice1080P:                 sn.VideoPrice1080P,
+		VideoModelPrices:                NormalizeVideoModelPrices(sn.VideoModelPrices),
+		WebSearchPricePerCall:           sn.WebSearchPricePerCall,
+		SearchPricePer1k:                sn.SearchPricePer1k,
+		AudioRealtimePricePerMin:        sn.AudioRealtimePricePerMin,
+		AudioTTSPricePerMillionChars:    sn.AudioTTSPricePerMillionChars,
+		AudioSTTPricePerHour:            sn.AudioSTTPricePerHour,
+		LongContextPricingEnabled:       sn.LongContextPricingEnabled,
+		ModelPricing:                    sn.ModelPricing,
+		ClaudeCodeOnly:                  sn.ClaudeCodeOnly,
+		FallbackGroupID:                 sn.FallbackGroupID,
+		FallbackGroupIDOnInvalidRequest: sn.FallbackGroupIDOnInvalidRequest,
+		ModelRouting:                    sn.ModelRouting,
+		ModelRoutingEnabled:             sn.ModelRoutingEnabled,
+		MCPXMLInject:                    sn.MCPXMLInject,
+		SupportedModelScopes:            sn.SupportedModelScopes,
+		AllowMessagesDispatch:           sn.AllowMessagesDispatch,
+		AllowLive:                       sn.AllowLive,
+		ForceOpenAIFast:                 sn.ForceOpenAIFast,
+		FreeOpenAIFast:                  sn.FreeOpenAIFast,
+		DefaultMappedModel:              sn.DefaultMappedModel,
+		MessagesDispatchModelConfig:     sn.MessagesDispatchModelConfig,
+		ModelAllowlist:                  sn.ModelAllowlist,
+		CodexModelsManifestConfig:       sn.CodexModelsManifestConfig,
+		RPMLimit:                        sn.RPMLimit,
+		MaxReasoningEffort:              sn.MaxReasoningEffort,
+		MaxReasoningEffortOverLimit:     sn.MaxReasoningEffortOverLimit,
+		ReasoningEffortMappings:         sn.ReasoningEffortMappings,
+		PeakRateEnabled:                 sn.PeakRateEnabled,
+		PeakStart:                       sn.PeakStart,
+		PeakEnd:                         sn.PeakEnd,
+		PeakRateMultiplier:              sn.PeakRateMultiplier,
+		ProfitControlEnabled:            sn.ProfitControlEnabled,
+		ProfitMinMargin:                 sn.ProfitMinMargin,
+		ProfitSafetyBuffer:              sn.ProfitSafetyBuffer,
+	}
 }

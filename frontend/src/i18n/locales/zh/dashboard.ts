@@ -107,6 +107,14 @@ export default {
     noGroup: '无分组',
     searchGroup: '搜索分组...',
     noGroupFound: '未找到匹配的分组',
+    extraGroups: {
+      title: '同时使用其他分组（可选）',
+      hint: '勾选后，这把密钥可以同时调用这些分组的模型：请求会按模型名自动选分组（如 gpt-* 走 OpenAI 分组、claude-* 走 Claude 分组）。上面选的是主分组，无法识别的模型名默认走主分组。',
+      empty: '没有其他可选分组',
+      selected: '已额外选择 {count} 个',
+      more: '+{count} 个分组',
+      moreTitle: '同时绑定：{names}'
+    },
     created: '创建时间',
     copyToClipboard: '复制到剪贴板',
     copied: '已复制！',

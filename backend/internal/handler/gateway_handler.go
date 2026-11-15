@@ -1145,6 +1145,15 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		platform = forcedPlatform
 	}
 
+	// 一把 Key 绑定了多个分组：模型列表取所有绑定分组的并集（带 :model 的单模型查询
+	// 已由鉴权中间件按该模型选好分组，走下面的单分组路径）。
+	if apiKey != nil && apiKey.HasExtraGroups() && strings.TrimSpace(c.Param("model")) == "" {
+		if _, forced := middleware2.GetForcePlatformFromContext(c); !forced {
+			h.multiGroupModels(c, apiKey)
+			return
+		}
+	}
+
 	if platform == service.PlatformOpenAI && apiKey != nil && apiKey.Group != nil &&
 		apiKey.Group.Platform == service.PlatformOpenAI && apiKey.Group.CodexModelsManifestConfig.Enabled {
 		h.pinnedOpenAIModels(c, apiKey.Group)
@@ -2625,4 +2634,53 @@ func (h *GatewayHandler) getUserMsgQueueMode(account *service.Account, parsed *s
 		mode = h.cfg.Gateway.UserMessageQueue.GetEffectiveMode()
 	}
 	return mode
+}
+
+// multiGroupModels 列出一把多分组 Key 能用的全部模型（各分组可用模型的并集，按分组优先级排序）。
+// 客户端带 anthropic-version / x-api-key 时用 Claude 的列表格式，否则用 OpenAI 格式。
+func (h *GatewayHandler) multiGroupModels(c *gin.Context, apiKey *service.APIKey) {
+	ctx := c.Request.Context()
+	groups := make([]*service.Group, 0, 1+len(apiKey.ExtraGroups))
+	if apiKey.Group != nil {
+		groups = append(groups, apiKey.Group)
+	}
+	groups = append(groups, apiKey.ExtraGroups...)
+
+	var merged []string
+	for _, g := range groups {
+		if g == nil || !g.IsActive() {
+			continue
+		}
+		merged = mergeModelIDs(merged, h.modelIDsForListingGroup(ctx, g))
+	}
+
+	if c.GetHeader("anthropic-version") != "" || c.GetHeader("x-api-key") != "" {
+		writeModelsList(c, service.PlatformAnthropic, merged)
+		return
+	}
+	writeOpenAIModelsList(c, merged)
+}
+
+// modelIDsForListingGroup 是 Models 单分组分支的「模型 ID 列表」部分，供多分组合并复用。
+func (h *GatewayHandler) modelIDsForListingGroup(ctx context.Context, g *service.Group) []string {
+	groupID := &g.ID
+	platform := g.Platform
+	if platform == service.PlatformComposite {
+		models := h.compositeAvailableModels(ctx, groupID, "", true)
+		if len(models) == 0 {
+			models = defaultModelIDsForPlatform(service.PlatformComposite)
+		}
+		if g.ModelAllowlistEnabled() {
+			return g.ModelAllowlist.FilterForListing(models)
+		}
+		return models
+	}
+	available := h.gatewayService.GetAvailableModels(ctx, groupID, platform)
+	if g.ModelAllowlistEnabled() {
+		return g.ModelAllowlist.FilterForListing(modelListingSource(platform, available, defaultModelIDsForPlatform(platform)))
+	}
+	if len(available) > 0 || (platform == service.PlatformOpenAI && available != nil) {
+		return available
+	}
+	return defaultModelIDsForPlatform(platform)
 }

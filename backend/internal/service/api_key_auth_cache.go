@@ -15,6 +15,11 @@ type APIKeyAuthSnapshot struct {
 	User        APIKeyAuthUserSnapshot   `json:"user"`
 	Group       *APIKeyAuthGroupSnapshot `json:"group,omitempty"`
 
+	// ExtraGroupIDs / ExtraGroups：主分组之外附加绑定的分组（按优先级），
+	// 用于按模型在多个分组里选一个（SelectGroupForModel）。
+	ExtraGroupIDs []int64                    `json:"extra_group_ids,omitempty"`
+	ExtraGroups   []*APIKeyAuthGroupSnapshot `json:"extra_groups,omitempty"`
+
 	// Quota fields for API Key independent quota feature
 	Quota     float64 `json:"quota"`      // Quota limit in USD (0 = unlimited)
 	QuotaUsed float64 `json:"quota_used"` // Used quota amount

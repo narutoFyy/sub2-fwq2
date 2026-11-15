@@ -782,6 +782,8 @@ export interface ApiKey {
   key: string
   name: string
   group_id: number | null
+  /** 绑定的全部分组：主分组在前，其余是附加分组（顺序即优先级）。 */
+  group_ids?: number[]
   status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'
   ip_whitelist: string[]
   ip_blacklist: string[]
@@ -811,6 +813,8 @@ export interface ApiKey {
 export interface CreateApiKeyRequest {
   name: string
   group_id?: number | null
+  /** 绑定多个分组（第一个为主分组）；传了就忽略 group_id。 */
+  group_ids?: number[]
   custom_key?: string // Optional custom API Key
   ip_whitelist?: string[]
   ip_blacklist?: string[]
@@ -824,6 +828,8 @@ export interface CreateApiKeyRequest {
 export interface UpdateApiKeyRequest {
   name?: string
   group_id?: number | null
+  /** 绑定多个分组（第一个为主分组）；传了就忽略 group_id，空数组等同不改。 */
+  group_ids?: number[]
   status?: 'active' | 'inactive'
   ip_whitelist?: string[]
   ip_blacklist?: string[]

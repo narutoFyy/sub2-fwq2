@@ -178,6 +178,9 @@ const DataTableStub = {
         </div>
         <slot name="cell-name" :value="row.name" :row="row" />
         <slot name="cell-actions" :row="row" />
+        <div data-test="group-cell">
+          <slot name="cell-group" :value="row.group_id" :row="row" />
+        </div>
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
         </div>
@@ -616,6 +619,80 @@ describe('user KeysView column settings', () => {
       await flushPromises()
       expect(keysAPI.create).toHaveBeenCalledOnce()
       expect(vi.mocked(keysAPI.create).mock.calls[0].slice(0, 2)).toEqual(['My key', 5])
+    })
+
+    describe('multi-group keys', () => {
+      const extraBoxes = (wrapper: VueWrapper) => wrapper.findAll<HTMLInputElement>('[data-test="extra-group-checkbox"]')
+
+      it('hides the extra group picker until a primary group is chosen, then lists every other group', async () => {
+        const wrapper = await openCreate()
+        expect(wrapper.find('[data-test="extra-groups"]').exists()).toBe(false)
+        await groupSelect(wrapper).vm.$emit('update:modelValue', 1)
+        await nextTick()
+        expect(wrapper.find('[data-test="extra-groups"]').exists()).toBe(true)
+        // 11 其他分组，不含主分组；跨供应商也可选。
+        expect(extraBoxes(wrapper)).toHaveLength(availableGroups.length - 1)
+        expect(extraBoxes(wrapper).map((box) => Number(box.element.value))).not.toContain(1)
+      })
+
+      it('creates a key bound to the primary group plus the checked extra groups', async () => {
+        const wrapper = await openCreate()
+        await wrapper.get('[data-tour="key-form-name"]').setValue('Everything')
+        await groupSelect(wrapper).vm.$emit('update:modelValue', 1)
+        await nextTick()
+        const box = (id: number) => extraBoxes(wrapper).find((b) => Number(b.element.value) === id)!
+        await box(2).setValue(true)
+        await box(7).setValue(true)
+        vi.mocked(keysAPI.create).mockResolvedValue({ ...createApiKey(), group_id: 1 })
+        await wrapper.get('#key-form').trigger('submit')
+        await flushPromises()
+        const call = vi.mocked(keysAPI.create).mock.calls[0]
+        expect(call.slice(0, 2)).toEqual(['Everything', 1])
+        expect(call[8]).toEqual([2, 7])
+      })
+
+      it('sends no extra groups for an ordinary single-group key', async () => {
+        const wrapper = await openCreate()
+        await wrapper.get('[data-tour="key-form-name"]').setValue('Single')
+        await groupSelect(wrapper).vm.$emit('update:modelValue', 1)
+        vi.mocked(keysAPI.create).mockResolvedValue({ ...createApiKey(), group_id: 1 })
+        await wrapper.get('#key-form').trigger('submit')
+        await flushPromises()
+        expect(vi.mocked(keysAPI.create).mock.calls[0][8]).toEqual([])
+      })
+
+      it('preloads the bound groups when editing and submits them together with the primary group', async () => {
+        const key: ApiKey = { ...createApiKey(), group_id: 1, group_ids: [1, 2, 3] }
+        listKeys.mockResolvedValueOnce({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+        updateKey.mockResolvedValue(key)
+        const wrapper = await mountView()
+        await getButtonByText(wrapper, 'common.edit').trigger('click')
+        const checked = extraBoxes(wrapper).filter((b) => b.element.checked).map((b) => Number(b.element.value))
+        expect(checked).toEqual([2, 3])
+        await wrapper.get('#key-form').trigger('submit')
+        await flushPromises()
+        expect(updateKey).toHaveBeenCalledWith(key.id, expect.objectContaining({ group_id: 1, group_ids: [1, 2, 3] }))
+      })
+
+      it('keeps the single-group payload when editing a key without extra groups', async () => {
+        const key: ApiKey = { ...createApiKey(), group_id: 1, group_ids: [1] }
+        listKeys.mockResolvedValueOnce({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+        updateKey.mockResolvedValue(key)
+        const wrapper = await mountView()
+        await getButtonByText(wrapper, 'common.edit').trigger('click')
+        await wrapper.get('#key-form').trigger('submit')
+        await flushPromises()
+        const payload = updateKey.mock.calls[0][1]
+        expect(payload.group_id).toBe(1)
+        expect('group_ids' in payload).toBe(false)
+      })
+
+      it('shows how many extra groups a key is bound to in the table', async () => {
+        const key: ApiKey = { ...createApiKey(), group_id: 1, group_ids: [1, 2, 3] }
+        listKeys.mockResolvedValueOnce({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+        const wrapper = await mountView()
+        expect(wrapper.get('[data-test="extra-group-count"]').text()).toBe('keys.extraGroups.more')
+      })
     })
 
     it('defaults to a provider with available groups and disables empty categories', async () => {

@@ -157,6 +157,10 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			AbortWithError(c, 401, "USER_INACTIVE", "User account is not active")
 			return
 		}
+		// 一把 Key 绑定多个分组时，按请求的模型选出本次要用的分组（换掉 apiKey.Group）。
+		if !selectAPIKeyGroupForRequest(c, apiKey) {
+			return
+		}
 		if abortIfAPIKeyGroupUnavailable(c, apiKey) {
 			return
 		}
