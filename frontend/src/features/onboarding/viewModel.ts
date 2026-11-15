@@ -15,6 +15,8 @@ export type GuideBlock =
   | { type: 'note'; text: string }
   /** 带脉冲小点的等待状态（如「正在等待第一次调用」）。 */
   | { type: 'status'; text: string }
+  /** 推荐模型：名字 + 一句话能力介绍。 */
+  | { type: 'models'; heading: string; hint?: string; items: { name: string; pitch: string; tag?: string }[] }
 
 export interface GuideAction {
   label: string
@@ -39,6 +41,8 @@ export interface GuideView {
   body?: string
   hint?: string
   list?: string[]
+  /** 小步骤清单（建密钥弹窗里的「起名字 → 选分组 → 点创建」），做到哪一步打勾到哪一步。 */
+  checklist?: { label: string; state: 'done' | 'active' | 'todo' }[]
   options?: GuideClientOption[]
   blocks?: GuideBlock[]
   /** 宽一点的卡片（下载页内容多）。 */

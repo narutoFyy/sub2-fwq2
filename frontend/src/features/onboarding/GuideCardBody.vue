@@ -15,6 +15,12 @@ const props = defineProps<{
   confirming: boolean
   /** 右上角的「跳过引导」；欢迎页（已有显式按钮）和成功页不显示。 */
   showSkip: boolean
+  /** 左上角返回箭头：有可回去的上一步时才显示。 */
+  canBack?: boolean
+  /** 左下角「不想配置？加群找管理员」：配置完成后不再显示。 */
+  showSupport?: boolean
+  /** 右下角「图文教程」链接（新标签页打开）。 */
+  tutorialHref?: string
 }>()
 
 const emit = defineEmits<{
@@ -23,6 +29,7 @@ const emit = defineEmits<{
   confirmSkip: []
   cancelSkip: []
   collapse: []
+  back: []
 }>()
 
 const copy = useGuideCopy()
@@ -43,6 +50,9 @@ const stageLabel = computed(() => {
 <template>
   <div class="og-body">
     <div v-if="stage >= 0" class="og-top">
+      <button v-if="canBack && !confirming && !completing" type="button" class="og-back" :aria-label="copy.backArrow" :title="copy.backArrow" @click="emit('back')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+      </button>
       <div class="og-stages" role="progressbar" aria-valuemin="1" :aria-valuemax="copy.stages.length" :aria-valuenow="stage + 1" :aria-label="stageLabel">
         <span v-for="(_, i) in copy.stages" :key="i" class="og-stage" :class="{ 'is-done': i < stage, 'is-active': i === stage }"><i></i></span>
         <span class="og-stage-label">{{ stageLabel }}</span>
@@ -74,6 +84,15 @@ const stageLabel = computed(() => {
 
         <ol v-if="isWelcome" class="og-path">
           <li v-for="(label, i) in copy.stages" :key="label" :style="{ '--i': i }"><span>{{ i + 1 }}</span>{{ label }}</li>
+        </ol>
+
+        <ol v-if="view.checklist" class="og-checklist">
+          <li v-for="(item, i) in view.checklist" :key="item.label" :class="`is-${item.state}`">
+            <span aria-hidden="true">
+              <svg v-if="item.state === 'done'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+              <template v-else>{{ i + 1 }}</template>
+            </span>{{ item.label }}
+          </li>
         </ol>
 
         <ol v-if="view.list" class="og-list">
@@ -109,8 +128,12 @@ const stageLabel = computed(() => {
     </Transition>
 
     <footer class="og-foot">
-      <GuideSupport />
-      <button v-if="quietAction && !confirming && !completing" type="button" class="og-link" @click="quietAction.run()">{{ quietAction.label }}</button>
+      <GuideSupport v-if="showSupport !== false" />
+      <span v-else></span>
+      <span class="og-foot-end">
+        <button v-if="quietAction && !confirming && !completing" type="button" class="og-link" @click="quietAction.run()">{{ quietAction.label }}</button>
+        <a v-if="tutorialHref" class="og-link" :href="tutorialHref" target="_blank" rel="noopener">{{ copy.tutorial }}</a>
+      </span>
     </footer>
   </div>
 </template>

@@ -56,18 +56,29 @@ export const guideCopyZh = {
   },
   keyName: {
     title: '给密钥起个名字',
-    body: (client: string) => `随便起一个方便你认出来的名字，比如「我的 ${client || '密钥'}」。填好后再选分组。`
+    body: (client: string) => `随便起一个方便你认出来的名字，比如「我的 ${client || '密钥'}」。填好后按回车，或点「下一步」。`,
+    next: '下一步'
   },
   keyForm: {
-    title: '确认类型并选择分组',
-    body: (client: string) => `已按你选的 ${client} 选好类型。选一个分组（倍率越低越便宜），然后点「创建」。`,
-    bodyChat: '选一个分组（倍率越低越便宜），然后点「创建」。'
+    title: '选择分组',
+    body: (client: string) => `已按你选的 ${client} 选好类型。点开下拉框选一个分组，倍率越低越便宜。`,
+    bodyChat: '点开下拉框选一个分组，倍率越低越便宜。'
   },
+  keySubmit: {
+    title: '点「创建」',
+    body: '分组选好了，点弹窗右下角的「创建」就完成了。',
+    multi: '还可以在下面多勾几个分组，一把密钥用所有模型（可忽略）。'
+  },
+  keySteps: ['起名字', '选分组', '点创建'],
   chatGo: {
     title: '密钥好了，去聊天吧',
     body: '聊天页会自动用上你刚建的密钥，选个模型、发一句话就行。',
     bodyFortune: '已为你备好「玄学测算」：报上出生日期和时辰，或者点一个快捷问题就能开始。',
-    open: '打开聊天页'
+    open: '打开聊天页',
+    modelsHeading: '推荐模型（已默认选好第一个）',
+    modelsHeadingFortune: '测算推荐用 Claude Opus 5.5（已默认选好），想看得更深可以换 Fable 5.2',
+    modelsHint: '在聊天页顶部的「模型」里随时切换。',
+    defaultTag: '默认'
   },
   ccs: {
     title: (tool: string) => `${tool} 和 CC Switch 都装好了吗？`,
@@ -172,6 +183,8 @@ export const guideCopyZh = {
   done: { redeem: '兑换成功', key: '密钥已创建' },
 
   back: '上一步',
+  backArrow: '返回上一步',
+  tutorial: '图文教程',
   skip: '跳过引导',
   skipConfirmTitle: '确定跳过引导吗？',
   skipConfirmBody: '跳过后不会再自动提示，首页上的图文教程随时可以看。',
@@ -245,18 +258,29 @@ export const guideCopyEn: GuideCopy = {
   },
   keyName: {
     title: 'Name your key',
-    body: (client: string) => `Pick any name you will recognize, e.g. “My ${client || 'key'}”. Then choose a group.`
+    body: (client: string) => `Pick any name you will recognize, e.g. “My ${client || 'key'}”. Then press Enter or click Next.`,
+    next: 'Next'
   },
   keyForm: {
-    title: 'Confirm type and pick a group',
-    body: (client: string) => `We preselected the type for ${client}. Pick a group (lower rate = cheaper), then click Create.`,
-    bodyChat: 'Pick a group (lower rate = cheaper), then click Create.'
+    title: 'Pick a group',
+    body: (client: string) => `We preselected the type for ${client}. Open the dropdown and pick a group (lower rate = cheaper).`,
+    bodyChat: 'Open the dropdown and pick a group (lower rate = cheaper).'
   },
+  keySubmit: {
+    title: 'Click Create',
+    body: 'Group picked. Click Create at the bottom right of the dialog and you are done.',
+    multi: 'You can also tick more groups below so one key works with every model (optional).'
+  },
+  keySteps: ['Name it', 'Pick a group', 'Create'],
   chatGo: {
     title: 'Key ready — let\'s chat',
     body: 'The chat page uses the key you just created. Pick a model and send a message.',
     bodyFortune: 'A fortune-reading chat is ready: share your birth date and time, or tap a quick question to begin.',
-    open: 'Open chat'
+    open: 'Open chat',
+    modelsHeading: 'Recommended models (the first is preselected)',
+    modelsHeadingFortune: 'Readings work best with Claude Opus 5.5 (preselected); switch to Fable 5.2 for deeper answers',
+    modelsHint: 'Switch any time from Model at the top of the chat page.',
+    defaultTag: 'Default'
   },
   ccs: {
     title: (tool: string) => `Are ${tool} and CC Switch installed?`,
@@ -361,6 +385,8 @@ export const guideCopyEn: GuideCopy = {
   done: { redeem: 'Redeemed', key: 'Key created' },
 
   back: 'Back',
+  backArrow: 'Back to previous step',
+  tutorial: 'Step-by-step guide',
   skip: 'Skip guide',
   skipConfirmTitle: 'Skip the guide?',
   skipConfirmBody: "You won't be prompted again. The illustrated guides on the home page are always there.",

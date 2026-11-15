@@ -37,6 +37,17 @@ onBeforeUnmount(() => clearTimeout(timer))
         <p class="og-block-note">{{ block.text }}</p>
       </template>
 
+      <template v-else-if="block.type === 'models'">
+        <p class="og-models-head">{{ block.heading }}</p>
+        <ul class="og-models">
+          <li v-for="item in block.items" :key="item.name">
+            <strong>{{ item.name }}<em v-if="item.tag">{{ item.tag }}</em></strong>
+            <span>{{ item.pitch }}</span>
+          </li>
+        </ul>
+        <p v-if="block.hint" class="og-block-hint">{{ block.hint }}</p>
+      </template>
+
       <template v-else-if="block.type === 'status'">
         <p class="og-status" role="status"><span class="og-pill-dot" aria-hidden="true"></span>{{ block.text }}</p>
       </template>

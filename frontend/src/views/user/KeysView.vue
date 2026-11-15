@@ -554,6 +554,7 @@
             :searchable="true"
             :search-placeholder="t('keys.searchGroup')"
             data-tour="key-form-group"
+            :data-filled="formData.group_id !== null ? '1' : '0'"
           >
             <template #selected="{ option }">
               <GroupBadge

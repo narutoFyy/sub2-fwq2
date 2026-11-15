@@ -86,6 +86,15 @@
 /* 进度：四段，走过的填满、当前的填一半 */
 .og-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 16px; }
 .og-stages { display: flex; align-items: center; gap: 6px; }
+/* 进度条左边的返回箭头 */
+.og-top { justify-content: flex-start; flex-wrap: nowrap; }
+.og-top .og-stages { min-width: 0; }
+.og-top .og-stage-label { overflow: hidden; text-overflow: ellipsis; }
+.og-card--float .og-stage { flex-basis: 22px; }
+.og-card--float .og-stage-label { margin-left: 2px; }
+.og-top .og-link--skip { margin-left: auto; }
+.og-back { flex: none; display: grid; place-items: center; width: 24px; height: 24px; margin: -4px 2px -4px -6px; border-radius: 999px; background: none; border: 0; color: var(--og-muted); transition: color 0.15s, background-color 0.15s; }
+.og-back:hover { color: var(--og-ink); background: var(--og-panel); }
 .og-stage { flex: 0 0 34px; height: 4px; border-radius: 4px; background: var(--og-line); overflow: hidden; }
 .og-stage i { display: block; height: 100%; width: 0; background: var(--og-accent); border-radius: inherit; transition: width 0.7s var(--og-ease); }
 .og-stage.is-done i { width: 100%; }
@@ -140,6 +149,23 @@
 .og-link { background: none; border: 0; padding: 2px 0; font-size: 12px; line-height: 1.5; color: var(--og-muted); text-decoration: none; text-underline-offset: 3px; }
 .og-link:hover { color: var(--og-ink); text-decoration: underline; }
 .og-link--skip { flex-shrink: 0; white-space: nowrap; }
+.og-foot-end { display: flex; align-items: center; gap: 14px; margin-left: auto; white-space: nowrap; }
+
+/* 建密钥弹窗里的小步骤：起名字 → 选分组 → 点创建 */
+.og-checklist { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 14px; font-size: 13px; }
+.og-checklist li { display: flex; align-items: center; gap: 6px; color: var(--og-muted); transition: color 0.2s; }
+.og-checklist li span { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font: 600 10px 'Geist Mono Variable', ui-monospace, monospace; border: 1px solid var(--og-line); transition: background-color 0.2s, color 0.2s, border-color 0.2s; }
+.og-checklist li.is-active { color: var(--og-ink); font-weight: 600; }
+.og-checklist li.is-active span { border-color: var(--og-accent); color: var(--og-accent); }
+.og-checklist li.is-done span { background: var(--og-accent); border-color: var(--og-accent); color: var(--og-bg); }
+
+/* 推荐模型 */
+.og-models-head { font-size: 13px; font-weight: 600; }
+.og-models { display: grid; gap: 10px; margin-top: 10px; }
+.og-models li { display: grid; gap: 1px; font-size: 12.5px; line-height: 1.5; }
+.og-models strong { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.og-models em { font-style: normal; font-size: 11px; font-weight: 500; padding: 0 7px; border-radius: 999px; background: var(--og-accent); color: var(--og-bg); }
+.og-models span { color: var(--og-muted); }
 .og-support { position: relative; }
 .og-support-pop { position: absolute; left: 0; bottom: calc(100% + 10px); width: 290px; max-width: calc(100vw - 48px); padding: 14px 16px; border-radius: 14px; background: var(--og-panel); border: 1px solid var(--og-line); box-shadow: var(--og-shadow); font-size: 13px; line-height: 1.6; z-index: 2; }
 .og-support-pop p { color: var(--og-muted); }

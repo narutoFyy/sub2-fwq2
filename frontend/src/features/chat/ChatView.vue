@@ -89,7 +89,7 @@
             <select :value="selectedModel" :disabled="!models.length" @change="onModelChange">
               <option v-if="modelsLoading" value="">{{ t('chat.modelsLoading') }}</option>
               <option v-else-if="!models.length" value="">{{ t('chat.noModel') }}</option>
-              <option v-for="model in models" :key="model" :value="model">{{ model }}</option>
+              <option v-for="model in models" :key="model" :value="model">{{ chatModelLabel(model, isZh) }}</option>
             </select>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" /></svg>
           </label>
@@ -207,6 +207,7 @@ import BrandLogo from '@/components/brand/BrandLogo.vue'
 import LocaleToggle from '@/components/brand/LocaleToggle.vue'
 import ThemeToggleIcon from '@/components/common/ThemeToggleIcon.vue'
 import { renderChatMarkdown } from './markdown'
+import { chatModelLabel } from './modelCatalog'
 import { suggestionsFor } from './suggestions'
 import type { ChatMode } from './types'
 import { useChatSession } from './useChatSession'
@@ -245,6 +246,7 @@ const consolePath = computed(() => (authStore.isAdmin ? '/admin/dashboard' : '/d
 const active = computed(() => session.activeConversation())
 const mode = computed<ChatMode>(() => active.value?.mode ?? 'chat')
 const suggestions = computed(() => suggestionsFor(locale.value, mode.value))
+const isZh = computed(() => locale.value.startsWith('zh'))
 const headerTitle = computed(() => {
   const conv = active.value
   if (conv && conv.messages.length) return conv.title

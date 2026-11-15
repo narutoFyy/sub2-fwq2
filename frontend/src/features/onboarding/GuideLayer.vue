@@ -20,12 +20,13 @@ import { useFirstCallWatcher } from './useFirstCallWatcher'
 import { afterKeyStep, FUND_STEPS, nextStep, prevStep, stageOf, type GuideContext, type GuideStepId, type PurchaseMode } from './steps'
 import { useGuideTarget, type TargetResolver } from './useGuideTarget'
 import { chatPathFor, isChatClient, type GuideClient } from './config'
+import { CHAT_MODEL_CATALOG } from '@/features/chat/modelCatalog'
 import type { GuideBlock, GuideView } from './viewModel'
 import './guide.css'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const auth = useAuthStore()
 const app = useAppStore()
 const subs = useSubscriptionStore()
@@ -109,11 +110,60 @@ const purchaseResolver = computed<TargetResolver>(() => {
   return sidebarLink((a) => a.getAttribute('href') === href)
 })
 
-/** 密钥名称：还没填、或正在输入时停在这里；填好并离开输入框后，高亮移到分组。 */
+/**
+ * 密钥名称：没填好之前高亮停在这里。填好后按回车、点卡片里的「下一步」、离开输入框，
+ * 或停手 1.2 秒，都算填好，高亮移到分组；再改名字又会回到这里。
+ */
+const keyNameReady = ref(false)
+const keyNameFilled = ref(false)
+let keyNameTimer: ReturnType<typeof setTimeout> | undefined
+const keyNameInput = () => document.querySelector<HTMLInputElement>('[data-tour="key-form-name"]')
 const keyNameResolver: TargetResolver = () => {
-  const input = document.querySelector<HTMLInputElement>('[data-tour="key-form-name"]')
+  const input = keyNameInput()
   if (!input) return null
-  return input.value.trim() === '' || document.activeElement === input ? input : null
+  return input.value.trim() === '' || !keyNameReady.value ? input : null
+}
+function confirmKeyName() {
+  clearTimeout(keyNameTimer)
+  if (keyNameInput()?.value.trim()) keyNameReady.value = true
+}
+function isKeyNameEvent(event: Event): event is Event & { target: HTMLInputElement } {
+  const target = event.target
+  return guide.active && guide.step === 'key' && target instanceof HTMLInputElement && target.dataset.tour === 'key-form-name'
+}
+function onKeyNameInput(event: Event) {
+  if (!isKeyNameEvent(event)) return
+  keyNameFilled.value = event.target.value.trim() !== ''
+  keyNameReady.value = false
+  clearTimeout(keyNameTimer)
+  if (keyNameFilled.value) keyNameTimer = setTimeout(confirmKeyName, 1200)
+}
+function onKeyNameKeydown(event: KeyboardEvent) {
+  if (!isKeyNameEvent(event) || event.key !== 'Enter' || event.isComposing) return
+  // 引导中回车只是「名字填好了」，不直接提交表单（这时多半还没选分组）
+  event.preventDefault()
+  confirmKeyName()
+}
+function onKeyNameBlur(event: Event) {
+  if (isKeyNameEvent(event)) confirmKeyName()
+}
+onMounted(() => {
+  document.addEventListener('input', onKeyNameInput, true)
+  document.addEventListener('keydown', onKeyNameKeydown, true)
+  document.addEventListener('blur', onKeyNameBlur, true)
+})
+watch(
+  () => guide.active && guide.step === 'key',
+  () => {
+    keyNameReady.value = false
+    keyNameFilled.value = false
+  }
+)
+
+/** 分组：还没选时高亮下拉框，选好后高亮弹窗里的「创建」。 */
+const keyGroupResolver: TargetResolver = () => {
+  const select = document.querySelector<HTMLElement>('[data-tour="key-form-group"]')
+  return select && select.dataset.filled !== '1' ? select : null
 }
 
 const resolvers = computed<TargetResolver[]>(() => {
@@ -126,7 +176,8 @@ const resolvers = computed<TargetResolver[]>(() => {
     case 'key':
       return [
         keyNameResolver,
-        byAttr('[data-tour="key-form-group"]'),
+        keyGroupResolver,
+        byAttr('[data-tour="key-form-submit"]'),
         byAttr('[data-tour="keys-create-btn"]'),
         byAttr('[data-tour="sidebar-my-keys"]')
       ]
@@ -230,7 +281,6 @@ const view = computed<GuideView | null>(() => {
           { id: 'chat', name: c.clientName('chat'), desc: c.client.chat },
           { id: 'fortune', name: c.clientName('fortune'), desc: c.client.fortune }
         ],
-        back: { label: c.back, run: () => guide.go(prevStep('client')) },
         resolvers: []
       }
     case 'buy': {
@@ -271,31 +321,30 @@ const view = computed<GuideView | null>(() => {
       }
     }
     case 'key': {
-      const phase = (['name', 'form', 'create', 'nav'] as const)[index.value] ?? 'nav'
-      const inForm = phase === 'name' || phase === 'form'
+      const phase = (['name', 'form', 'submit', 'create', 'nav'] as const)[index.value] ?? 'nav'
+      const inForm = phase === 'name' || phase === 'form' || phase === 'submit'
       const clientName = guide.client ? c.clientName(guide.client) : ''
+      const formStep = phase === 'name' ? 0 : phase === 'form' ? 1 : 2
+      const titles = { name: c.keyName.title, form: c.keyForm.title, submit: c.keySubmit.title, create: c.keyCreate.title, nav: c.keyNav.title }
+      const bodies = {
+        name: c.keyName.body(clientName),
+        form: isChatClient(guide.client) ? c.keyForm.bodyChat : c.keyForm.body(clientName),
+        submit: c.keySubmit.body,
+        create: c.keyCreate.body,
+        nav: c.keyNav.body(targetText.value || t('nav.apiKeys'))
+      }
       return {
         kind: 'spot',
         key: `key-${phase}`,
-        title:
-          phase === 'name'
-            ? c.keyName.title
-            : phase === 'form'
-              ? c.keyForm.title
-              : phase === 'create'
-                ? c.keyCreate.title
-                : c.keyNav.title,
-        body:
-          phase === 'name'
-            ? c.keyName.body(clientName)
-            : phase === 'form'
-              ? isChatClient(guide.client)
-                ? c.keyForm.bodyChat
-                : c.keyForm.body(clientName)
-              : phase === 'create'
-                ? c.keyCreate.body
-                : c.keyNav.body(targetText.value || t('nav.apiKeys')),
-        click: !inForm,
+        title: titles[phase],
+        body: bodies[phase],
+        // 选好分组后提一句多分组，不强调
+        hint: phase === 'submit' ? c.keySubmit.multi : undefined,
+        checklist: inForm
+          ? c.keySteps.map((label, i) => ({ label, state: i < formStep ? 'done' : i === formStep ? 'active' : 'todo' }))
+          : undefined,
+        primary: phase === 'name' && keyNameFilled.value ? { label: c.keyName.next, run: confirmKeyName } : undefined,
+        click: !inForm || phase === 'submit',
         dim: !inForm,
         inSidebar: phase === 'nav',
         secondary: hasKey.value && !inForm ? { label: c.haveKey, run: () => guide.go(afterKeyStep(ctx.value)), quiet: true } : undefined,
@@ -332,7 +381,6 @@ const view = computed<GuideView | null>(() => {
           : undefined,
         hint: resources.ready.value ? undefined : c.download.preparing,
         primary: { label: c.download.cont, run: advance },
-        back: { label: c.back, run: () => guide.go(prevStep('download')) },
         resolvers: []
       }
     case 'import': {
@@ -389,6 +437,7 @@ const view = computed<GuideView | null>(() => {
         key: 'chat',
         title: c.chatGo.title,
         body: target === 'fortune' ? c.chatGo.bodyFortune : c.chatGo.body,
+        blocks: [chatModelsBlock(target)],
         primary: {
           label: c.chatGo.open,
           run: () => {
@@ -461,6 +510,52 @@ const view = computed<GuideView | null>(() => {
       }
   }
   return null
+})
+
+/** 「去聊天」那步讲清楚推荐模型各自强在哪（和聊天页下拉框用同一份名单）。 */
+function chatModelsBlock(target: 'chat' | 'fortune'): GuideBlock {
+  const c = copy.value
+  const zh = locale.value.startsWith('zh')
+  return {
+    type: 'models',
+    heading: target === 'fortune' ? c.chatGo.modelsHeadingFortune : c.chatGo.modelsHeading,
+    hint: c.chatGo.modelsHint,
+    items: CHAT_MODEL_CATALOG.map((entry, i) => ({
+      name: entry.name,
+      pitch: zh ? entry.pitch.zh : entry.pitch.en,
+      tag: i === 0 ? c.chatGo.defaultTag : undefined
+    }))
+  }
+}
+
+// ---------------------------------------------------------------- 返回上一步 / 页脚
+
+/**
+ * 左上角返回箭头回到历史里最近一个还能停下来的步骤：已经有额度时，充值那几步会立刻被跳过，
+ * 回到那里没有意义，跳过它们。欢迎页、成功页不显示。
+ */
+const backIndex = computed(() => {
+  if (guide.step === 'welcome' || guide.step === 'success') return -1
+  const history = guide.history
+  for (let i = history.length - 1; i >= 0; i--) {
+    const step = history[i]!
+    if (step === guide.step) continue
+    if (hasFunds.value && FUND_STEPS.includes(step)) continue
+    return i
+  }
+  return -1
+})
+function goBack() {
+  if (backIndex.value >= 0) guide.backTo(backIndex.value)
+}
+
+/** 配置完成后（等第一次调用、接通了；聊天用法从「去聊天」起）不再显示「不想配置？加群」。 */
+const showSupport = computed(() => !['chat', 'finish', 'success'].includes(guide.step))
+
+/** 右下角「图文教程」：按选的工具打开对应教程，新标签页里打开，不打断引导。 */
+const tutorialHref = computed(() => {
+  const client = guide.client === 'codex' || guide.client === 'claude-code' ? guide.client : null
+  return router.resolve(client ? `/tutorials/${client}` : '/tutorials').href
 })
 
 const stage = computed(() => (guide.step === 'welcome' ? -1 : guide.step === 'success' ? 4 : stageOf(guide.step)))
@@ -706,6 +801,10 @@ onBeforeUnmount(() => {
   clearTimeout(completeTimer)
   clearTimeout(drawerTimer)
   clearTimeout(inviteTimer)
+  clearTimeout(keyNameTimer)
+  document.removeEventListener('input', onKeyNameInput, true)
+  document.removeEventListener('keydown', onKeyNameKeydown, true)
+  document.removeEventListener('blur', onKeyNameBlur, true)
 })
 </script>
 
@@ -729,6 +828,10 @@ onBeforeUnmount(() => {
               :completing="completing"
               :confirming="confirming"
               :show-skip="guide.step !== 'welcome' && guide.step !== 'success'"
+              :can-back="backIndex >= 0"
+              :show-support="showSupport"
+              :tutorial-href="tutorialHref"
+              @back="goBack"
               @choose="choose"
               @ask-skip="confirming = true"
               @confirm-skip="confirmSkip"
@@ -757,6 +860,10 @@ onBeforeUnmount(() => {
             :completing="completing"
             :confirming="confirming"
             :show-skip="true"
+            :can-back="backIndex >= 0"
+            :show-support="showSupport"
+            :tutorial-href="tutorialHref"
+            @back="goBack"
             @choose="choose"
             @ask-skip="confirming = true"
             @confirm-skip="confirmSkip"

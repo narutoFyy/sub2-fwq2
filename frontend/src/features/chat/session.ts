@@ -1,5 +1,6 @@
 import type { ApiKey } from '@/types'
 import { GatewayError, listGatewayModels, streamChatCompletion } from './gateway'
+import { chatModelsFrom } from './modelCatalog'
 import { systemPromptFor } from './prompts'
 import { createBrowserChatRepository, createChatId, emptyConversation, titleFromFirstMessage } from './storage'
 import type {
@@ -137,10 +138,13 @@ export function createChatEngine(deps: ChatEngineDeps, state: ChatEngineState = 
     const keyId = key.id
     state.modelsLoading = true
     try {
-      const models = await deps.listModels({
-        completionsUrl: deps.completionsUrl(),
-        apiKey: key.key,
-      })
+      // 只留名单里的最新模型（旧模型、Grok、画图视频等一律不显示），默认第一个
+      const models = chatModelsFrom(
+        await deps.listModels({
+          completionsUrl: deps.completionsUrl(),
+          apiKey: key.key,
+        }),
+      )
       if (requestId !== modelsRequest || state.selectedKeyId !== keyId) {
         return
       }

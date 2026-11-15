@@ -81,4 +81,23 @@ describe('guide store', () => {
     expect(guide.redeemedTick).toBe(1)
     expect(guide.keyCreatedTick).toBe(2)
   })
+
+  it('remembers visited steps so the back arrow can return, and persists them', () => {
+    const guide = useGuideStore()
+    guide.load(9)
+    guide.start()
+    guide.go('client')
+    guide.go('redeem')
+    guide.go('key')
+    expect(guide.history).toEqual(['welcome', 'client', 'redeem'])
+
+    guide.backTo(1)
+    expect(guide.step).toBe('client')
+    expect(guide.history).toEqual(['welcome'])
+
+    setActivePinia(createPinia())
+    const reloaded = useGuideStore()
+    reloaded.load(9)
+    expect(reloaded.history).toEqual(['welcome'])
+  })
 })
