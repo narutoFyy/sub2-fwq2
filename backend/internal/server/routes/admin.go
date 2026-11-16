@@ -40,6 +40,10 @@ func RegisterAdminRoutes(
 			radar.PUT("/configs", h.Admin.ModelRadar.UpdateConfigs)
 			radar.POST("/run", h.Admin.ModelRadar.RunNow)
 			radar.PUT("/results/:id/review", h.Admin.ModelRadar.ReviewResult)
+			radar.PUT("/settings", h.Admin.ModelRadar.UpdateSettings)
+			radar.DELETE("/results", h.Admin.ModelRadar.ClearAllResults)
+			radar.DELETE("/results/:id", h.Admin.ModelRadar.DeleteResult)
+			radar.DELETE("/groups/:id/results", h.Admin.ModelRadar.ClearGroupResults)
 		}
 
 		// 部署与运营合规确认

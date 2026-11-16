@@ -23,6 +23,11 @@ export interface ModelRadarGroup {
   model_id: string
   reasoning_effort: string
   enabled: boolean
+  /** 0 表示跟随全局间隔 */
+  interval_minutes: number
+  /** false 时照常检测，但不出现在用户页 */
+  visible: boolean
+  verdict?: 'ok' | 'nerfed' | 'watch' | 'error' | 'none'
   next_run_at?: string
   last_run_at?: string
   ciallo?: ModelRadarResult
@@ -35,6 +40,15 @@ export interface ModelRadarOverview {
   interval_minutes: number
   prompt: string
   expected_reply: string
+  settings?: ModelRadarSettings
+}
+
+export interface ModelRadarSettings {
+  interval_minutes: number
+  ciallo_attempts: number
+  nerf_confirm_rounds: number
+  drawing_enabled: boolean
+  retention_days: number
 }
 
 export async function getOverview(): Promise<ModelRadarOverview> {

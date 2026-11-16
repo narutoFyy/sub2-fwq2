@@ -19,7 +19,7 @@
       <template v-else>
         <RadarSummary :groups="overview.groups" />
         <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <RadarGroupCard v-for="group in overview.groups" :key="group.group_id" :group="group" :prompt="prompt" />
+          <RadarGroupCard v-for="group in overview.groups" :key="group.group_id" :group="group" :prompt="prompt" :confirm-rounds="overview.settings?.nerf_confirm_rounds" />
         </div>
       </template>
     </div>

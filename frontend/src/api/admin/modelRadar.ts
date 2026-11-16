@@ -1,9 +1,9 @@
 import { apiClient } from '../client'
-import type { ModelRadarOverview, ModelRadarResult } from '@/api/modelRadar'
+import type { ModelRadarOverview, ModelRadarResult, ModelRadarSettings } from '@/api/modelRadar'
 
 export type { ModelRadarOverview, ModelRadarResult }
 
-export interface ModelRadarConfig extends Omit<NonNullable<ModelRadarOverview['groups'][number]>, 'timeline' | 'logic' | 'drawing'> {
+export interface ModelRadarConfig extends Omit<NonNullable<ModelRadarOverview['groups'][number]>, 'timeline' | 'ciallo' | 'drawing' | 'verdict'> {
   id?: number
 }
 
@@ -27,5 +27,24 @@ export async function reviewResult(id: number, status: 'passed' | 'failed'): Pro
   return data
 }
 
-export const modelRadarAdminAPI = { getOverview, updateConfigs, runNow, reviewResult }
+export async function updateSettings(settings: ModelRadarSettings): Promise<ModelRadarSettings> {
+  const { data } = await apiClient.put<ModelRadarSettings>('/admin/model-radar/settings', settings)
+  return data
+}
+
+export async function deleteResult(id: number): Promise<void> {
+  await apiClient.delete(`/admin/model-radar/results/${id}`)
+}
+
+export async function clearGroupResults(groupId: number): Promise<{ deleted: number }> {
+  const { data } = await apiClient.delete<{ deleted: number }>(`/admin/model-radar/groups/${groupId}/results`)
+  return data
+}
+
+export async function clearAllResults(): Promise<{ deleted: number }> {
+  const { data } = await apiClient.delete<{ deleted: number }>('/admin/model-radar/results')
+  return data
+}
+
+export const modelRadarAdminAPI = { getOverview, updateConfigs, runNow, reviewResult, updateSettings, deleteResult, clearGroupResults, clearAllResults }
 export default modelRadarAdminAPI

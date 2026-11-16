@@ -20,8 +20,9 @@ func (s *modelRadarGroupRepoStub) ListActiveByPlatform(context.Context, string) 
 
 type modelRadarRepoStub struct {
 	ModelRadarRepository
-	configs []*ModelRadarConfig
-	results []*ModelRadarResult
+	configs  []*ModelRadarConfig
+	results  []*ModelRadarResult
+	settings *ModelRadarSettings
 }
 
 func (s *modelRadarRepoStub) ListConfigs(context.Context) ([]*ModelRadarConfig, error) {
@@ -38,9 +39,13 @@ func (s *modelRadarRepoStub) ListResults(_ context.Context, _ *int64, testType s
 	return out, nil
 }
 
+func (s *modelRadarRepoStub) GetSettings(context.Context) (*ModelRadarSettings, error) {
+	return s.settings, nil
+}
+
 func TestModelRadarPublicOverviewExposesResultsAndRedactsInternalDetails(t *testing.T) {
 	reviewedBy := int64(77)
-	repo := &modelRadarRepoStub{configs: []*ModelRadarConfig{{GroupID: 10, Enabled: true}}, results: []*ModelRadarResult{{
+	repo := &modelRadarRepoStub{configs: []*ModelRadarConfig{{GroupID: 10, Enabled: true, Visible: true}}, results: []*ModelRadarResult{{
 		ID: 2, GroupID: 10, ModelID: "gpt-5.4", TestType: ModelRadarTestTypeCiallo,
 		Status: ModelRadarStatusPassed, ResponseText: "Ciallo～(∠・ω< )⌒☆", ErrorMessage: "secret error",
 		LatencyMS: 120, DetectedAt: time.Now(), ReviewedBy: &reviewedBy,
@@ -104,4 +109,46 @@ func TestRadarProbePayloadCanCarryModelMatchedInstructions(t *testing.T) {
 		payload := createOpenAITestPayload(model, true, openAIAccountTestPayloadOptions{Prompt: "ciallo", ReasoningEffort: "high", Instructions: matched})
 		require.Equal(t, matched, payload["instructions"])
 	}
+}
+
+func TestModelRadarHiddenGroupStaysOutOfPublicOverview(t *testing.T) {
+	repo := &modelRadarRepoStub{configs: []*ModelRadarConfig{{GroupID: 10, Enabled: true, Visible: false}}}
+	groups := &modelRadarGroupRepoStub{groups: []Group{{ID: 10, Name: "OpenAI", Platform: PlatformOpenAI, Status: StatusActive}}}
+	svc := NewModelRadarService(repo, nil, groups, nil)
+
+	public, err := svc.PublicOverview(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, public.Groups)
+	admin, err := svc.AdminOverview(context.Background())
+	require.NoError(t, err)
+	require.Len(t, admin.Groups, 1)
+	require.False(t, admin.Groups[0].Visible)
+}
+
+func TestRadarVerdictNeedsConsecutiveFailures(t *testing.T) {
+	seq := func(statuses ...string) []*ModelRadarResult {
+		out := make([]*ModelRadarResult, 0, len(statuses))
+		for _, status := range statuses {
+			out = append(out, &ModelRadarResult{Status: status})
+		}
+		return out
+	}
+	p, f, e := ModelRadarStatusPassed, ModelRadarStatusFailed, ModelRadarStatusRequest
+	require.Equal(t, ModelRadarVerdictNone, radarVerdict(nil, 2))
+	require.Equal(t, ModelRadarVerdictOK, radarVerdict(seq(p, f, f), 2))
+	require.Equal(t, ModelRadarVerdictError, radarVerdict(seq(e, f, f), 2))
+	require.Equal(t, ModelRadarVerdictNerfed, radarVerdict(seq(f), 1))
+	require.Equal(t, ModelRadarVerdictWatch, radarVerdict(seq(f, p, f), 2))
+	require.Equal(t, ModelRadarVerdictNerfed, radarVerdict(seq(f, f, p), 2))
+	// 中间夹着的请求失败不打断连续计数，也不计数。
+	require.Equal(t, ModelRadarVerdictNerfed, radarVerdict(seq(f, e, f), 2))
+	require.Equal(t, ModelRadarVerdictWatch, radarVerdict(seq(f, e), 2))
+}
+
+func TestRadarSettingsAreClampedAndGroupIntervalOverrides(t *testing.T) {
+	got := normalizeRadarSettings(ModelRadarSettings{IntervalMinutes: 1, CialloAttempts: 99, NerfConfirmRounds: 0, RetentionDays: -3})
+	require.Equal(t, ModelRadarSettings{IntervalMinutes: 5, CialloAttempts: 5, NerfConfirmRounds: 1}, got)
+	settings := DefaultModelRadarSettings()
+	require.Equal(t, 30*time.Minute, radarInterval(&ModelRadarConfig{}, settings))
+	require.Equal(t, 2*time.Hour, radarInterval(&ModelRadarConfig{IntervalMinutes: 120}, settings))
 }
