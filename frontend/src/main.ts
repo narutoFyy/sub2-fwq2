@@ -2,7 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
-import i18n, { initI18n } from './i18n'
+import i18n, { ensureAdminMessages, initI18n } from './i18n'
 import { useAppStore } from '@/stores/app'
 import { updateFavicon } from '@/utils/branding'
 import { isIOSDevice } from '@/utils/device'
@@ -51,7 +51,20 @@ async function bootstrap() {
   }
   updateFavicon(appStore.siteLogo)
 
-  await initI18n()
+  // 语言包与页面组件并行下载：不再先等语言包再开始路由，
+  // 而是在路由解析完成前（页面组件已下载）再等待语言包就绪。
+  const i18nReady = initI18n().catch((err) => console.error('Failed to load locale messages', err))
+  const needsAdminMessages = (meta: { requiresAuth?: boolean }) => meta.requiresAuth !== false
+  router.beforeEach((to) => {
+    // 只发起下载不等待，让后台文案与页面组件同时下载。
+    if (needsAdminMessages(to.meta)) void ensureAdminMessages().catch(() => {})
+  })
+  router.beforeResolve(async (to) => {
+    await i18nReady
+    if (needsAdminMessages(to.meta)) {
+      await ensureAdminMessages().catch((err) => console.error('Failed to load admin messages', err))
+    }
+  })
 
   app.use(router)
   app.use(i18n)

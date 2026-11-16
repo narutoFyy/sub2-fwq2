@@ -1,26 +1,8 @@
-import adminAccessKeys from './adminAccessKeys'
-import mcp from './mcp'
-import landing from './landing'
-import activity from './activity'
-import common from './common'
-import dashboard from './dashboard'
-import channelMonitorV2 from './channelMonitorV2'
-import batchImage from './batchImage'
-import chat from './chat'
-import admin from './admin'
-import misc from './misc'
+// 完整语言包（测试与键完整性检查使用）；运行时按 base / adminPack 分开加载。
+import base from './base'
+import adminPack from './adminPack'
 
 export default {
-  tutorials: { title: '接入教程' },
-  adminAccessKeys,
-  mcp,
-  ...landing,
-  ...activity,
-  ...common,
-  ...dashboard,
-  ...channelMonitorV2,
-  ...batchImage,
-  ...chat,
-  admin,
-  ...misc,
+  ...base,
+  ...adminPack,
 }

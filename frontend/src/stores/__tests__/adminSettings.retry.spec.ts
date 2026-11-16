@@ -3,7 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAdminSettingsStore } from '../adminSettings'
 
 const mocks = vi.hoisted(() => ({ getSettings: vi.fn(), getConfig: vi.fn() }))
-vi.mock('@/api', () => ({ adminAPI: { settings: { getSettings: mocks.getSettings }, payment: { getConfig: mocks.getConfig } } }))
+vi.mock('@/api/admin/settings', () => ({ default: { getSettings: mocks.getSettings } }))
+vi.mock('@/api/admin/payment', () => ({ default: { getConfig: mocks.getConfig } }))
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()

@@ -405,6 +405,8 @@ func serveIndexHTML(c *gin.Context, fsys fs.FS) {
 		return
 	}
 
+	// index.html 里的内联预加载脚本带 nonce 占位符，这条兜底路径也要替换。
+	content = replaceNoncePlaceholder(content, middleware.GetNonceFromContext(c))
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	c.Abort()
 }

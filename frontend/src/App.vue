@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from 'vue-router'
-import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
-import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
 import { resolveRouteDocumentTitle } from '@/router/title'
-import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
 import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore } from '@/stores'
 import { getSetupStatus } from '@/api/setup'
 import { updateFavicon } from '@/utils/branding'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
-import GuideLayer from '@/features/onboarding/GuideLayer.vue'
+// 公告弹窗、合规弹窗和新手引导只在少数情况下出现，且依赖 Markdown 渲染库，
+// 改为按需加载，不占首屏入口包。
+const AdminComplianceDialog = defineAsyncComponent(() => import('@/components/admin/AdminComplianceDialog.vue'))
+const AnnouncementPopup = defineAsyncComponent(() => import('@/components/common/AnnouncementPopup.vue'))
+const GuideLayer = defineAsyncComponent(() => import('@/features/onboarding/GuideLayer.vue'))
 import { useGuideStore } from '@/features/onboarding/guideStore'
 
 const router = useRouter()
@@ -23,6 +25,9 @@ const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
 const guide = useGuideStore()
+// 第一次有公告要弹出时才加载弹窗组件；加载后保持挂载，保证关闭动画完整。
+const popupNeeded = ref(false)
+watch(() => announcementStore.currentPopup, (popup) => { if (popup) popupNeeded.value = true }, { immediate: true })
 
 function updateDocumentTitle() {
   const customMenuItems = [
@@ -168,7 +173,7 @@ onMounted(async () => {
   <NavigationProgress />
   <RouterView />
   <Toast />
-  <AnnouncementPopup v-if="!guide.active" />
+  <AnnouncementPopup v-if="!guide.active && popupNeeded" />
   <GuideLayer />
-  <AdminComplianceDialog />
+  <AdminComplianceDialog v-if="authStore.isAdmin" />
 </template>
