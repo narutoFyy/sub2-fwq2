@@ -79,6 +79,8 @@ type openAIAccountTestPayloadOptions struct {
 	Prompt          string
 	MaxOutputTokens int
 	ReasoningEffort string
+	// Instructions 为空时用通用的 DefaultInstructions。
+	Instructions string
 }
 
 func withOpenAILowCostProbeContext(ctx context.Context) context.Context {
@@ -923,6 +925,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	}
 	if effort := openAIRadarReasoningEffort(ctx); effort != "" {
 		payloadOptions.ReasoningEffort = effort
+		// 雷达要测的是用户真实拿到的表现，所以带上真实流量同款的、按模型匹配的提示词；
+		// 通用的 GPT-5-Codex 提示词会让新模型答得很死板（实测 ciallo 题永远不回颜文字）。
+		payloadOptions.Instructions = openai.CodexBaseInstructionsForModel(upstreamTestModelID)
 	}
 	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth, payloadOptions)
 	payloadBytes, _ := json.Marshal(payload)
@@ -2849,6 +2854,9 @@ func createOpenAITestPayload(modelID string, isOAuth bool, options ...openAIAcco
 
 	// All accounts require instructions for Responses API
 	payload["instructions"] = openai.DefaultInstructions
+	if len(options) > 0 && strings.TrimSpace(options[0].Instructions) != "" {
+		payload["instructions"] = options[0].Instructions
+	}
 	if maxOutputTokens > 0 {
 		payload["max_output_tokens"] = maxOutputTokens
 	}

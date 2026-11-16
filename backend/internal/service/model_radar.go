@@ -26,6 +26,9 @@ const (
 	modelRadarMaxResponseBytes = 2 << 20
 	modelRadarDefaultEffort    = "high"
 	modelRadarTimelineSize     = 24
+	// 正常模型也不是每次都带颜文字（实测 gpt-6-astra high 大约一半到八成），
+	// 降智的则一次都不带，所以一轮里多问几次，有一次带就算正常。
+	modelRadarCialloAttempts = 3
 )
 
 var (
@@ -388,6 +391,11 @@ func (s *ModelRadarService) runGroup(ctx context.Context, groupID int64) error {
 	probes := []struct{ typ, prompt string }{{ModelRadarTestTypeCiallo, radarCialloPrompt}, {ModelRadarTestTypeDrawing, radarDrawingPrompt}}
 	for _, probe := range probes {
 		result, callErr := s.accountTest.RunTestBackgroundWithPromptAndReasoning(ctx, accountID, cfg.ModelID, probe.prompt, cfg.ReasoningEffort)
+		if probe.typ == ModelRadarTestTypeCiallo {
+			for attempt := 1; attempt < modelRadarCialloAttempts && callErr == nil && result != nil && result.Status == "success" && !IsCialloReply(result.ResponseText); attempt++ {
+				result, callErr = s.accountTest.RunTestBackgroundWithPromptAndReasoning(ctx, accountID, cfg.ModelID, probe.prompt, cfg.ReasoningEffort)
+			}
+		}
 		stored := &ModelRadarResult{GroupID: groupID, ModelID: cfg.ModelID, TestType: probe.typ, Prompt: probe.prompt, DetectedAt: s.now()}
 		if callErr != nil || result == nil || result.Status != "success" {
 			stored.Status = ModelRadarStatusRequest

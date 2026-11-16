@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,5 +90,18 @@ func TestIsCialloReply(t *testing.T) {
 		"",
 	} {
 		require.False(t, IsCialloReply(reply), reply)
+	}
+}
+
+func TestRadarProbePayloadCanCarryModelMatchedInstructions(t *testing.T) {
+	generic := createOpenAITestPayload("gpt-6-astra", true, openAIAccountTestPayloadOptions{Prompt: "ciallo"})
+	require.Equal(t, openai.DefaultInstructions, generic["instructions"])
+
+	// 后台里填的模型名可能带空格和大写（线上就是 "gpt-6 Astra"），也要匹配到 Astra 的提示词。
+	for _, model := range []string{"gpt-6-astra", "gpt-6 Astra"} {
+		matched := openai.CodexBaseInstructionsForModel(model)
+		require.NotEqual(t, openai.DefaultInstructions, matched, model)
+		payload := createOpenAITestPayload(model, true, openAIAccountTestPayloadOptions{Prompt: "ciallo", ReasoningEffort: "high", Instructions: matched})
+		require.Equal(t, matched, payload["instructions"])
 	}
 }
