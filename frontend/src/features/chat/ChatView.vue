@@ -19,7 +19,7 @@
         </div>
 
         <div class="grid gap-2 px-1">
-          <button type="button" class="chat-new-btn" @click="newConversation('chat')">
+          <button type="button" class="chat-new-btn chat-new-btn--primary" @click="newConversation('chat')">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             <span>{{ t('chat.newChat') }}</span>
           </button>
@@ -33,31 +33,34 @@
           {{ t('chat.noConversations') }}
         </p>
         <nav class="chat-conv-list">
-          <div
-            v-for="item in conversations"
-            :key="item.id"
-            class="chat-conv group"
-            :class="{ 'is-active': item.id === activeId }"
-          >
-            <button
-              type="button"
-              class="flex min-w-0 flex-1 items-center gap-2 text-left"
-              @click="selectConversation(item.id)"
-              @dblclick="onRename(item)"
+          <template v-for="group in groupedConversations" :key="group.key">
+            <p class="chat-conv-group">{{ t(`chat.groups.${group.key}`) }}</p>
+            <div
+              v-for="item in group.items"
+              :key="item.id"
+              class="chat-conv group"
+              :class="{ 'is-active': item.id === activeId }"
             >
-              <span class="chat-conv-dot" :class="{ 'is-fortune': item.mode === 'fortune' }" aria-hidden="true" />
-              <span class="truncate">{{ titleOf(item) }}</span>
-            </button>
-            <button
-              type="button"
-              class="chat-conv-del"
-              :title="t('chat.delete')"
-              :aria-label="t('chat.delete')"
-              @click.stop="onDelete(item.id)"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>
-            </button>
-          </div>
+              <button
+                type="button"
+                class="flex min-w-0 flex-1 items-center gap-2 text-left"
+                @click="selectConversation(item.id)"
+                @dblclick="onRename(item)"
+              >
+                <span class="chat-conv-dot" :class="{ 'is-fortune': item.mode === 'fortune' }" aria-hidden="true" />
+                <span class="truncate">{{ titleOf(item) }}</span>
+              </button>
+              <button
+                type="button"
+                class="chat-conv-del"
+                :title="t('chat.delete')"
+                :aria-label="t('chat.delete')"
+                @click.stop="onDelete(item.id)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" /></svg>
+              </button>
+            </div>
+          </template>
         </nav>
 
         <router-link :to="consolePath" class="chat-console-link">
@@ -84,122 +87,154 @@
             </select>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" /></svg>
           </label>
-          <label class="chat-pill-select chat-pill-select--model" :title="t('chat.model')">
-            <span class="chat-pill-label">{{ t('chat.model') }}</span>
-            <select :value="selectedModel" :disabled="!models.length" @change="onModelChange">
-              <option v-if="modelsLoading" value="">{{ t('chat.modelsLoading') }}</option>
-              <option v-else-if="!models.length" value="">{{ t('chat.noModel') }}</option>
-              <option v-for="model in models" :key="model" :value="model">{{ chatModelLabel(model, isZh) }}</option>
-            </select>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" /></svg>
-          </label>
         </header>
 
         <p v-if="persistenceWarning" class="chat-notice">{{ t('chat.persistenceWarning') }}</p>
 
-        <section ref="scrollerRef" class="chat-scroller">
-          <div v-if="loading" class="chat-empty">
-            <span class="chat-typing" aria-hidden="true"><i /><i /><i /></span>
-            <p class="mt-4 text-sm" :style="{ color: 'var(--chat-muted)' }">{{ t('chat.loading') }}</p>
-          </div>
-
-          <div v-else-if="!keys.length" class="chat-empty">
-            <p class="chat-greeting">{{ t('chat.noKey') }}</p>
-            <router-link to="/keys" class="chat-cta">{{ t('chat.createKey') }}</router-link>
-          </div>
-
-          <div v-else-if="!active?.messages.length" class="chat-empty">
-            <div class="chat-orb" aria-hidden="true">
-              <svg v-if="mode === 'fortune'" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" /><path d="M16.5 3.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" /></svg>
-              <svg v-else viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
+        <!-- 空对话时是居中的「问候 + 输入框 + 快捷问题」，有消息后输入框沉到底部 -->
+        <div class="chat-body" :class="{ 'is-hero': isHero }">
+          <section ref="scrollerRef" class="chat-scroller" @click="onThreadClick">
+            <div v-if="loading" class="chat-empty">
+              <span class="chat-typing" aria-hidden="true"><i /><i /><i /></span>
+              <p class="mt-4 text-sm" :style="{ color: 'var(--chat-muted)' }">{{ t('chat.loading') }}</p>
             </div>
-            <p class="chat-greeting">{{ mode === 'fortune' ? t('chat.fortuneGreeting') : t('chat.greeting') }}</p>
-            <p class="chat-subtitle">{{ mode === 'fortune' ? t('chat.fortuneSubtitle') : t('chat.chatSubtitle') }}</p>
-            <div class="chat-suggestions" :class="{ 'is-six': suggestions.length > 4 }">
-              <button
-                v-for="(item, i) in suggestions"
-                :key="item.title"
-                type="button"
-                class="chat-suggestion"
-                :style="{ '--i': i }"
-                @click="useSuggestion(item.prompt)"
-              >
-                <strong>{{ item.title }}</strong>
-                <span>{{ item.prompt }}</span>
-              </button>
+
+            <div v-else-if="!keys.length" class="chat-empty">
+              <p class="chat-greeting">{{ t('chat.noKey') }}</p>
+              <router-link to="/keys" class="chat-cta">{{ t('chat.createKey') }}</router-link>
             </div>
-          </div>
 
-          <ol v-else class="chat-thread">
-            <li
-              v-for="message in active.messages"
-              :key="message.id"
-              class="chat-msg group"
-              :class="message.role === 'user' ? 'is-user' : 'is-assistant'"
-            >
-              <template v-if="message.role === 'assistant'">
-                <div class="chat-avatar" :class="{ 'is-fortune': mode === 'fortune' }" aria-hidden="true">
-                  <svg v-if="mode === 'fortune'" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" /></svg>
-                  <svg v-else viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="chat-msg-name">{{ mode === 'fortune' ? t('chat.fortuneName') : t('chat.assistant') }}</div>
-                  <span v-if="message.status === 'streaming' && !message.content" class="chat-typing" aria-hidden="true"><i /><i /><i /></span>
-                  <div
-                    v-else
-                    class="chat-md"
-                    :class="{ 'is-error': message.status === 'error' }"
-                    v-html="renderChatMarkdown(message.content || (message.status === 'streaming' ? '' : t('chat.emptyAssistant')))"
-                  />
-                  <span v-if="message.status === 'streaming' && message.content" class="chat-caret" aria-hidden="true" />
-                  <div v-if="message.content && message.status !== 'streaming'" class="chat-msg-actions">
-                    <button type="button" @click="copyMessage(message.content)">
-                      {{ copied === message.content ? t('chat.copied') : t('chat.copy') }}
-                    </button>
-                  </div>
-                </div>
-              </template>
-              <template v-else>
-                <div class="chat-user">{{ message.content }}</div>
-              </template>
-            </li>
-          </ol>
-        </section>
-
-        <footer class="chat-footer">
-          <p v-if="sendError" class="chat-error">{{ errorText }}</p>
-          <form class="chat-composer" @submit.prevent="onSend">
-            <textarea
-              ref="inputRef"
-              v-model="draft"
-              rows="1"
-              class="chat-input"
-              :placeholder="mode === 'fortune' ? t('chat.fortunePlaceholder') : t('chat.composerPlaceholder')"
-              :disabled="!keys.length || streaming"
-              @keydown="onComposerKeydown"
-              @input="resizeComposer"
-            />
-            <div class="flex items-center justify-between gap-2 px-3 pb-2.5">
-              <span class="chat-hint">{{ t('chat.sendHint') }}</span>
-              <div class="flex items-center gap-1.5">
-                <button v-if="canRetry" type="button" class="chat-text-btn" @click="retry">{{ t('chat.retry') }}</button>
-                <button v-if="streaming" type="button" class="chat-send is-stop" :aria-label="t('chat.stop')" :title="t('chat.stop')" @click="stop">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" /></svg>
-                </button>
-                <button v-else type="submit" class="chat-send" :disabled="!canSend" :aria-label="t('chat.send')" :title="t('chat.send')">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
-                </button>
+            <div v-else-if="!active?.messages.length" class="chat-empty">
+              <div class="chat-orb" aria-hidden="true">
+                <svg v-if="mode === 'fortune'" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" /><path d="M16.5 3.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" /></svg>
+                <svg v-else viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
               </div>
+              <p class="chat-greeting">{{ mode === 'fortune' ? t('chat.fortuneGreeting') : t('chat.greeting') }}</p>
+              <p class="chat-subtitle">{{ mode === 'fortune' ? t('chat.fortuneSubtitle') : t('chat.chatSubtitle') }}</p>
             </div>
-          </form>
-        </footer>
+
+            <ol v-else class="chat-thread">
+              <li
+                v-for="message in active.messages"
+                :key="message.id"
+                class="chat-msg group"
+                :class="message.role === 'user' ? 'is-user' : 'is-assistant'"
+              >
+                <template v-if="message.role === 'assistant'">
+                  <div class="chat-avatar" :class="{ 'is-fortune': mode === 'fortune' }" :title="mode === 'fortune' ? t('chat.fortuneName') : t('chat.assistant')">
+                    <svg v-if="mode === 'fortune'" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" /></svg>
+                    <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
+                  </div>
+                  <div class="chat-msg-body">
+                    <span v-if="message.status === 'streaming' && !message.content" class="chat-typing" aria-hidden="true"><i /><i /><i /></span>
+                    <div
+                      v-else
+                      class="chat-md"
+                      :class="{ 'is-error': message.status === 'error' }"
+                      v-html="renderChatMarkdown(message.content || (message.status === 'streaming' ? '' : t('chat.emptyAssistant')), t('chat.copyCode'))"
+                    />
+                    <span v-if="message.status === 'streaming' && message.content" class="chat-caret" aria-hidden="true" />
+                    <div v-if="message.content && message.status !== 'streaming'" class="chat-msg-actions">
+                      <button type="button" @click="copyMessage(message.content)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5" /><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15" /></svg>
+                        {{ copied === message.content ? t('chat.copied') : t('chat.copy') }}
+                      </button>
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="chat-user">{{ message.content }}</div>
+                </template>
+              </li>
+            </ol>
+          </section>
+
+          <footer class="chat-footer">
+            <p v-if="sendError" class="chat-error">{{ errorText }}</p>
+            <form class="chat-composer" @submit.prevent="onSend">
+              <textarea
+                ref="inputRef"
+                v-model="draft"
+                rows="1"
+                class="chat-input"
+                :placeholder="mode === 'fortune' ? t('chat.fortunePlaceholder') : t('chat.composerPlaceholder')"
+                :disabled="!keys.length || streaming"
+                @keydown="onComposerKeydown"
+                @input="resizeComposer"
+              />
+              <div class="chat-composer-bar">
+                <!-- 模型：带一句说明的弹层，不用系统下拉框 -->
+                <div ref="modelMenuRef" class="chat-model">
+                  <button
+                    type="button"
+                    class="chat-model-btn"
+                    :disabled="!modelOptions.length"
+                    :aria-expanded="modelMenuOpen"
+                    aria-haspopup="listbox"
+                    :title="t('chat.pickModel')"
+                    @click="modelMenuOpen = !modelMenuOpen"
+                  >
+                    <span class="chat-vendor" :data-vendor="currentModel?.vendor ?? 'other'" aria-hidden="true" />
+                    <span class="truncate">{{ modelButtonText }}</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14l5-5 5 5" /></svg>
+                  </button>
+                  <Transition name="chat-pop">
+                    <ul v-if="modelMenuOpen" class="chat-model-menu" role="listbox" :aria-label="t('chat.pickModel')">
+                      <li v-for="option in modelOptions" :key="option.id">
+                        <button
+                          type="button"
+                          role="option"
+                          class="chat-model-option"
+                          :class="{ 'is-selected': option.id === selectedModel }"
+                          :aria-selected="option.id === selectedModel"
+                          @click="pickModel(option.id)"
+                        >
+                          <span class="chat-vendor" :data-vendor="option.vendor" aria-hidden="true" />
+                          <span class="min-w-0 flex-1">
+                            <span class="chat-model-name">{{ option.name }}<em v-if="option.tag">{{ option.tag }}</em></span>
+                            <span v-if="option.pitch" class="chat-model-pitch">{{ option.pitch }}</span>
+                          </span>
+                          <svg v-if="option.id === selectedModel" class="chat-model-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                        </button>
+                      </li>
+                    </ul>
+                  </Transition>
+                </div>
+                <span class="chat-hint">{{ t('chat.sendHint') }}</span>
+                <div class="flex items-center gap-1.5">
+                  <button v-if="canRetry" type="button" class="chat-text-btn" @click="retry">{{ t('chat.retry') }}</button>
+                  <button v-if="streaming" type="button" class="chat-send is-stop" :aria-label="t('chat.stop')" :title="t('chat.stop')" @click="stop">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" /></svg>
+                  </button>
+                  <button v-else type="submit" class="chat-send" :disabled="!canSend" :aria-label="t('chat.send')" :title="t('chat.send')">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </footer>
+
+          <div v-if="isHero" class="chat-suggestions">
+            <button
+              v-for="(item, i) in suggestions"
+              :key="item.title"
+              type="button"
+              class="chat-suggestion"
+              :style="{ '--i': i }"
+              :title="item.prompt"
+              @click="useSuggestion(item.prompt)"
+            >
+              {{ item.title }}
+            </button>
+          </div>
+        </div>
       </main>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -207,7 +242,7 @@ import BrandLogo from '@/components/brand/BrandLogo.vue'
 import LocaleToggle from '@/components/brand/LocaleToggle.vue'
 import ThemeToggleIcon from '@/components/common/ThemeToggleIcon.vue'
 import { renderChatMarkdown } from './markdown'
-import { chatModelLabel } from './modelCatalog'
+import { chatModelEntry } from './modelCatalog'
 import { suggestionsFor } from './suggestions'
 import type { ChatMode } from './types'
 import { useChatSession } from './useChatSession'
@@ -247,6 +282,65 @@ const active = computed(() => session.activeConversation())
 const mode = computed<ChatMode>(() => active.value?.mode ?? 'chat')
 const suggestions = computed(() => suggestionsFor(locale.value, mode.value))
 const isZh = computed(() => locale.value.startsWith('zh'))
+const isHero = computed(() => !loading.value && keys.value.length > 0 && !active.value?.messages.length)
+
+/** 侧栏按最后活动时间分组；列表本身已按时间倒序。 */
+const groupedConversations = computed(() => {
+  const today = new Date().setHours(0, 0, 0, 0)
+  const day = 86_400_000
+  const groups = [
+    { key: 'today', from: today },
+    { key: 'yesterday', from: today - day },
+    { key: 'week', from: today - 7 * day },
+    { key: 'earlier', from: -Infinity }
+  ].map((group) => ({ ...group, items: [] as typeof conversations.value }))
+  for (const item of conversations.value) {
+    groups.find((group) => item.updatedAt >= group.from)?.items.push(item)
+  }
+  return groups.filter((group) => group.items.length)
+})
+
+const modelMenuOpen = ref(false)
+const modelMenuRef = ref<HTMLElement | null>(null)
+const modelOptions = computed(() =>
+  models.value.map((id) => {
+    const entry = chatModelEntry(id)
+    return {
+      id,
+      name: entry?.name ?? id,
+      vendor: entry?.vendor ?? 'other',
+      tag: entry ? (isZh.value ? entry.tag.zh : entry.tag.en) : '',
+      pitch: entry ? (isZh.value ? entry.pitch.zh : entry.pitch.en) : ''
+    }
+  })
+)
+const currentModel = computed(() => modelOptions.value.find((option) => option.id === selectedModel.value))
+const modelButtonText = computed(() => {
+  if (modelsLoading.value) return t('chat.modelsLoading')
+  if (!modelOptions.value.length) return t('chat.noModel')
+  return currentModel.value?.name ?? t('chat.pickModel')
+})
+
+function pickModel(id: string) {
+  modelMenuOpen.value = false
+  void session.selectModel(id)
+}
+
+function onDocumentPointerDown(event: PointerEvent) {
+  if (modelMenuOpen.value && !modelMenuRef.value?.contains(event.target as Node)) modelMenuOpen.value = false
+}
+function onDocumentKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') modelMenuOpen.value = false
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocumentPointerDown)
+  document.addEventListener('keydown', onDocumentKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
+  document.removeEventListener('keydown', onDocumentKeydown)
+})
+
 const headerTitle = computed(() => {
   const conv = active.value
   if (conv && conv.messages.length) return conv.title
@@ -273,13 +367,6 @@ function onKeyChange(event: Event) {
   const value = Number((event.target as HTMLSelectElement).value)
   if (Number.isFinite(value) && value > 0) {
     void session.selectKey(value)
-  }
-}
-
-function onModelChange(event: Event) {
-  const value = (event.target as HTMLSelectElement).value
-  if (value) {
-    void session.selectModel(value)
   }
 }
 
@@ -338,6 +425,22 @@ async function copyMessage(content: string) {
     }, 1200)
   } catch {
     copied.value = ''
+  }
+}
+
+/** 代码块上的「复制」按钮是 v-html 出来的，统一在对话区上接点击。 */
+async function onThreadClick(event: MouseEvent) {
+  const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-chat-copy]')
+  const code = button?.closest('.chat-code')?.querySelector('pre')
+  if (!button || !code) return
+  try {
+    await navigator.clipboard.writeText(code.textContent ?? '')
+    button.textContent = t('chat.copied')
+    window.setTimeout(() => {
+      button.textContent = button.dataset.label ?? ''
+    }, 1200)
+  } catch {
+    // 剪贴板不可用时不提示，按钮保持原样。
   }
 }
 

@@ -58,7 +58,7 @@ export const CHAT_MODEL_CATALOG: ChatModelEntry[] = [
 ]
 
 /** 模型 id 对上名单项：完全相同，或是带日期的快照（如 claude-opus-5-5-20260922）。 */
-function entryFor(id: string): ChatModelEntry | undefined {
+export function chatModelEntry(id: string): ChatModelEntry | undefined {
   return CHAT_MODEL_CATALOG.find((entry) => id === entry.id || id.startsWith(`${entry.id}-20`))
 }
 
@@ -69,14 +69,14 @@ function entryFor(id: string): ChatModelEntry | undefined {
 export function chatModelsFrom(models: string[]): string[] {
   const picked: string[] = []
   for (const entry of CHAT_MODEL_CATALOG) {
-    const hit = models.find((id) => entryFor(id) === entry)
+    const hit = models.find((id) => chatModelEntry(id) === entry)
     if (hit) picked.push(hit)
   }
   return picked.length ? picked : models
 }
 
 export function chatModelLabel(id: string, zh: boolean): string {
-  const entry = entryFor(id)
+  const entry = chatModelEntry(id)
   if (!entry) return id
   return `${entry.name} · ${zh ? entry.tag.zh : entry.tag.en}`
 }

@@ -34,6 +34,9 @@ export default {
     fortunePlaceholder: '例如：1995.8.12 早上 7 点生，女，看今年运势',
     chatSubtitle: '问问题、写东西、翻译、改代码，随便聊。',
     sendHint: 'Enter 发送，Shift + Enter 换行',
+    pickModel: '选择模型',
+    copyCode: '复制代码',
+    groups: { today: '今天', yesterday: '昨天', week: '近 7 天', earlier: '更早' },
     errors: {
       invalid_key: '这把密钥无效或已停用，请换一把再试。',
       billing: '余额或配额不足。',

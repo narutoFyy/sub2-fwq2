@@ -34,6 +34,9 @@ export default {
     fortunePlaceholder: 'e.g. Born 1995-08-12, 7 am, female — this year?',
     chatSubtitle: 'Ask questions, write, translate, fix code — anything goes.',
     sendHint: 'Enter to send, Shift + Enter for a new line',
+    pickModel: 'Choose a model',
+    copyCode: 'Copy code',
+    groups: { today: 'Today', yesterday: 'Yesterday', week: 'Last 7 days', earlier: 'Earlier' },
     errors: {
       invalid_key: 'This key is invalid or inactive. Choose another key.',
       billing: 'Balance or quota is insufficient.',
