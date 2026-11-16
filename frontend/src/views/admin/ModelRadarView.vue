@@ -1,73 +1,73 @@
 <template>
   <AppLayout>
-    <div class="w-full min-w-0 space-y-6 pb-8">
-      <header class="page-header rounded-3xl bg-white p-5 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700 sm:p-6">
-        <div class="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p class="text-xs font-semibold uppercase text-primary-600 dark:text-primary-400">OpenAI</p>
-            <h1 class="mt-1 text-2xl font-black text-gray-900 dark:text-white">{{ t('modelRadar.configure') }}</h1>
-            <p class="mt-1.5 text-sm text-gray-500 dark:text-gray-400">{{ t('modelRadar.subtitle') }}</p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button class="btn-secondary inline-flex items-center gap-2" :disabled="loading" @click="load"><Icon name="refresh" size="sm" />{{ t('modelRadar.refresh') }}</button>
-            <button class="btn-primary inline-flex items-center gap-2" :disabled="saving || !groups.length" @click="save"><Icon name="check" size="sm" />{{ t('modelRadar.save') }}</button>
-            <button class="btn-secondary inline-flex items-center gap-2" :disabled="running || !groups.length" @click="run"><Icon name="play" size="sm" />{{ t('modelRadar.runNow') }}</button>
-          </div>
+    <div class="w-full min-w-0 space-y-5 pb-8">
+      <header class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+          <h1 class="page-title">{{ t('modelRadar.configure') }}</h1>
+          <p class="page-description">{{ t('modelRadar.configureSubtitle') }}</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn btn-secondary" :disabled="loading" @click="load"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" />{{ t('modelRadar.refresh') }}</button>
+          <button type="button" class="btn btn-secondary" :disabled="running || !enabledGroupIds.length" @click="run"><Icon name="play" size="sm" />{{ running ? t('modelRadar.runningNow') : t('modelRadar.runNow') }}</button>
+          <button type="button" class="btn btn-primary" :disabled="saving || !groups.length" @click="save"><Icon name="check" size="sm" />{{ t('modelRadar.save') }}</button>
         </div>
       </header>
 
-      <div v-if="error" class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">{{ t('modelRadar.loadFailed') }}</div>
-      <div v-if="notice" class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">{{ notice }}</div>
-      <div v-if="loading" class="flex justify-center py-12"><LoadingSpinner /></div>
-      <section v-else-if="groups.length" class="space-y-4">
-        <article v-for="group in groups" :key="group.group_id" class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700">
-          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div><h2 class="font-bold text-gray-900 dark:text-white">{{ group.group_name }}</h2><p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ group.group_id }}</p></div>
-            <button type="button" class="relative inline-flex h-6 w-11 flex-shrink-0 rounded-full transition" :class="group.enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-dark-600'" :aria-label="t('modelRadar.enabled')" @click="group.enabled = !group.enabled"><span class="absolute top-1 h-4 w-4 rounded-full bg-white transition" :class="group.enabled ? 'left-6' : 'left-1'"></span></button>
-          </div>
+      <RadarHowItWorks :prompt="prompt" :expected="expected" />
 
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <label class="block"><span class="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-300">{{ t('modelRadar.model') }}</span><input v-model="group.model_id" class="input w-full" maxlength="128" /></label>
-            <label class="block"><span class="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-300">{{ t('modelRadar.effort') }}</span><select v-model="group.reasoning_effort" class="input w-full"><option v-for="effort in efforts" :key="effort" :value="effort">{{ effort }}</option></select></label>
-          </div>
-
-          <div class="mt-5 space-y-5">
-            <ModelRadarResultPanel :label="t('modelRadar.logic')" :result="group.logic" :fallback-prompt="logicPrompt" />
-            <ModelRadarResultPanel :label="t('modelRadar.drawing')" :result="group.drawing" :fallback-prompt="drawingPrompt" />
-          </div>
-        </article>
-      </section>
-      <div v-else class="rounded-2xl border border-dashed border-gray-300 p-10 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400">{{ t('modelRadar.empty') }}</div>
-
-      <section class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700"><h2 class="font-bold text-gray-900 dark:text-white">{{ t('modelRadar.iq') }}</h2><p class="mt-3 text-xl font-black text-gray-400">{{ overview?.iq_status }}</p></article>
-        <article class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700"><h2 class="font-bold text-gray-900 dark:text-white">{{ t('modelRadar.recommendation') }}</h2><p class="mt-3 text-xl font-black text-gray-400">{{ overview?.recommend_status }}</p></article>
-      </section>
+      <div v-if="loading && !overview" class="flex justify-center py-12"><LoadingSpinner /></div>
+      <div v-else-if="error" class="card p-5 text-sm text-red-700 dark:text-red-300">{{ t('modelRadar.loadFailed') }}</div>
+      <div v-else-if="!groups.length" class="card p-10 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('modelRadar.empty') }}</div>
+      <template v-else>
+        <RadarSummary :groups="groups" />
+        <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <RadarGroupCard v-for="group in groups" :key="group.group_id" :group="group" :prompt="prompt">
+            <template #config>
+              <div class="mt-4 rounded-xl bg-gray-900/[0.03] p-4 dark:bg-white/[0.04]">
+                <label class="flex cursor-pointer items-center justify-between gap-3">
+                  <span class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ t('modelRadar.enabled') }}</span>
+                  <button type="button" role="switch" :aria-checked="group.enabled" class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition" :class="group.enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-white/20'" @click="group.enabled = !group.enabled"><span class="absolute top-1 h-4 w-4 rounded-full bg-white transition-all" :class="group.enabled ? 'left-6' : 'left-1'"></span></button>
+                </label>
+                <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label class="block"><span class="mb-1.5 block text-xs text-gray-500 dark:text-gray-400">{{ t('modelRadar.model') }}</span><input v-model="group.model_id" class="input" maxlength="128" /></label>
+                  <label class="block"><span class="mb-1.5 block text-xs text-gray-500 dark:text-gray-400">{{ t('modelRadar.effort') }}</span><select v-model="group.reasoning_effort" class="input"><option v-for="effort in efforts" :key="effort" :value="effort">{{ effort }}</option></select></label>
+                </div>
+                <p v-if="group.reasoning_effort !== 'high'" class="mt-2 text-xs text-amber-700 dark:text-amber-400">{{ t('modelRadar.effortHint') }}</p>
+                <p v-if="group.enabled && group.next_run_at" class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ t('modelRadar.nextRun', { time: new Date(group.next_run_at).toLocaleString() }) }}</p>
+              </div>
+            </template>
+          </RadarGroupCard>
+        </div>
+      </template>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Icon from '@/components/icons/Icon.vue'
-import ModelRadarResultPanel from '@/components/model-radar/ModelRadarResultPanel.vue'
+import RadarGroupCard from '@/components/model-radar/RadarGroupCard.vue'
+import RadarHowItWorks from '@/components/model-radar/RadarHowItWorks.vue'
+import RadarSummary from '@/components/model-radar/RadarSummary.vue'
 import { adminAPI } from '@/api/admin'
 import type { ModelRadarGroup, ModelRadarOverview } from '@/api/modelRadar'
+import { useAppStore } from '@/stores/app'
 
 const { t } = useI18n()
+const appStore = useAppStore()
 const overview = ref<ModelRadarOverview | null>(null)
 const groups = ref<ModelRadarGroup[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const running = ref(false)
 const error = ref(false)
-const notice = ref('')
 const efforts = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']
-const logicPrompt = 'Solve this logic question. What is the next number in the sequence 1, 3, 6, 10, 15, ? Explain briefly, then finish with exactly "Answer: 21".'
-const drawingPrompt = '创建一个HTML，内容是SVG绘制一个鹈鹕骑自行车的2D动画'
+const prompt = computed(() => overview.value?.prompt || 'ciallo')
+const expected = computed(() => overview.value?.expected_reply || 'Ciallo～(∠・ω< )⌒☆')
+const enabledGroupIds = computed(() => groups.value.filter(group => group.enabled).map(group => group.group_id))
 
 const load = async () => {
   loading.value = true
@@ -82,27 +82,47 @@ const load = async () => {
   }
 }
 
+const saveConfigs = () => adminAPI.modelRadar.updateConfigs(groups.value.map(group => ({ group_id: group.group_id, group_name: group.group_name, model_id: group.model_id, reasoning_effort: group.reasoning_effort, enabled: group.enabled })))
+
 const save = async () => {
   saving.value = true
   try {
-    await adminAPI.modelRadar.updateConfigs(groups.value.map(group => ({ group_id: group.group_id, group_name: group.group_name, model_id: group.model_id, reasoning_effort: group.reasoning_effort, enabled: group.enabled })))
-    notice.value = t('modelRadar.saved')
+    await saveConfigs()
+    appStore.showSuccess(t('modelRadar.saved'))
     await load()
   } catch {
-    error.value = true
+    appStore.showError(t('modelRadar.saveFailed'))
   } finally {
     saving.value = false
   }
 }
 
+// 「立即检测」按页面上当前的模型和强度跑：先存配置，再触发。后端在后台跑（画图题要几分钟），
+// 这里轮询到每个分组都出了新的 ciallo 结果为止，最多等 3 分钟。
 const run = async () => {
   running.value = true
+  const startedAt = Date.now()
+  const targets = enabledGroupIds.value
   try {
-    await adminAPI.modelRadar.runNow(groups.value.filter(group => group.enabled).map(group => group.group_id))
-    notice.value = t('modelRadar.running')
-    setTimeout(load, 500)
+    await saveConfigs()
+    await adminAPI.modelRadar.runNow(targets)
+    for (let attempt = 0; attempt < 45; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 4000))
+      const fresh = await adminAPI.modelRadar.getOverview()
+      overview.value = fresh
+      groups.value = fresh.groups.map(group => ({ ...group }))
+      const done = targets.every(id => {
+        const latest = fresh.groups.find(group => group.group_id === id)?.ciallo
+        return latest && new Date(latest.detected_at).getTime() >= startedAt
+      })
+      if (done) {
+        appStore.showSuccess(t('modelRadar.ran', { n: targets.length }))
+        return
+      }
+    }
+    appStore.showError(t('modelRadar.runFailed'))
   } catch {
-    error.value = true
+    appStore.showError(t('modelRadar.runFailed'))
   } finally {
     running.value = false
   }

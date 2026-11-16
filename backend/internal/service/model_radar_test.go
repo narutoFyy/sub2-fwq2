@@ -27,16 +27,25 @@ func (s *modelRadarRepoStub) ListConfigs(context.Context) ([]*ModelRadarConfig, 
 	return s.configs, nil
 }
 
-func (s *modelRadarRepoStub) ListResults(context.Context, *int64, string, int) ([]*ModelRadarResult, error) {
-	return s.results, nil
+func (s *modelRadarRepoStub) ListResults(_ context.Context, _ *int64, testType string, _ int) ([]*ModelRadarResult, error) {
+	out := make([]*ModelRadarResult, 0, len(s.results))
+	for _, result := range s.results {
+		if testType == "" || result.TestType == testType {
+			out = append(out, result)
+		}
+	}
+	return out, nil
 }
 
 func TestModelRadarPublicOverviewExposesResultsAndRedactsInternalDetails(t *testing.T) {
 	reviewedBy := int64(77)
 	repo := &modelRadarRepoStub{configs: []*ModelRadarConfig{{GroupID: 10, Enabled: true}}, results: []*ModelRadarResult{{
-		ID: 1, GroupID: 10, ModelID: "gpt-5.4", TestType: ModelRadarTestTypeLogic,
-		Status: ModelRadarStatusPassed, ResponseText: "Answer: 21", ErrorMessage: "secret error",
+		ID: 2, GroupID: 10, ModelID: "gpt-5.4", TestType: ModelRadarTestTypeCiallo,
+		Status: ModelRadarStatusPassed, ResponseText: "Ciallo～(∠・ω< )⌒☆", ErrorMessage: "secret error",
 		LatencyMS: 120, DetectedAt: time.Now(), ReviewedBy: &reviewedBy,
+	}, {
+		ID: 1, GroupID: 10, ModelID: "gpt-5.4", TestType: ModelRadarTestTypeLogic,
+		Status: ModelRadarStatusPassed, ResponseText: "Answer: 21", DetectedAt: time.Now(),
 	}}}
 	groups := &modelRadarGroupRepoStub{groups: []Group{{ID: 10, Name: "OpenAI", Platform: PlatformOpenAI, Status: StatusActive}}}
 	svc := NewModelRadarService(repo, nil, groups, nil)
@@ -44,10 +53,14 @@ func TestModelRadarPublicOverviewExposesResultsAndRedactsInternalDetails(t *test
 	overview, err := svc.PublicOverview(context.Background())
 	require.NoError(t, err)
 	require.Len(t, overview.Groups, 1)
-	require.NotNil(t, overview.Groups[0].Logic)
-	require.Equal(t, "Answer: 21", overview.Groups[0].Logic.ResponseText)
-	require.Empty(t, overview.Groups[0].Logic.ErrorMessage)
-	require.Nil(t, overview.Groups[0].Logic.ReviewedBy)
+	require.Equal(t, "ciallo", overview.Prompt)
+	require.NotNil(t, overview.Groups[0].Ciallo)
+	require.Equal(t, "Ciallo～(∠・ω< )⌒☆", overview.Groups[0].Ciallo.ResponseText)
+	require.Empty(t, overview.Groups[0].Ciallo.ErrorMessage)
+	require.Nil(t, overview.Groups[0].Ciallo.ReviewedBy)
+	// 旧数列题的历史结果不进时间线。
+	require.Len(t, overview.Groups[0].Timeline, 1)
+	require.Empty(t, overview.Groups[0].Timeline[0].ErrorMessage)
 }
 
 func TestModelRadarRejectsNonOpenAIConfig(t *testing.T) {
@@ -58,8 +71,23 @@ func TestModelRadarRejectsNonOpenAIConfig(t *testing.T) {
 	require.ErrorIs(t, err, ErrModelRadarOpenAIOnly)
 }
 
-func TestModelRadarLogicAnswerMatcher(t *testing.T) {
-	require.True(t, logicAnswerPattern.MatchString("Answer: 21"))
-	require.True(t, logicAnswerPattern.MatchString("答案：21"))
-	require.False(t, logicAnswerPattern.MatchString("Answer: 20"))
+func TestIsCialloReply(t *testing.T) {
+	// 以下回复均为 2026-11-15 实测所得。
+	for _, reply := range []string{
+		"Ciallo～(∠・ω< )⌒☆",
+		"Ciallo～(∠・ω< )⌒★ 有什么我可以帮你的吗？",
+		"ciallo~ (≧▽≦)",
+		"Ciallo！(^_^)",
+	} {
+		require.True(t, IsCialloReply(reply), reply)
+	}
+	for _, reply := range []string{
+		"Ciallo! 👋 What can I help you with?",
+		"Ciallo～ 👋 今天想聊点什么？",
+		"Hello! How can I help? (∠・ω< )⌒☆",
+		"Ciallo (hello) there",
+		"",
+	} {
+		require.False(t, IsCialloReply(reply), reply)
+	}
 }

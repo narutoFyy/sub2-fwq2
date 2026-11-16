@@ -6,7 +6,7 @@ export interface ModelRadarResult {
   id: number
   group_id: number
   model_id: string
-  test_type: 'logic' | 'drawing'
+  test_type: 'ciallo' | 'drawing'
   prompt: string
   status: RadarStatus
   response_text?: string
@@ -25,7 +25,7 @@ export interface ModelRadarGroup {
   enabled: boolean
   next_run_at?: string
   last_run_at?: string
-  logic?: ModelRadarResult
+  ciallo?: ModelRadarResult
   drawing?: ModelRadarResult
   timeline: ModelRadarResult[]
 }
@@ -33,8 +33,8 @@ export interface ModelRadarGroup {
 export interface ModelRadarOverview {
   groups: ModelRadarGroup[]
   interval_minutes: number
-  iq_status: string
-  recommend_status: string
+  prompt: string
+  expected_reply: string
 }
 
 export async function getOverview(): Promise<ModelRadarOverview> {

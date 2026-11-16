@@ -11,7 +11,9 @@ import (
 )
 
 const (
+	// ModelRadarTestTypeLogic 是旧的数列题，只为读历史数据保留，不再发起也不再展示。
 	ModelRadarTestTypeLogic    = "logic"
+	ModelRadarTestTypeCiallo   = "ciallo"
 	ModelRadarTestTypeDrawing  = "drawing"
 	ModelRadarStatusPassed     = "passed"
 	ModelRadarStatusFailed     = "failed"
@@ -22,6 +24,8 @@ const (
 	modelRadarInterval         = 30 * time.Minute
 	modelRadarCycleInterval    = time.Minute
 	modelRadarMaxResponseBytes = 2 << 20
+	modelRadarDefaultEffort    = "high"
+	modelRadarTimelineSize     = 24
 )
 
 var (
@@ -29,7 +33,9 @@ var (
 	ErrModelRadarOpenAIOnly  = errors.New("model radar supports OpenAI groups only")
 	ErrModelRadarGroup       = errors.New("OpenAI group not found")
 	ErrModelRadarReview      = errors.New("invalid model radar review status")
-	logicAnswerPattern       = regexp.MustCompile(`(?i)(?:答案|answer|结果|result)\s*[:：]?\s*(?:是\s*)?(21)\b|\b(21)\b`)
+	cialloWordPattern        = regexp.MustCompile(`(?i)ciallo`)
+	// 颜文字：括号里带表情符号的一小段，或 Ciallo 招牌的「⌒☆」尾巴。emoji（如 👋）不算。
+	cialloKaomojiPattern = regexp.MustCompile(`[(（][^()（）\n]{0,24}[ω∀▽∇・･´｀≧≦﹏∠°□Дᴗ•╹◡‿ㅂ╥＾￣＿＞＜][^()（）\n]{0,24}[)）]|[(（]\s*[\^>;T]\s*[_.o\-wv]+\s*[\^<;T]\s*[)）]|⌒\s*[☆★]`)
 )
 
 type ModelRadarConfig struct {
@@ -66,16 +72,16 @@ type ModelRadarGroupOverview struct {
 	Enabled         bool               `json:"enabled"`
 	NextRunAt       *time.Time         `json:"next_run_at,omitempty"`
 	LastRunAt       *time.Time         `json:"last_run_at,omitempty"`
-	Logic           *ModelRadarResult  `json:"logic,omitempty"`
+	Ciallo          *ModelRadarResult  `json:"ciallo,omitempty"`
 	Drawing         *ModelRadarResult  `json:"drawing,omitempty"`
 	Timeline        []ModelRadarResult `json:"timeline"`
 }
 
 type ModelRadarOverview struct {
-	Groups          []ModelRadarGroupOverview `json:"groups"`
-	IntervalMins    int                       `json:"interval_minutes"`
-	IQStatus        string                    `json:"iq_status"`
-	RecommendStatus string                    `json:"recommend_status"`
+	Groups       []ModelRadarGroupOverview `json:"groups"`
+	IntervalMins int                       `json:"interval_minutes"`
+	Prompt       string                    `json:"prompt"`
+	ExpectedText string                    `json:"expected_reply"`
 }
 
 type ModelRadarRepository interface {
@@ -161,21 +167,27 @@ func (s *ModelRadarService) GetOverview(ctx context.Context, admin bool) (*Model
 	for _, cfg := range configs {
 		configByGroup[cfg.GroupID] = cfg
 	}
-	results, err := s.repo.ListResults(ctx, nil, "", 300)
+	// 两类结果分开取：ciallo 回复很短，可以多取做时间线；画图回复很大，只要每组最新一条。
+	results, err := s.repo.ListResults(ctx, nil, ModelRadarTestTypeCiallo, 1000)
 	if err != nil {
 		return nil, err
 	}
+	drawings, err := s.repo.ListResults(ctx, nil, ModelRadarTestTypeDrawing, 60)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, drawings...)
 	resultByGroup := make(map[int64][]*ModelRadarResult)
 	for _, result := range results {
 		resultByGroup[result.GroupID] = append(resultByGroup[result.GroupID], result)
 	}
-	out := &ModelRadarOverview{Groups: make([]ModelRadarGroupOverview, 0, len(groups)), IntervalMins: 30, IQStatus: "未开发", RecommendStatus: "未开发"}
+	out := &ModelRadarOverview{Groups: make([]ModelRadarGroupOverview, 0, len(groups)), IntervalMins: int(modelRadarInterval / time.Minute), Prompt: radarCialloPrompt, ExpectedText: radarCialloExpected}
 	for _, group := range groups {
 		cfg := configByGroup[group.ID]
 		if !admin && (group.IsExclusive || cfg == nil || !cfg.Enabled) {
 			continue
 		}
-		item := ModelRadarGroupOverview{GroupID: group.ID, GroupName: group.Name, ModelID: DefaultRadarModel(&group), ReasoningEffort: "medium", Timeline: []ModelRadarResult{}}
+		item := ModelRadarGroupOverview{GroupID: group.ID, GroupName: group.Name, ModelID: DefaultRadarModel(&group), ReasoningEffort: modelRadarDefaultEffort, Timeline: []ModelRadarResult{}}
 		if cfg != nil {
 			item.ModelID, item.ReasoningEffort, item.Enabled, item.NextRunAt, item.LastRunAt = cfg.ModelID, cfg.ReasoningEffort, cfg.Enabled, cfg.NextRunAt, cfg.LastRunAt
 			if item.ModelID == "" {
@@ -192,11 +204,15 @@ func (s *ModelRadarService) GetOverview(ctx context.Context, admin bool) (*Model
 			if !admin {
 				current.ErrorMessage, current.ReviewedBy = "", nil
 			}
-			timeline := current
-			timeline.ResponseText, timeline.ErrorMessage, timeline.ReviewedBy = "", "", nil
-			item.Timeline = append(item.Timeline, timeline)
-			if result.TestType == ModelRadarTestTypeLogic && item.Logic == nil {
-				item.Logic = &current
+			if result.TestType == ModelRadarTestTypeCiallo {
+				if item.Ciallo == nil {
+					item.Ciallo = &current
+				}
+				if len(item.Timeline) < modelRadarTimelineSize {
+					timeline := current
+					timeline.ErrorMessage, timeline.ReviewedBy = "", nil
+					item.Timeline = append(item.Timeline, timeline)
+				}
 			}
 			if result.TestType == ModelRadarTestTypeDrawing && item.Drawing == nil {
 				item.Drawing = &current
@@ -281,11 +297,42 @@ func (s *ModelRadarService) RunNow(ctx context.Context, groupIDs []int64) (int, 
 	count := 0
 	for _, groupID := range groupIDs {
 		if err := s.runGroup(ctx, groupID); err != nil {
-			return count, err
+			continue
 		}
 		count++
 	}
 	return count, nil
+}
+
+// RunNowInBackground 供后台「立即检测」用：一轮要跑文字题加画图题，可能要几分钟，
+// 所以立刻返回要检测的分组数，结果由页面轮询总览拿。
+func (s *ModelRadarService) RunNowInBackground(ctx context.Context, groupIDs []int64) (int, error) {
+	if s == nil || s.repo == nil || s.groupRepo == nil || s.accountTest == nil {
+		return 0, ErrModelRadarUnavailable
+	}
+	if len(groupIDs) == 0 {
+		groups, err := s.groupRepo.ListActiveByPlatform(ctx, PlatformOpenAI)
+		if err != nil {
+			return 0, err
+		}
+		for _, group := range groups {
+			groupIDs = append(groupIDs, group.ID)
+		}
+	}
+	s.mu.Lock()
+	parent := s.parentCtx
+	if parent == nil {
+		parent = context.Background()
+	}
+	s.wg.Add(1)
+	s.mu.Unlock()
+	go func() {
+		defer s.wg.Done()
+		runCtx, cancel := context.WithTimeout(parent, 15*time.Minute)
+		defer cancel()
+		_, _ = s.RunNow(runCtx, groupIDs)
+	}()
+	return len(groupIDs), nil
 }
 
 func (s *ModelRadarService) runDue(ctx context.Context, now time.Time) error {
@@ -328,7 +375,7 @@ func (s *ModelRadarService) runGroup(ctx context.Context, groupID int64) error {
 		}
 	}
 	if cfg == nil {
-		cfg = &ModelRadarConfig{GroupID: groupID, ModelID: DefaultRadarModel(group), ReasoningEffort: "medium", Enabled: true}
+		cfg = &ModelRadarConfig{GroupID: groupID, ModelID: DefaultRadarModel(group), ReasoningEffort: modelRadarDefaultEffort, Enabled: true}
 	}
 	accounts, err := s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, groupID, PlatformOpenAI)
 	if err != nil {
@@ -338,7 +385,7 @@ func (s *ModelRadarService) runGroup(ctx context.Context, groupID int64) error {
 		return s.finishRun(ctx, cfg)
 	}
 	accountID := accounts[0].ID
-	probes := []struct{ typ, prompt string }{{ModelRadarTestTypeLogic, radarLogicPrompt}, {ModelRadarTestTypeDrawing, radarDrawingPrompt}}
+	probes := []struct{ typ, prompt string }{{ModelRadarTestTypeCiallo, radarCialloPrompt}, {ModelRadarTestTypeDrawing, radarDrawingPrompt}}
 	for _, probe := range probes {
 		result, callErr := s.accountTest.RunTestBackgroundWithPromptAndReasoning(ctx, accountID, cfg.ModelID, probe.prompt, cfg.ReasoningEffort)
 		stored := &ModelRadarResult{GroupID: groupID, ModelID: cfg.ModelID, TestType: probe.typ, Prompt: probe.prompt, DetectedAt: s.now()}
@@ -352,8 +399,8 @@ func (s *ModelRadarService) runGroup(ctx context.Context, groupID int64) error {
 			}
 		} else {
 			stored.ResponseText, stored.LatencyMS = truncateRadarResponse(result.ResponseText), result.LatencyMs
-			if probe.typ == ModelRadarTestTypeLogic {
-				if logicAnswerPattern.MatchString(result.ResponseText) {
+			if probe.typ == ModelRadarTestTypeCiallo {
+				if IsCialloReply(result.ResponseText) {
 					stored.Status = ModelRadarStatusPassed
 				} else {
 					stored.Status = ModelRadarStatusFailed
@@ -384,11 +431,17 @@ func containsRadarSVG(value string) bool {
 	return strings.Contains(strings.ToLower(value), "<svg")
 }
 
+// IsCialloReply 判定 ciallo 题：没降智的模型认得这个梗，会回「Ciallo」并带上颜文字；
+// 只回一句普通问候（哪怕带 emoji）算未通过。
+func IsCialloReply(reply string) bool {
+	return cialloWordPattern.MatchString(reply) && cialloKaomojiPattern.MatchString(reply)
+}
+
 func modelRadarPrompt(testType string) string {
 	if testType == ModelRadarTestTypeDrawing {
 		return radarDrawingPrompt
 	}
-	return radarLogicPrompt
+	return radarCialloPrompt
 }
 
 func (s *ModelRadarService) finishRun(ctx context.Context, cfg *ModelRadarConfig) error {
@@ -412,7 +465,10 @@ func (s *ModelRadarService) ReviewResult(ctx context.Context, resultID int64, st
 	return s.repo.ReviewResult(ctx, resultID, status, reviewerID)
 }
 
-const radarLogicPrompt = `Solve this logic question. What is the next number in the sequence 1, 3, 6, 10, 15, ? Explain briefly, then finish with exactly "Answer: 21".`
+// 实测（2026-11-15，gpt-6-astra / gpt-6.1-sol）：high 强度稳定回「Ciallo～(∠・ω< )⌒★」，
+// medium 及以下只回「Ciallo～ 👋」，所以默认强度用 high。
+const radarCialloPrompt = `ciallo`
+const radarCialloExpected = `Ciallo～(∠・ω< )⌒☆`
 const radarDrawingPrompt = `创建一个HTML，内容是SVG绘制一个鹈鹕骑自行车的2D动画`
 
 func (s *ModelRadarService) PublicOverview(ctx context.Context) (*ModelRadarOverview, error) {

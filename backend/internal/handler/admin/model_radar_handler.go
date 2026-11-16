@@ -79,7 +79,7 @@ func (h *ModelRadarHandler) RunNow(c *gin.Context) {
 			return
 		}
 	}
-	count, err := h.radar.RunNow(c.Request.Context(), req.GroupIDs)
+	count, err := h.radar.RunNowInBackground(c.Request.Context(), req.GroupIDs)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
