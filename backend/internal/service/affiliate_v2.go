@@ -45,8 +45,8 @@ const (
 )
 
 var (
-	ErrAffiliateRewardGrantNotFound      = infraerrors.NotFound("AFFILIATE_REWARD_GRANT_NOT_FOUND", "affiliate reward grant not found")
-	ErrAffiliateRewardGrantNotPending    = infraerrors.Conflict("AFFILIATE_REWARD_GRANT_NOT_PENDING", "affiliate reward grant is not in pending_review status")
+	ErrAffiliateRewardGrantNotFound   = infraerrors.NotFound("AFFILIATE_REWARD_GRANT_NOT_FOUND", "affiliate reward grant not found")
+	ErrAffiliateRewardGrantNotPending = infraerrors.Conflict("AFFILIATE_REWARD_GRANT_NOT_PENDING", "affiliate reward grant is not in pending_review status")
 )
 
 type ctxKeyAffiliateClientIP struct{}
@@ -169,12 +169,12 @@ func DefaultAffiliateLadderTiers() []AffiliateLadderTier {
 }
 
 type AffiliateTrialGrantOutcome struct {
-	Granted                 bool   `json:"granted"`
+	Granted                 bool    `json:"granted"`
 	Amount                  float64 `json:"amount"`
-	SkipReason              string `json:"skip_reason,omitempty"`
-	TodayGrantedCount       int    `json:"today_granted_count"`
-	CircuitBreakerTriggered bool   `json:"circuit_breaker_triggered"`
-	InviterPausedNow        bool   `json:"inviter_paused_now"`
+	SkipReason              string  `json:"skip_reason,omitempty"`
+	TodayGrantedCount       int     `json:"today_granted_count"`
+	CircuitBreakerTriggered bool    `json:"circuit_breaker_triggered"`
+	InviterPausedNow        bool    `json:"inviter_paused_now"`
 }
 
 type AffiliateRewardEvalOutcome struct {
@@ -276,19 +276,18 @@ func (s *AffiliateService) postBindInviterV2(ctx context.Context, inviteeID, inv
 
 // postPaidRechargeV2 在被邀请人完成实付充值时执行：
 // 累加实付金额、解除未充值体验号 3 RPM 限速，并评估单人两步奖（10元->3元、50元->5元）与阶梯奖（5/20/50/100人）。
-func (s *AffiliateService) postPaidRechargeV2(ctx context.Context, inviteeID int64, paidAmount float64, sourceOrderID *int64) {
+func (s *AffiliateService) postPaidRechargeV2(ctx context.Context, inviteeID int64, paidAmount float64, sourceOrderID *int64) error {
 	repo, ok := s.v2Repo()
 	if !ok || inviteeID <= 0 || paidAmount <= 0 {
-		return
+		return nil
 	}
 	defaultRPM := s.defaultUserRPMLimit(ctx)
 	outcome, err := repo.RecordInviteePaidRecharge(ctx, inviteeID, roundTo(paidAmount, 8), sourceOrderID, defaultRPM)
 	if err != nil {
-		logger.LegacyPrintf("service.affiliate", "[AffiliateV2] RecordInviteePaidRecharge failed invitee=%d amount=%.4f: %v", inviteeID, paidAmount, err)
-		return
+		return fmt.Errorf("record affiliate paid recharge: %w", err)
 	}
 	if outcome == nil {
-		return
+		return nil
 	}
 	if outcome.TrialRPMLifted {
 		s.invalidateAffiliateCaches(ctx, inviteeID)
@@ -296,6 +295,7 @@ func (s *AffiliateService) postPaidRechargeV2(ctx context.Context, inviteeID int
 	if outcome.InviterID > 0 && (outcome.Step1Granted > 0 || outcome.Step2Granted > 0 || outcome.TierBonusGranted > 0) {
 		s.invalidateAffiliateCaches(ctx, outcome.InviterID)
 	}
+	return nil
 }
 
 // RecordUserConsumption 在用户调用模型产生实际扣费后调用：
@@ -367,9 +367,9 @@ func (s *AffiliateService) ClawbackOrderAffiliateRewards(ctx context.Context, or
 }
 
 // enrichAffiliateDetailV2 计算邀请页改版所需的阶梯进度条、待到账/已到账明细与提醒好友激活状态。
-func (s *AffiliateService) enrichAffiliateDetailV2(ctx context.Context, summary *AffiliateSummary, detail *AffiliateDetail) {
+func (s *AffiliateService) enrichAffiliateDetailV2(ctx context.Context, summary *AffiliateSummary, detail *AffiliateDetail) error {
 	if detail == nil {
-		return
+		return nil
 	}
 	now := time.Now()
 	var qualifiedCount int
@@ -401,6 +401,9 @@ func (s *AffiliateService) enrichAffiliateDetailV2(ctx context.Context, summary 
 	tiers := DefaultAffiliateLadderTiers()
 	if repo, ok := s.v2Repo(); ok && summary != nil {
 		grants, err := repo.ListUserRewardGrants(ctx, summary.UserID)
+		if err != nil {
+			return err
+		}
 		if err == nil {
 			tierStatusMap := make(map[int]string, len(grants))
 			var pendingLadder, grantedLadder float64
@@ -425,6 +428,7 @@ func (s *AffiliateService) enrichAffiliateDetailV2(ctx context.Context, summary 
 		}
 	}
 	detail.LadderTiers = tiers
+	return nil
 }
 
 // FormatAffiliateInviteeV2 根据被邀请人的累计实付、累计消耗和两步奖状态，计算前端展示字段：
@@ -441,7 +445,17 @@ func FormatAffiliateInviteeV2(inv *AffiliateInvitee, now time.Time) {
 	if inv.Step2RewardStatus == "" {
 		inv.Step2RewardStatus = "none"
 	}
-	inv.Qualified = inv.QualifiedAt != nil
+	inv.Qualified = inv.QualifiedAt != nil && inv.TotalPaidAmount >= AffiliateStep1MinPaid && inv.TotalConsumedAmount >= AffiliateMinConsumed &&
+		(inv.CreatedAt == nil || !inv.QualifiedAt.After(inv.CreatedAt.Add(AffiliateQualifyWindowDays*24*time.Hour)))
+	withinWindow := inv.CreatedAt == nil || !now.After(inv.CreatedAt.Add(AffiliateQualifyWindowDays*24*time.Hour))
+	if !withinWindow {
+		if inv.Step1RewardStatus == "pending_consume" {
+			inv.Step1RewardStatus = "expired"
+		}
+		if inv.Step2RewardStatus == "pending_consume" {
+			inv.Step2RewardStatus = "expired"
+		}
+	}
 
 	var pending float64
 	var granted float64
@@ -460,10 +474,6 @@ func FormatAffiliateInviteeV2(inv *AffiliateInvitee, now time.Time) {
 	}
 
 	// 兼容：若状态列尚未更新但实付已达标且在 30 天有效期内
-	withinWindow := true
-	if inv.CreatedAt != nil && now.After(inv.CreatedAt.AddDate(0, 0, AffiliateQualifyWindowDays)) && !inv.Qualified {
-		withinWindow = false
-	}
 	if withinWindow && inv.TotalPaidAmount >= AffiliateStep1MinPaid && inv.TotalConsumedAmount < AffiliateMinConsumed {
 		if inv.Step1RewardStatus == "none" {
 			pending += AffiliateStep1Bonus

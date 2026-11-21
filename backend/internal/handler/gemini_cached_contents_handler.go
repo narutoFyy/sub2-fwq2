@@ -686,7 +686,7 @@ func (h *GatewayHandler) submitGeminiCachedContentUsage(
 	inboundEndpoint := GetInboundEndpoint(c)
 	upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 	userAgent := c.GetHeader("User-Agent")
-	clientIP := ip.GetClientIP(c)
+	clientIP := ip.GetTrustedClientIP(c)
 	requestPayloadHash := service.HashUsageRequestPayload(payload)
 	quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 	h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {

@@ -155,6 +155,9 @@ type AffiliateDetail struct {
 	TrialBonusAmount           float64               `json:"trial_bonus_amount,omitempty"`
 	TrialExpiresAt             *time.Time            `json:"trial_expires_at,omitempty"`
 	Invitees                   []AffiliateInvitee    `json:"invitees"`
+	InviteesTotal              int                   `json:"invitees_total"`
+	InviteesPage               int                   `json:"invitees_page"`
+	InviteesPageSize           int                   `json:"invitees_page_size"`
 }
 
 type LaunchCampaignLeaderboardEntry struct {
@@ -373,6 +376,16 @@ func (s *AffiliateService) EnsureUserAffiliate(ctx context.Context, userID int64
 }
 
 func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64) (*AffiliateDetail, error) {
+	return s.GetAffiliateDetailPage(ctx, userID, 1, affiliateInviteesLimit)
+}
+
+func (s *AffiliateService) GetAffiliateDetailPage(ctx context.Context, userID int64, page, pageSize int) (*AffiliateDetail, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > affiliateInviteesLimit {
+		pageSize = affiliateInviteesLimit
+	}
 	// Lazy thaw: move any matured frozen quota to available before reading.
 	if s != nil && s.repo != nil {
 		// best-effort: thaw failure is non-fatal
@@ -384,7 +397,27 @@ func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64)
 	if err != nil {
 		return nil, err
 	}
-	invitees, err := s.listInvitees(ctx, userID)
+	var invitees []AffiliateInvitee
+	var totals *AffiliateInviteeTotals
+	if repo, ok := s.repo.(AffiliateDetailRepository); ok {
+		totals, err = repo.GetInviteeTotals(ctx, userID, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		lastPage := (totals.InviteeCount + pageSize - 1) / pageSize
+		if lastPage < 1 {
+			lastPage = 1
+		}
+		if page > lastPage {
+			page = lastPage
+		}
+		invitees, err = repo.ListInviteesPage(ctx, userID, pageSize, (page-1)*pageSize)
+		for i := range invitees {
+			invitees[i].Email = maskEmail(invitees[i].Email)
+		}
+	} else {
+		invitees, err = s.listInvitees(ctx, userID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -403,8 +436,22 @@ func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64)
 		TrialBonusAmount:           summary.TrialBonusAmount,
 		TrialExpiresAt:             summary.TrialExpiresAt,
 		Invitees:                   invitees,
+		InviteesTotal:              len(invitees),
+		InviteesPage:               page,
+		InviteesPageSize:           pageSize,
 	}
-	s.enrichAffiliateDetailV2(ctx, summary, detail)
+	if err := s.enrichAffiliateDetailV2(ctx, summary, detail); err != nil {
+		return nil, err
+	}
+	if totals != nil {
+		detail.AffCount = totals.InviteeCount
+		detail.InviteesTotal = totals.InviteeCount
+		detail.QualifiedInviteeCount = totals.QualifiedCount
+		detail.QualifiedInviteesPaidTotal = totals.QualifiedPaidTotal
+		detail.PendingStepBonusTotal = totals.PendingStepTotal
+		detail.GrantedStepBonusTotal = totals.GrantedStepTotal
+		detail.RemindConsumeCount = totals.RemindCount
+	}
 	return detail, nil
 }
 
@@ -522,7 +569,9 @@ func (s *AffiliateService) AccrueInviteRebateForOrder(ctx context.Context, invit
 		return 0, err
 	}
 	// 沉淀被邀请人累计实付金额、解除未充值体验号 RPM 限速，并评估单人两步奖（3元+5元）与阶梯奖
-	s.postPaidRechargeV2(ctx, inviteeUserID, baseRechargeAmount, sourceOrderID)
+	if err := s.postPaidRechargeV2(ctx, inviteeUserID, baseRechargeAmount, sourceOrderID); err != nil {
+		return 0, err
+	}
 
 	if inviteeSummary.InviterID == nil || *inviteeSummary.InviterID <= 0 {
 		return 0, nil
@@ -671,6 +720,12 @@ func maskSegment(s string) string {
 }
 
 func (s *AffiliateService) invalidateAffiliateCaches(ctx context.Context, userID int64) {
+	AfterAccountCommit(ctx, func(committedCtx context.Context) {
+		s.invalidateAffiliateCachesAfterCommit(committedCtx, userID)
+	})
+}
+
+func (s *AffiliateService) invalidateAffiliateCachesAfterCommit(ctx context.Context, userID int64) {
 	if s.authCacheInvalidator != nil {
 		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
 	}

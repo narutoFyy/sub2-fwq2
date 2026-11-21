@@ -57,7 +57,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT user_id, COALESCE(SUM(amount), 0)::double precision AS matured_frozen_quota
     FROM user_affiliate_ledger
-    WHERE action = 'accrue' AND frozen_until IS NOT NULL AND frozen_until <= NOW()
+    WHERE action IN ('accrue', 'clawback_rebate') AND frozen_until IS NOT NULL AND frozen_until <= NOW()
     GROUP BY user_id
 ) matured ON matured.user_id = ua.user_id
 WHERE ua.user_id = $1
@@ -178,7 +178,7 @@ VALUES ($1, 'accrue', $2, $3, $4, NOW(), NOW())`, inviterID, amount, inviteeUser
 func (r *affiliateRepository) GetAccruedRebateFromInvitee(ctx context.Context, inviterID, inviteeUserID int64) (float64, error) {
 	client := clientFromContext(ctx, r.client)
 	rows, err := client.QueryContext(ctx,
-		`SELECT COALESCE(SUM(amount), 0)::double precision FROM user_affiliate_ledger WHERE user_id = $1 AND source_user_id = $2 AND action = 'accrue'`,
+		`SELECT COALESCE(SUM(amount), 0)::double precision FROM user_affiliate_ledger WHERE user_id = $1 AND source_user_id = $2 AND action IN ('accrue', 'clawback_rebate')`,
 		inviterID, inviteeUserID)
 	if err != nil {
 		return 0, fmt.Errorf("query accrued rebate from invitee: %w", err)
@@ -205,6 +205,15 @@ func (r *affiliateRepository) ThawFrozenQuota(ctx context.Context, userID int64)
 
 // thawFrozenQuotaTx moves matured frozen quota to available quota within an existing tx.
 func thawFrozenQuotaTx(txCtx context.Context, txClient *dbent.Client, userID int64) (float64, error) {
+	// Lock the wallet before its ledger, matching accrual, transfer and refund paths.
+	lockRows, err := txClient.QueryContext(txCtx, `SELECT user_id FROM user_affiliates WHERE user_id = $1 FOR UPDATE`, userID)
+	if err != nil {
+		return 0, err
+	}
+	if err := lockRows.Close(); err != nil {
+		return 0, err
+	}
+
 	rows, err := txClient.QueryContext(txCtx, `
 WITH matured AS (
     UPDATE user_affiliate_ledger
@@ -250,6 +259,11 @@ func (r *affiliateRepository) TransferQuotaToBalance(ctx context.Context, userID
 	var newBalance float64
 
 	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
+		// Legacy refund finalization may already hold the user balance row before
+		// recovering rewards. Serialize before taking the affiliate wallet row.
+		if err := lockAffiliateRewardScopeTx(txCtx, txClient, userID); err != nil {
+			return err
+		}
 		if _, err := ensureUserAffiliateWithClient(txCtx, txClient, userID); err != nil {
 			return err
 		}
@@ -520,8 +534,15 @@ WHERE operation_id = $1`, operationID, userID, amount)
 }
 
 func (r *affiliateRepository) ListInvitees(ctx context.Context, inviterID int64, limit int) ([]service.AffiliateInvitee, error) {
+	return r.ListInviteesPage(ctx, inviterID, limit, 0)
+}
+
+func (r *affiliateRepository) ListInviteesPage(ctx context.Context, inviterID int64, limit, offset int) ([]service.AffiliateInvitee, error) {
 	if limit <= 0 {
 		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
 	}
 	client := clientFromContext(ctx, r.client)
 	rows, err := client.QueryContext(ctx, `
@@ -544,7 +565,7 @@ LEFT JOIN users u ON u.id = ua.user_id
 LEFT JOIN user_affiliate_ledger ual
        ON ual.user_id = $1
       AND ual.source_user_id = ua.user_id
-      AND ual.action = 'accrue'
+      AND ual.action IN ('accrue', 'clawback_rebate')
 WHERE ua.inviter_id = $1
 GROUP BY ua.user_id, u.email, u.username, ua.created_at,
          ua.total_paid_amount, ua.total_consumed_amount,
@@ -552,8 +573,8 @@ GROUP BY ua.user_id, u.email, u.username, ua.created_at,
          ua.step1_reward_status, ua.step1_reward_amount,
          ua.step2_reward_status, ua.step2_reward_amount,
          ua.qualified_at
-ORDER BY ua.created_at DESC
-LIMIT $2`, inviterID, limit)
+ORDER BY ua.created_at DESC, ua.user_id DESC
+LIMIT $2 OFFSET $3`, inviterID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -652,7 +673,7 @@ JOIN user_affiliates inviter_aff ON inviter_aff.user_id = ua.inviter_id
 LEFT JOIN user_affiliate_ledger ual
        ON ual.user_id = ua.inviter_id
       AND ual.source_user_id = ua.user_id
-      AND ual.action = 'accrue'
+      AND ual.action IN ('accrue', 'clawback_rebate')
 `+where+`
 GROUP BY ua.inviter_id, inviter.email, inviter.username, ua.user_id, invitee.email, invitee.username, inviter_aff.aff_code,
          ua.total_paid_amount, ua.total_consumed_amount, ua.trial_bonus_status, ua.trial_bonus_amount, ua.trial_skip_reason,

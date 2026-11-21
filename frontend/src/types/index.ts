@@ -200,6 +200,9 @@ export interface UserAffiliateDetail {
   trial_bonus_amount?: number
   trial_expires_at?: string | null
   invitees: AffiliateInvitee[]
+  invitees_total?: number
+  invitees_page?: number
+  invitees_page_size?: number
 }
 
 export interface AffiliateTransferResponse {

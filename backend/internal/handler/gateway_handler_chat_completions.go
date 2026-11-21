@@ -318,7 +318,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		// 错误路径共用；failover 错误恒定 result=nil，不会重复计费。
 		submitForwardUsage := func(result *service.ForwardResult) {
 			userAgent := c.GetHeader("User-Agent")
-			clientIP := ip.GetClientIP(c)
+			clientIP := ip.GetTrustedClientIP(c)
 			requestPayloadHash := service.HashUsageRequestPayload(body)
 			inboundEndpoint := GetInboundEndpoint(c)
 			upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)

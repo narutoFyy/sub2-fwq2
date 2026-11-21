@@ -37,7 +37,7 @@
 
         <!-- 好友已充10元但未消费满3元时的醒目解锁提示 -->
         <div
-          v-if="remindConsumeInvitees.length > 0"
+          v-if="remindConsumeCount > 0"
           data-test="affiliate-consume-reminder"
           class="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between"
         >
@@ -45,7 +45,7 @@
             <Icon name="sparkles" size="md" class="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
             <div class="text-sm">
               <p class="font-semibold">
-                您有 {{ remindConsumeInvitees.length }} 位好友已充值达标，待消耗满 3 元即可解锁奖励（待到账 {{ formatCurrency(pendingStepBonus) }}）
+                您有 {{ remindConsumeCount }} 位好友已充值达标，待消耗满 3 元即可解锁奖励（待到账 {{ formatCurrency(pendingStepBonus) }}）
               </p>
               <p class="mt-0.5 text-amber-800 dark:text-amber-300">
                 提醒好友配置 API Key 试用即可解锁 3 元（若首充已满 50 元可一次性解锁 8 元）！
@@ -257,7 +257,7 @@
         </div>
 
         <!-- 邀请好友明细表（含待到账/已到账状态与唤醒提醒） -->
-        <div class="card p-6">
+        <div class="card p-6" data-testid="affiliate-invitees">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('affiliate.invitees.title') }}（待到账 / 已到账明细）</h3>
@@ -267,7 +267,10 @@
             </div>
           </div>
 
-          <div v-if="detail.invitees.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-dark-400">
+          <div v-if="inviteesLoading" class="flex justify-center py-8" role="status">
+            <div class="h-6 w-6 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
+          </div>
+          <div v-else-if="detail.invitees.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-dark-400">
             {{ t('affiliate.invitees.empty') }}
           </div>
           <div v-else class="mt-4 overflow-x-auto">
@@ -315,6 +318,15 @@
               </tbody>
             </table>
           </div>
+          <Pagination
+            v-if="inviteesTotal > 0"
+            data-testid="affiliate-invitees-pagination"
+            :total="inviteesTotal"
+            :page="inviteesPage"
+            :page-size="inviteesPageSize"
+            @update:page="changeInviteesPage"
+            @update:page-size="changeInviteesPageSize"
+          />
         </div>
 
         <!-- 清晰版活动规则与边界口径说明 -->
@@ -348,6 +360,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import Icon from '@/components/icons/Icon.vue'
 import userAPI from '@/api/user'
 import type { AffiliateInvitee, AffiliateLadderTier, UserAffiliateDetail } from '@/types'
@@ -365,6 +378,11 @@ const { copyToClipboard } = useClipboard()
 const loading = ref(true)
 const transferring = ref(false)
 const detail = ref<UserAffiliateDetail | null>(null)
+const inviteesPage = ref(1)
+const inviteesPageSize = ref(20)
+const inviteesLoading = ref(false)
+const inviteesTotal = computed(() => detail.value?.invitees_total ?? detail.value?.invitees.length ?? 0)
+let detailRequestId = 0
 
 const DEFAULT_LADDER_TIERS: AffiliateLadderTier[] = [
   { tier_target: 5, cumulative_bonus: 10, delta_bonus: 10, requires_min_total_paid: 0, auto_grant: true, status: 'locked' },
@@ -408,8 +426,8 @@ const ladderProgressPercent = computed(() => {
   return Math.min(100, Math.max(0, Math.round((count / 100) * 100)))
 })
 
-const remindConsumeInvitees = computed(() =>
-  (detail.value?.invitees ?? []).filter((item) => item.needs_consume_reminder),
+const remindConsumeCount = computed(() =>
+  detail.value?.remind_consume_count ?? (detail.value?.invitees ?? []).filter((item) => item.needs_consume_reminder).length,
 )
 
 function formatCount(value: number): string {
@@ -486,18 +504,39 @@ function inviteeBadgeClass(item: AffiliateInvitee): string {
 }
 
 async function loadAffiliateDetail(silent = false): Promise<void> {
+  const requestId = ++detailRequestId
+  inviteesLoading.value = true
   if (!silent) {
     loading.value = true
   }
   try {
-    detail.value = await userAPI.getAffiliateDetail()
+    const result = await userAPI.getAffiliateDetail({ page: inviteesPage.value, page_size: inviteesPageSize.value })
+    if (requestId !== detailRequestId) return
+    detail.value = result
+    inviteesPage.value = result.invitees_page ?? inviteesPage.value
+    inviteesPageSize.value = result.invitees_page_size ?? inviteesPageSize.value
   } catch (error) {
+    if (requestId !== detailRequestId) return
+    inviteesPage.value = detail.value?.invitees_page ?? 1
+    inviteesPageSize.value = detail.value?.invitees_page_size ?? 20
     appStore.showError(extractApiErrorMessage(error, t('affiliate.loadFailed')))
   } finally {
-    if (!silent) {
+    if (requestId === detailRequestId) {
+      inviteesLoading.value = false
       loading.value = false
     }
   }
+}
+
+function changeInviteesPage(page: number): void {
+  inviteesPage.value = page
+  void loadAffiliateDetail(true)
+}
+
+function changeInviteesPageSize(pageSize: number): void {
+  inviteesPageSize.value = pageSize
+  inviteesPage.value = 1
+  void loadAffiliateDetail(true)
 }
 
 async function copyCode(): Promise<void> {

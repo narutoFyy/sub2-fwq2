@@ -52,6 +52,25 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 	}
 
 	result := &service.UsageBillingApplyResult{Applied: true}
+	// Expiry, consumption milestones and the charge share the same idempotent
+	// transaction. A failed reward update rolls back both debit and dedup claim.
+	if cmd.UserID > 0 && cmd.BalanceCost > 0 {
+		if err := lockAffiliateRewardScopeTx(ctx, tx, cmd.UserID); err != nil {
+			return nil, err
+		}
+		expired, err := expireUserTrialBonusTx(ctx, tx, cmd.UserID)
+		if err != nil {
+			return nil, err
+		}
+		result.TrialBonusExpiredAmount = expired
+		outcome := &service.AffiliateRewardEvalOutcome{InviteeID: cmd.UserID}
+		if err := recordInviteeConsumptionTx(ctx, tx, cmd.UserID, cmd.BalanceCost, cmd.ClientIP, outcome); err != nil {
+			return nil, err
+		}
+		if outcome.InviterID > 0 && (outcome.Step1Granted > 0 || outcome.Step2Granted > 0 || outcome.TierBonusGranted > 0) {
+			result.AffiliateCreditedInviterID = outcome.InviterID
+		}
+	}
 	if err := r.applyUsageBillingEffects(ctx, tx, cmd, result); err != nil {
 		return nil, err
 	}
@@ -60,16 +79,6 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 		return nil, err
 	}
 	tx = nil
-
-	if cmd.BalanceCost > 0 && cmd.UserID > 0 && r.entClient != nil {
-		affRepo := &affiliateRepository{client: r.entClient}
-		outcome, affErr := affRepo.RecordInviteeConsumption(ctx, cmd.UserID, cmd.BalanceCost, "")
-		if affErr != nil {
-			logger.LegacyPrintf("repository.usage_billing", "[AffiliateV2] RecordInviteeConsumption failed user=%d cost=%.6f: %v", cmd.UserID, cmd.BalanceCost, affErr)
-		} else if outcome != nil && outcome.InviterID > 0 && (outcome.Step1Granted > 0 || outcome.Step2Granted > 0 || outcome.TierBonusGranted > 0) {
-			result.AffiliateCreditedInviterID = outcome.InviterID
-		}
-	}
 
 	return result, nil
 }

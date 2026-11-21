@@ -32,6 +32,8 @@ const (
 	vertexGooglePublisherModelPrefix = "publishers/google/models/"
 )
 
+var errModelsDevProviderUnavailable = errors.New("no model metadata provider matches account base URL")
+
 type UpstreamModelMetadata struct {
 	ID                       string                     `json:"id"`
 	DisplayName              string                     `json:"display_name,omitempty"`
@@ -218,10 +220,11 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 // and persists a normalized account snapshot when complete metadata is available.
 //
 // Persistence is per-model: models with complete capability fields are saved even
-// when other IDs in the same sync remain incomplete. An incomplete warning is
-// still returned so admins can tell ID sync succeeded without a full capability
-// snapshot. When no model is complete, the existing account snapshot is left
-// untouched.
+// when other IDs in the same sync remain incomplete. Capability fields are
+// optional in a model list: an ID-only provider absent from the registry is a
+// successful ID sync, not a capability failure. Actual enrichment failures and
+// incomplete advertised capabilities still return warnings. When no model is
+// complete, the existing account snapshot is left untouched.
 func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, account *Account) (*UpstreamModelCatalog, error) {
 	fetched, err := s.fetchUpstreamModelListWithObservation(ctx, account)
 	var (
@@ -289,6 +292,7 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 	capabilityIDs := capabilitySyncModelIDs(enrichIDs)
 
 	source := "upstream"
+	metadataNotProvided := false
 	if upstreamCatalogNeedsRegistry(capabilityIDs, catalog.Metadata) {
 		if registryMetadata, registryErr := s.fetchModelsDevMetadata(ctx, account, enrichIDs); registryErr == nil {
 			for modelID, fallback := range registryMetadata {
@@ -299,6 +303,11 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 					source = "models.dev"
 				}
 			}
+		} else if errors.Is(registryErr, errModelsDevProviderUnavailable) && liveListAvailable && !upstreamCatalogHasCapabilities(capabilityIDs, catalog.Metadata) {
+			// Compatible /models endpoints may return only IDs (and names).
+			// An unlisted provider cannot supply registry enrichment, which is
+			// different from a failed request or malformed capability response.
+			metadataNotProvided = true
 		} else {
 			slog.Warn("upstream model capability metadata enrichment failed",
 				"account_id", upstreamModelSyncAccountID(account),
@@ -348,7 +357,7 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 		persistedCapabilities = true
 	}
 
-	if upstreamCatalogNeedsRegistry(capabilityIDs, catalog.Metadata) {
+	if !metadataNotProvided && upstreamCatalogNeedsRegistry(capabilityIDs, catalog.Metadata) {
 		if persistedCapabilities {
 			catalog.Warnings = append(catalog.Warnings, UpstreamModelSyncWarning{
 				Code:    UpstreamModelMetadataPartialCode,
@@ -443,6 +452,19 @@ func upstreamModelMetadataIsUseful(metadata UpstreamModelMetadata) bool {
 		metadata.ContextWindow > 0 ||
 		metadata.MaxContextWindow > 0 ||
 		metadata.MaxOutputTokens > 0
+}
+
+func upstreamCatalogHasCapabilities(modelIDs []string, metadata map[string]UpstreamModelMetadata) bool {
+	for _, modelID := range modelIDs {
+		entry := metadata[modelID]
+		if entry.Reasoning != nil || entry.DefaultReasoningLevel != "" ||
+			len(entry.SupportedReasoningLevels) > 0 || len(entry.InputModalities) > 0 ||
+			len(entry.CodexToolCapabilities) > 0 || entry.ContextWindow > 0 ||
+			entry.MaxContextWindow > 0 || entry.MaxOutputTokens > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // upstreamModelMetadataIsComplete reports whether a snapshot entry is safe to
@@ -553,7 +575,7 @@ func (s *AccountTestService) fetchModelsDevMetadata(
 	}
 	provider, ok := matchModelsDevProvider(registry, upstreamModelRegistryBaseURL(account))
 	if !ok {
-		return nil, fmt.Errorf("no model metadata provider matches account base URL")
+		return nil, errModelsDevProviderUnavailable
 	}
 
 	metadata := make(map[string]UpstreamModelMetadata)

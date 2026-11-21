@@ -214,7 +214,7 @@
       width="wide"
       @close="rewardReviewDialog = false"
     >
-      <div class="space-y-4">
+      <div class="space-y-4" data-testid="reward-review-dialog">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2 text-sm">
             <button
@@ -313,6 +313,15 @@
             </tbody>
           </table>
         </div>
+        <Pagination
+          v-if="rewardReviewPagination.total > 0"
+          data-testid="reward-review-pagination"
+          :total="rewardReviewPagination.total"
+          :page="rewardReviewPagination.page"
+          :page-size="rewardReviewPagination.page_size"
+          @update:page="changeRewardReviewPage"
+          @update:page-size="changeRewardReviewPageSize"
+        />
       </div>
     </BaseDialog>
 
@@ -412,8 +421,11 @@ const withdrawDialog = ref(false)
 const rewardReviewDialog = ref(false)
 const rewardReviewLoading = ref(false)
 const rewardReviewFilterStatus = ref('pending_review')
+const rewardReviewPagination = reactive({ page: 1, page_size: 50, total: 0 })
 const rewardGrants = ref<AffiliateRewardGrantRecord[]>([])
 const reviewingGrantId = ref<number | null>(null)
+let rewardReviewRequestId = 0
+let lastRewardReviewState: { page: number; page_size: number; total: number; status: string } | null = null
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const columns = computed<Column[]>(() => {
@@ -602,28 +614,65 @@ async function toggleInviterTrialPause() {
 
 function openRewardReviewDialog() {
   rewardReviewDialog.value = true
+  rewardReviewPagination.page = 1
+  rewardReviewPagination.total = 0
+  lastRewardReviewState = null
+  rewardGrants.value = []
   void loadRewardGrants()
 }
 
 function changeRewardReviewStatus(status: string) {
   rewardReviewFilterStatus.value = status
+  rewardReviewPagination.page = 1
+  void loadRewardGrants()
+}
+
+function changeRewardReviewPage(page: number) {
+  rewardReviewPagination.page = page
+  void loadRewardGrants()
+}
+
+function changeRewardReviewPageSize(pageSize: number) {
+  rewardReviewPagination.page_size = pageSize
+  rewardReviewPagination.page = 1
   void loadRewardGrants()
 }
 
 async function loadRewardGrants() {
   if (!affiliatesAPI.listRewardGrants) return
+  const requestId = ++rewardReviewRequestId
   rewardReviewLoading.value = true
   try {
     const res = await affiliatesAPI.listRewardGrants({
-      page: 1,
-      page_size: 50,
+      page: rewardReviewPagination.page,
+      page_size: rewardReviewPagination.page_size,
       status: rewardReviewFilterStatus.value || undefined,
     })
+    if (requestId !== rewardReviewRequestId) return
+    rewardReviewPagination.total = res.total
+    const lastPage = Math.max(1, Math.ceil(res.total / rewardReviewPagination.page_size))
+    if (rewardReviewPagination.page > lastPage) {
+      rewardReviewPagination.page = lastPage
+      await loadRewardGrants()
+      return
+    }
     rewardGrants.value = res.items || []
+    lastRewardReviewState = { ...rewardReviewPagination, status: rewardReviewFilterStatus.value }
   } catch (error) {
+    if (requestId !== rewardReviewRequestId) return
+    if (lastRewardReviewState) {
+      rewardReviewPagination.page = lastRewardReviewState.page
+      rewardReviewPagination.page_size = lastRewardReviewState.page_size
+      rewardReviewPagination.total = lastRewardReviewState.total
+      rewardReviewFilterStatus.value = lastRewardReviewState.status
+    } else {
+      rewardReviewPagination.page = 1
+      rewardReviewPagination.total = 0
+      rewardGrants.value = []
+    }
     appStore.showError(extractI18nErrorMessage(error, t, 'admin.affiliates.errors', t('common.error')))
   } finally {
-    rewardReviewLoading.value = false
+    if (requestId === rewardReviewRequestId) rewardReviewLoading.value = false
   }
 }
 

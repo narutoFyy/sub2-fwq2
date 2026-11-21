@@ -203,7 +203,8 @@ func (h *UserHandler) GetAffiliate(c *gin.Context) {
 		return
 	}
 
-	detail, err := h.affiliateService.GetAffiliateDetail(c.Request.Context(), subject.UserID)
+	page, pageSize := response.ParsePagination(c)
+	detail, err := h.affiliateService.GetAffiliateDetailPage(c.Request.Context(), subject.UserID, page, pageSize)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

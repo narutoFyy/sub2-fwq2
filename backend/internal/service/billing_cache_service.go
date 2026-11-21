@@ -757,6 +757,11 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 
 	// 判断计费模式
 	isSubscriptionMode := group != nil && group.IsSubscriptionType() && subscription != nil
+	if !isSubscriptionMode && user != nil {
+		if err := s.refreshExpiredAffiliateTrial(ctx, user.ID); err != nil {
+			return err
+		}
+	}
 
 	if isSubscriptionMode {
 		if err := s.checkSubscriptionEligibility(ctx, user.ID, group, subscription); err != nil {

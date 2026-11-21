@@ -3,6 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AffiliateView from '../AffiliateView.vue'
 
+const PaginationStub = {
+  name: 'Pagination',
+  props: ['total', 'page', 'pageSize'],
+  emits: ['update:page', 'update:pageSize'],
+  template: '<div />',
+}
+
 const { copyToClipboard, getAffiliateDetail } = vi.hoisted(() => ({
   copyToClipboard: vi.fn(),
   getAffiliateDetail: vi.fn(),
@@ -172,5 +179,33 @@ describe('AffiliateView', () => {
     expect(wrapper.text()).toContain('提醒好友配置 API Key 试用即可解锁 3 元')
     expect(wrapper.find('[data-test="affiliate-ladder-card"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="affiliate-withdraw-guide"]').text()).toContain('已满 300 元可申请')
+  })
+
+  it('paginates invitees while keeping full-history totals and reminders', async () => {
+    getAffiliateDetail.mockImplementation(({ page, page_size }) => Promise.resolve({
+      user_id: 1, aff_code: 'TEST', aff_count: 101, aff_quota: 0, aff_frozen_quota: 0, aff_history_quota: 0,
+      effective_rebate_rate_percent: 5, qualified_invitee_count: 101, qualified_invitees_paid_total: 1010,
+      remind_consume_count: 8, pending_step_bonus_total: 24,
+      invitees_total: 101, invitees_page: page, invitees_page_size: page_size,
+      invitees: [{ user_id: page, email: `page-${page}@example.com`, total_rebate: 0, needs_consume_reminder: false }],
+    }))
+    const wrapper = mount(AffiliateView, {
+      global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, Icon: true, Pagination: PaginationStub } },
+    })
+    await flushPromises()
+    expect(getAffiliateDetail).toHaveBeenLastCalledWith({ page: 1, page_size: 20 })
+    expect(wrapper.get('[data-test="affiliate-consume-reminder"]').text()).toContain('8 位好友')
+    expect(wrapper.get('[data-test="affiliate-ladder-card"]').text()).toContain('101 / 100')
+    const pager = wrapper.findComponent(PaginationStub)
+    expect(pager.props()).toMatchObject({ total: 101, page: 1, pageSize: 20 })
+    pager.vm.$emit('update:page', 6)
+    await flushPromises()
+    expect(getAffiliateDetail).toHaveBeenLastCalledWith({ page: 6, page_size: 20 })
+    expect(wrapper.get('[data-testid="affiliate-invitees"]').text()).toContain('page-6@example.com')
+    expect(wrapper.get('[data-test="affiliate-ladder-card"]').text()).toContain('101 / 100')
+    expect(wrapper.get('[data-test="affiliate-consume-reminder"]').text()).toContain('8 位好友')
+    pager.vm.$emit('update:pageSize', 50)
+    await flushPromises()
+    expect(getAffiliateDetail).toHaveBeenLastCalledWith({ page: 1, page_size: 50 })
   })
 })

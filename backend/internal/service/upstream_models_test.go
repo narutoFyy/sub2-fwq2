@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -804,6 +805,50 @@ func TestSyncUpstreamModelCatalogClassifiesSnapshotPersistenceFailureAsInternal(
 }
 
 // Scenario: 元数据源失败时保留已有快照。
+func TestSyncUpstreamModelCatalogIDOnlyUnlistedProviderIsSuccessful(t *testing.T) {
+	for _, accountID := range []int64{0, 93} {
+		t.Run(fmt.Sprintf("account_%d", accountID), func(t *testing.T) {
+			upstream := &httpUpstreamRecorder{responses: []*http.Response{
+				{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"gpt-6-astra","name":"GPT"}]}`))},
+				{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"openai":{"api":"https://api.openai.com/v1","models":{}}}`))},
+			}}
+			repo := &upstreamModelMetadataRepoStub{}
+			svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
+			account := &Account{
+				ID: accountID, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+				Credentials: map[string]any{"api_key": "key", "base_url": "https://api.tokenclub.hk"},
+			}
+			account.SetUpstreamModelMetadataSnapshot(UpstreamModelMetadataSnapshot{
+				Source: "upstream", Models: map[string]UpstreamModelMetadata{
+					"gpt-6-astra": {ID: "gpt-6-astra", ContextWindow: 128000},
+				},
+			})
+
+			catalog, err := svc.SyncUpstreamModelCatalog(context.Background(), account)
+			require.NoError(t, err)
+			require.Equal(t, []string{"gpt-6-astra"}, catalog.Models)
+			require.Empty(t, catalog.Warnings, "optional capability fields must not turn ID sync into a failure")
+			require.Nil(t, repo.updates, "unavailable capability data must not erase the existing snapshot")
+			require.Equal(t, int64(128000), account.GetUpstreamModelMetadataSnapshot().Models["gpt-6-astra"].ContextWindow)
+		})
+	}
+}
+
+func TestSyncUpstreamModelCatalogUnlistedProviderWithPartialCapabilitiesStillWarns(t *testing.T) {
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"custom-model","reasoning":true}]}`))},
+		{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"openai":{"api":"https://api.openai.com/v1","models":{}}}`))},
+	}}
+	svc := &AccountTestService{httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
+	catalog, err := svc.SyncUpstreamModelCatalog(context.Background(), &Account{
+		Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "key", "base_url": "https://api.tokenclub.hk"},
+	})
+	require.NoError(t, err)
+	require.Len(t, catalog.Warnings, 1)
+	require.Equal(t, UpstreamModelMetadataIncompleteCode, catalog.Warnings[0].Code)
+}
+
 func TestSyncUpstreamModelCatalogDoesNotOverwriteSnapshotWhenRegistryFails(t *testing.T) {
 	upstream := &httpUpstreamRecorder{responses: []*http.Response{
 		{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"x-preview-f-free"}]}`))},

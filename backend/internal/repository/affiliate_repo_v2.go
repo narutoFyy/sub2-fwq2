@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,6 +31,51 @@ func appendRiskTag(existing, tag string) string {
 	return existing + "," + tag
 }
 
+// lockAffiliateUsersTx serializes reward evaluation for shared inviters. Always acquire
+// all user scopes in numeric order before taking affiliate, grant or balance row locks.
+func lockAffiliateUsersTx(ctx context.Context, q affiliateQueryExecer, ids ...int64) error {
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	var previous int64
+	for _, id := range ids {
+		if id <= 0 || id == previous {
+			continue
+		}
+		if _, err := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, fmt.Sprintf("affiliate_rewards:%d", id)); err != nil {
+			return fmt.Errorf("lock affiliate reward scope: %w", err)
+		}
+		previous = id
+	}
+	return nil
+}
+
+func lockAffiliateRewardScopeTx(ctx context.Context, q affiliateQueryExecer, userID int64) error {
+	rows, err := q.QueryContext(ctx, `SELECT inviter_id FROM user_affiliates WHERE user_id = $1`, userID)
+	if err != nil {
+		return err
+	}
+	var inviterID sql.NullInt64
+	if rows.Next() {
+		if err := rows.Scan(&inviterID); err != nil {
+			_ = rows.Close()
+			return err
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	return lockAffiliateUsersTx(ctx, q, userID, inviterID.Int64)
+}
+
+// LockAffiliateRewardScope lets payment transactions acquire the same scopes before
+// locking payment orders or user balances. A standalone call would release too early.
+func (r *affiliateRepository) LockAffiliateRewardScope(ctx context.Context, userID int64) error {
+	tx := dbent.TxFromContext(ctx)
+	if tx == nil {
+		return fmt.Errorf("affiliate reward scope requires an existing transaction")
+	}
+	return lockAffiliateRewardScopeTx(ctx, tx.Client(), userID)
+}
+
 // ProcessInviteePostBind 处理受邀新用户绑定邀请人后的准入校验与 1 元体验金发放。
 func (r *affiliateRepository) ProcessInviteePostBind(
 	ctx context.Context,
@@ -43,6 +89,14 @@ func (r *affiliateRepository) ProcessInviteePostBind(
 
 	outcome := &service.AffiliateTrialGrantOutcome{}
 	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
+		// A shared transaction lock protects both rolling IP/subnet and global-day quotas.
+		if _, err := txClient.ExecContext(txCtx, `SELECT pg_advisory_xact_lock(hashtextextended('affiliate_trial_grants', 0))`); err != nil {
+			return err
+		}
+		if err := lockAffiliateUsersTx(txCtx, txClient, inviteeID, inviterID); err != nil {
+			return err
+		}
+
 		rows, err := txClient.QueryContext(txCtx, `
 SELECT COALESCE(u.email, ''),
        COALESCE(u.rpm_limit, 0),
@@ -319,6 +373,10 @@ func (r *affiliateRepository) RecordInviteePaidRecharge(
 
 	outcome := &service.AffiliateRewardEvalOutcome{InviteeID: inviteeID}
 	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
+		if err := lockAffiliateRewardScopeTx(txCtx, txClient, inviteeID); err != nil {
+			return err
+		}
+
 		if _, err := ensureUserAffiliateWithClient(txCtx, txClient, inviteeID); err != nil {
 			return err
 		}
@@ -379,94 +437,10 @@ WHERE id = $2
 	return outcome, nil
 }
 
-// RecordInviteeConsumption 记录用户模型调用消耗，并触发单人两步奖（消耗满 3 元解锁）与阶梯奖。
-func (r *affiliateRepository) RecordInviteeConsumption(
-	ctx context.Context,
-	inviteeID int64,
-	consumedAmount float64,
-	clientIP string,
-) (*service.AffiliateRewardEvalOutcome, error) {
-	if inviteeID <= 0 || consumedAmount <= 0 {
-		return nil, nil
-	}
-
-	outcome := &service.AffiliateRewardEvalOutcome{InviteeID: inviteeID}
-	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
-		// 先检查体验金是否已到期
-		_, _ = expireUserTrialBonusTx(txCtx, txClient, inviteeID)
-
-		rows, err := txClient.QueryContext(txCtx, `
-SELECT inviter_id,
-       COALESCE(total_paid_amount, 0)::double precision,
-       COALESCE(total_consumed_amount, 0)::double precision,
-       COALESCE(trial_bonus_status, 'none'),
-       COALESCE(trial_bonus_amount, 0)::double precision,
-       COALESCE(step1_reward_status, 'none'),
-       COALESCE(step2_reward_status, 'none')
-FROM user_affiliates
-WHERE user_id = $1
-FOR UPDATE`, inviteeID)
-		if err != nil {
-			return fmt.Errorf("lock user_affiliates on consumption: %w", err)
-		}
-		if !rows.Next() {
-			_ = rows.Close()
-			return nil
-		}
-		var inviterID sql.NullInt64
-		var totalPaid, totalConsumed, trialBonusAmount float64
-		var trialStatus, step1Status, step2Status string
-		if err := rows.Scan(
-			&inviterID,
-			&totalPaid,
-			&totalConsumed,
-			&trialStatus,
-			&trialBonusAmount,
-			&step1Status,
-			&step2Status,
-		); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-
-		newConsumed := totalConsumed + consumedAmount
-		newTrialStatus := trialStatus
-		if trialStatus == "active" && newConsumed >= trialBonusAmount {
-			newTrialStatus = "used"
-		}
-
-		if _, err := txClient.ExecContext(txCtx, `
-UPDATE user_affiliates
-SET total_consumed_amount = total_consumed_amount + $1,
-    trial_bonus_status = $2,
-    last_active_ip = CASE WHEN $3 <> '' THEN $3 ELSE last_active_ip END,
-    updated_at = NOW()
-WHERE user_id = $4`, consumedAmount, newTrialStatus, clientIP, inviteeID); err != nil {
-			return fmt.Errorf("update invitee consumption: %w", err)
-		}
-
-		if !inviterID.Valid || inviterID.Int64 <= 0 {
-			return nil
-		}
-		if totalPaid < service.AffiliateStep1MinPaid && step1Status != "pending_consume" && step2Status != "pending_consume" {
-			return nil
-		}
-		outcome.InviterID = inviterID.Int64
-		return evaluateInviteeAndLadderRewardsTx(txCtx, txClient, inviteeID, outcome)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return outcome, nil
-}
-
 // evaluateInviteeAndLadderRewardsTx 在同一数据库事务中幂等评估并解锁单人两步奖（3元+5元）与 4 档阶梯奖。
 func evaluateInviteeAndLadderRewardsTx(
 	txCtx context.Context,
-	txClient *dbent.Client,
+	txClient affiliateQueryExecer,
 	inviteeID int64,
 	outcome *service.AffiliateRewardEvalOutcome,
 ) error {
@@ -527,12 +501,13 @@ FOR UPDATE`, inviteeID)
 
 	// 活动结束在途归因：注册后 30 天内达成充值与消耗门槛均可获颁奖励
 	now := time.Now()
-	within30Days := !now.After(createdAt.AddDate(0, 0, service.AffiliateQualifyWindowDays)) ||
-		qualifiedAt.Valid ||
-		step1Status == "pending_consume" ||
-		step2Status == "pending_consume"
+	within30Days := !now.After(createdAt.AddDate(0, 0, service.AffiliateQualifyWindowDays))
 	if !within30Days {
-		return nil
+		_, err := txClient.ExecContext(txCtx, `UPDATE user_affiliates SET
+            step1_reward_status = CASE WHEN step1_reward_status = 'pending_consume' THEN 'expired' ELSE step1_reward_status END,
+            step2_reward_status = CASE WHEN step2_reward_status = 'pending_consume' THEN 'expired' ELSE step2_reward_status END,
+            updated_at = NOW() WHERE user_id = $1`, inviteeID)
+		return err
 	}
 
 	// 同 IP 加权预警检查
@@ -583,10 +558,10 @@ WHERE user_id = $2`, riskTags, inviteeID); err != nil {
 		if newStep1 != step1Status || newStep2 != step2Status {
 			if _, err := txClient.ExecContext(txCtx, `
 UPDATE user_affiliates
-SET step1_reward_status = $1,
-    step1_reward_amount = CASE WHEN $1 <> 'none' THEN $2 ELSE step1_reward_amount END,
-    step2_reward_status = $3,
-    step2_reward_amount = CASE WHEN $3 <> 'none' THEN $4 ELSE step2_reward_amount END,
+SET step1_reward_status = $1::varchar,
+    step1_reward_amount = CASE WHEN $1::varchar <> 'none' THEN $2 ELSE step1_reward_amount END,
+    step2_reward_status = $3::varchar,
+    step2_reward_amount = CASE WHEN $3::varchar <> 'none' THEN $4 ELSE step2_reward_amount END,
     updated_at = NOW()
 WHERE user_id = $5`,
 				newStep1, service.AffiliateStep1Bonus,
@@ -623,7 +598,8 @@ WHERE user_id = $1 AND qualified_at IS NULL`, inviteeID); err != nil {
 SELECT COUNT(*)::integer
 FROM user_affiliates
 WHERE inviter_id = $1
-  AND same_ip_warning = true`, inviterID)
+  AND same_ip_warning = true
+  AND created_at >= NOW() - INTERVAL '24 hours'`, inviterID)
 		if err != nil {
 			return fmt.Errorf("count inviter same_ip_warning invitees: %w", err)
 		}
@@ -640,7 +616,9 @@ WHERE inviter_id = $1
 		if sameIPCount >= service.AffiliateSameIPBurst24hThreshold {
 			sameIPHighRisk = true
 			riskTags = appendRiskTag(riskTags, "same_ip_burst")
-			_, _ = txClient.ExecContext(txCtx, `UPDATE user_affiliates SET risk_tags = $1, updated_at = NOW() WHERE user_id = $2`, riskTags, inviteeID)
+			if _, err := txClient.ExecContext(txCtx, `UPDATE user_affiliates SET risk_tags = $1, updated_at = NOW() WHERE user_id = $2`, riskTags, inviteeID); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -713,24 +691,8 @@ WHERE user_id = $3`, st, service.AffiliateStep2Bonus, inviteeID); err != nil {
 	}
 
 	// 3) 评估邀请人的阶梯奖（5人 +10元 / 20人 +30元自动发放；50人 +60元 / 100人且实付满3000元 +100元人工审核）
-	qualRows, err := txClient.QueryContext(txCtx, `
-SELECT COUNT(*)::integer,
-       COALESCE(SUM(total_paid_amount), 0)::double precision
-FROM user_affiliates
-WHERE inviter_id = $1
-  AND qualified_at IS NOT NULL`, inviterID)
+	qualifiedCount, qualifiedPaidSum, err := qualifiedAffiliateTotalsTx(txCtx, txClient, inviterID)
 	if err != nil {
-		return fmt.Errorf("count qualified invitees for ladder reward: %w", err)
-	}
-	var qualifiedCount int
-	var qualifiedPaidSum float64
-	if qualRows.Next() {
-		if err := qualRows.Scan(&qualifiedCount, &qualifiedPaidSum); err != nil {
-			_ = qualRows.Close()
-			return err
-		}
-	}
-	if err := qualRows.Close(); err != nil {
 		return err
 	}
 
@@ -772,7 +734,7 @@ WHERE inviter_id = $1
 // 否则自动发放到邀请人站内余额（balance，不可提现）并写入流水。
 func grantOrQueueAffiliateRewardTx(
 	txCtx context.Context,
-	txClient *dbent.Client,
+	txClient affiliateQueryExecer,
 	operationID string,
 	inviterID int64,
 	inviteeID *int64,
@@ -782,6 +744,9 @@ func grantOrQueueAffiliateRewardTx(
 	allowAutoGrant bool,
 	sameIPHighRisk bool,
 ) (string, error) {
+	if err := lockAffiliateUsersTx(txCtx, txClient, inviterID); err != nil {
+		return "", err
+	}
 	// 检查邀请人今日已自动发放的奖励笔数（单邀请人每日最多自动发 10 笔奖励，超出转人工）
 	var todayAutoCount int
 	if allowAutoGrant && !sameIPHighRisk {
@@ -789,7 +754,7 @@ func grantOrQueueAffiliateRewardTx(
 SELECT COUNT(*)::integer
 FROM affiliate_reward_grants
 WHERE inviter_id = $1
-  AND status = 'granted'
+  AND granted_at IS NOT NULL
   AND reviewed_by IS NULL
   AND granted_at >= (date_trunc('day', NOW() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai')`, inviterID)
 		if err != nil {
@@ -835,8 +800,8 @@ INSERT INTO affiliate_reward_grants (
     updated_at
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8,
-    CASE WHEN $7 = 'granted' THEN NOW() ELSE NULL END,
+    $1, $2, $3, $4, $5, $6, $7::varchar, $8,
+    CASE WHEN $7::varchar = 'granted' THEN NOW() ELSE NULL END,
     NOW(), NOW()
 )
 ON CONFLICT (operation_id) DO NOTHING
@@ -881,19 +846,20 @@ RETURNING id`,
 
 func creditInviterRewardBalanceTx(
 	txCtx context.Context,
-	txClient *dbent.Client,
+	txClient affiliateQueryExecer,
 	inviterID int64,
 	inviteeID *int64,
 	rewardType string,
 	operationID string,
 	amount float64,
 ) error {
-	affected, err := txClient.User.Update().
-		Where(user.IDEQ(inviterID)).
-		AddBalance(amount).
-		Save(txCtx)
+	res, err := txClient.ExecContext(txCtx, `UPDATE users SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, amount, inviterID)
 	if err != nil {
 		return fmt.Errorf("credit inviter reward balance: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
 	}
 	if affected == 0 {
 		return service.ErrUserNotFound
@@ -947,13 +913,16 @@ func (r *affiliateRepository) ExpireUserTrialBonus(ctx context.Context, userID i
 	var deducted float64
 	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
 		var err error
+		if err := lockAffiliateRewardScopeTx(txCtx, txClient, userID); err != nil {
+			return err
+		}
 		deducted, err = expireUserTrialBonusTx(txCtx, txClient, userID)
 		return err
 	})
 	return deducted, err
 }
 
-func expireUserTrialBonusTx(txCtx context.Context, txClient *dbent.Client, userID int64) (float64, error) {
+func expireUserTrialBonusTx(txCtx context.Context, txClient affiliateQueryExecer, userID int64) (float64, error) {
 	rows, err := txClient.QueryContext(txCtx, `
 SELECT COALESCE(trial_bonus_amount, 0)::double precision,
        COALESCE(total_consumed_amount, 0)::double precision
@@ -1018,33 +987,21 @@ WHERE user_id = $2`, deduct, userID); err != nil {
 
 	if deduct > 0 {
 		snapshot, err := queryAffiliateTransferSnapshot(txCtx, txClient, userID)
-		if err == nil {
-			opID := fmt.Sprintf("trial_expire:%d", userID)
-			_, _ = txClient.ExecContext(txCtx, `
-INSERT INTO user_affiliate_ledger (
-    user_id,
-    action,
-    amount,
-    operation_id,
-    balance_after,
-    aff_quota_after,
-    aff_frozen_quota_after,
-    aff_history_quota_after,
-    created_at,
-    updated_at
-)
+		if err != nil {
+			return 0, err
+		}
+		_, err = txClient.ExecContext(txCtx, `
+INSERT INTO user_affiliate_ledger (user_id, action, amount, operation_id, balance_after,
+    aff_quota_after, aff_frozen_quota_after, aff_history_quota_after, created_at, updated_at)
 VALUES ($1, 'trial_expire', $2, $3, $4, $5, $6, $7, NOW(), NOW())
 ON CONFLICT (operation_id) WHERE operation_id IS NOT NULL DO NOTHING`,
-				userID,
-				deduct,
-				opID,
-				snapshot.BalanceAfter,
-				snapshot.AvailableQuotaAfter,
-				snapshot.FrozenQuotaAfter,
-				snapshot.HistoryQuotaAfter,
-			)
+			userID, deduct, fmt.Sprintf("trial_expire:%d", userID), snapshot.BalanceAfter,
+			snapshot.AvailableQuotaAfter, snapshot.FrozenQuotaAfter, snapshot.HistoryQuotaAfter)
+		if err != nil {
+			return 0, err
 		}
 	}
+
 	return deduct, nil
 }
 
@@ -1244,6 +1201,10 @@ func scanAffiliateRewardGrantRows(rows *sql.Rows) ([]service.AffiliateRewardGran
 func (r *affiliateRepository) ApproveRewardGrant(ctx context.Context, grantID, reviewerID int64, note string) (*service.AffiliateRewardGrantRecord, error) {
 	var out *service.AffiliateRewardGrantRecord
 	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
+		if err := lockAffiliateGrantScopeTx(txCtx, txClient, grantID); err != nil {
+			return err
+		}
+
 		rows, err := txClient.QueryContext(txCtx, `
 SELECT operation_id, inviter_id, invitee_id, reward_type, tier_target, amount::double precision, status
 FROM affiliate_reward_grants
@@ -1272,6 +1233,14 @@ FOR UPDATE`, grantID)
 			return service.ErrAffiliateRewardGrantNotPending
 		}
 
+		eligible, err := affiliateGrantStillEligibleTx(txCtx, txClient, grantID, inviterID, inviteeID, rewardType, tierTarget)
+		if err != nil {
+			return err
+		}
+		if !eligible {
+			return service.ErrAffiliateRewardGrantNotPending
+		}
+
 		var reviewerPtr *int64
 		if reviewerID > 0 {
 			reviewerPtr = &reviewerID
@@ -1296,9 +1265,13 @@ WHERE id = $3`, note, nullableInt64Arg(reviewerPtr), grantID); err != nil {
 		if inviteePtr != nil {
 			switch rewardType {
 			case "step1":
-				_, _ = txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step1_reward_status = 'granted', updated_at = NOW() WHERE user_id = $1`, *inviteePtr)
+				if _, err := txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step1_reward_status = 'granted', updated_at = NOW() WHERE user_id = $1`, *inviteePtr); err != nil {
+					return err
+				}
 			case "step2":
-				_, _ = txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step2_reward_status = 'granted', updated_at = NOW() WHERE user_id = $1`, *inviteePtr)
+				if _, err := txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step2_reward_status = 'granted', updated_at = NOW() WHERE user_id = $1`, *inviteePtr); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1326,6 +1299,10 @@ WHERE id = $3`, note, nullableInt64Arg(reviewerPtr), grantID); err != nil {
 func (r *affiliateRepository) RejectRewardGrant(ctx context.Context, grantID, reviewerID int64, note string) (*service.AffiliateRewardGrantRecord, error) {
 	var out *service.AffiliateRewardGrantRecord
 	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
+		if err := lockAffiliateGrantScopeTx(txCtx, txClient, grantID); err != nil {
+			return err
+		}
+
 		rows, err := txClient.QueryContext(txCtx, `
 SELECT operation_id, inviter_id, invitee_id, reward_type, tier_target, amount::double precision, status
 FROM affiliate_reward_grants
@@ -1373,9 +1350,13 @@ WHERE id = $3`, note, nullableInt64Arg(reviewerPtr), grantID); err != nil {
 		if inviteePtr != nil {
 			switch rewardType {
 			case "step1":
-				_, _ = txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step1_reward_status = 'rejected', updated_at = NOW() WHERE user_id = $1`, *inviteePtr)
+				if _, err := txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step1_reward_status = 'rejected', updated_at = NOW() WHERE user_id = $1`, *inviteePtr); err != nil {
+					return err
+				}
 			case "step2":
-				_, _ = txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step2_reward_status = 'rejected', updated_at = NOW() WHERE user_id = $1`, *inviteePtr)
+				if _, err := txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step2_reward_status = 'rejected', updated_at = NOW() WHERE user_id = $1`, *inviteePtr); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1415,171 +1396,4 @@ SET trial_grant_paused = $1,
 WHERE user_id = $3`, paused, reason, inviterID)
 		return err
 	})
-}
-
-// ClawbackOrderAffiliateRewards 在订单发生异常退款或争议时，同步扣回双方的赠送与邀请奖励（余额不足扣为负值）。
-func (r *affiliateRepository) ClawbackOrderAffiliateRewards(
-	ctx context.Context,
-	orderID, inviteeID int64,
-	refundedPaidAmount float64,
-) ([]int64, error) {
-	if orderID <= 0 || inviteeID <= 0 || refundedPaidAmount <= 0 {
-		return nil, nil
-	}
-	affectedUsers := make([]int64, 0, 2)
-	err := r.withTx(ctx, func(txCtx context.Context, txClient *dbent.Client) error {
-		rows, err := txClient.QueryContext(txCtx, `
-SELECT inviter_id,
-       COALESCE(total_paid_amount, 0)::double precision,
-       COALESCE(step1_reward_status, 'none'),
-       COALESCE(step2_reward_status, 'none')
-FROM user_affiliates
-WHERE user_id = $1
-FOR UPDATE`, inviteeID)
-		if err != nil {
-			return err
-		}
-		if !rows.Next() {
-			_ = rows.Close()
-			return nil
-		}
-		var inviterIDNull sql.NullInt64
-		var totalPaid float64
-		var step1Status, step2Status string
-		if err := rows.Scan(&inviterIDNull, &totalPaid, &step1Status, &step2Status); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-
-		newPaid := math.Max(0, totalPaid-refundedPaidAmount)
-		if _, err := txClient.ExecContext(txCtx, `
-UPDATE user_affiliates
-SET total_paid_amount = $1,
-    updated_at = NOW()
-WHERE user_id = $2`, newPaid, inviteeID); err != nil {
-			return err
-		}
-		affectedUsers = append(affectedUsers, inviteeID)
-
-		if !inviterIDNull.Valid || inviterIDNull.Int64 <= 0 {
-			return nil
-		}
-		inviterID := inviterIDNull.Int64
-		affectedUsers = append(affectedUsers, inviterID)
-
-		// 1) 扣回该笔订单产生的 5% 返利额度（优先扣冻结返利 -> 可用返利 -> 已转出的站内余额，允许扣为负值）
-		rebateRows, err := txClient.QueryContext(txCtx, `
-SELECT id, amount::double precision, frozen_until IS NOT NULL AND frozen_until > NOW()
-FROM user_affiliate_ledger
-WHERE user_id = $1
-  AND source_order_id = $2
-  AND action = 'accrue'`, inviterID, orderID)
-		if err != nil {
-			return err
-		}
-		type rebateEntry struct {
-			id       int64
-			amount   float64
-			isFrozen bool
-		}
-		var entries []rebateEntry
-		for rebateRows.Next() {
-			var e rebateEntry
-			if err := rebateRows.Scan(&e.id, &e.amount, &e.isFrozen); err != nil {
-				_ = rebateRows.Close()
-				return err
-			}
-			entries = append(entries, e)
-		}
-		if err := rebateRows.Close(); err != nil {
-			return err
-		}
-
-		for _, entry := range entries {
-			clawOpID := fmt.Sprintf("clawback_rebate:%d:%d", orderID, entry.id)
-			claimRows, err := txClient.QueryContext(txCtx, `
-INSERT INTO user_affiliate_ledger (user_id, action, amount, source_user_id, source_order_id, operation_id, created_at, updated_at)
-VALUES ($1, 'clawback_rebate', $2, $3, $4, $5, NOW(), NOW())
-ON CONFLICT (operation_id) WHERE operation_id IS NOT NULL DO NOTHING
-RETURNING id`, inviterID, -entry.amount, inviteeID, orderID, clawOpID)
-			if err != nil {
-				return err
-			}
-			claimed := claimRows.Next()
-			_ = claimRows.Close()
-			if !claimed {
-				continue
-			}
-
-			if entry.isFrozen {
-				_, _ = txClient.ExecContext(txCtx, `UPDATE user_affiliate_ledger SET frozen_until = NULL, updated_at = NOW() WHERE id = $1`, entry.id)
-				_, err = txClient.ExecContext(txCtx, `
-UPDATE user_affiliates
-SET aff_frozen_quota = GREATEST(aff_frozen_quota - $1, 0),
-    aff_history_quota = GREATEST(aff_history_quota - $1, 0),
-    updated_at = NOW()
-WHERE user_id = $2`, entry.amount, inviterID)
-				if err != nil {
-					return err
-				}
-			} else {
-				// 从可用返利扣减，不足部分从邀请人站内余额扣减（可扣为负值）
-				invRows, err := txClient.QueryContext(txCtx, `SELECT aff_quota::double precision FROM user_affiliates WHERE user_id = $1 FOR UPDATE`, inviterID)
-				if err != nil {
-					return err
-				}
-				var availQuota float64
-				if invRows.Next() {
-					_ = invRows.Scan(&availQuota)
-				}
-				_ = invRows.Close()
-
-				fromQuota := math.Min(availQuota, entry.amount)
-				fromBalance := entry.amount - fromQuota
-				if fromQuota > 0 {
-					_, _ = txClient.ExecContext(txCtx, `
-UPDATE user_affiliates
-SET aff_quota = GREATEST(aff_quota - $1, 0),
-    aff_history_quota = GREATEST(aff_history_quota - $2, 0),
-    updated_at = NOW()
-WHERE user_id = $3`, fromQuota, entry.amount, inviterID)
-				}
-				if fromBalance > 0 {
-					_, _ = txClient.User.Update().Where(user.IDEQ(inviterID)).AddBalance(-fromBalance).Save(txCtx)
-				}
-			}
-		}
-
-		// 2) 若退款后累计实付跌破 50 元 / 10 元，同步扣回已发放的单人两步奖（余额不足扣为负值）
-		if newPaid < service.AffiliateStep2MinPaid && step2Status == "granted" {
-			clawOpID := fmt.Sprintf("clawback_step2:%d:%d", orderID, inviteeID)
-			if _, err := txClient.User.Update().Where(user.IDEQ(inviterID)).AddBalance(-service.AffiliateStep2Bonus).Save(txCtx); err != nil {
-				return err
-			}
-			_, _ = txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step2_reward_status = 'clawed_back', updated_at = NOW() WHERE user_id = $1`, inviteeID)
-			_, _ = txClient.ExecContext(txCtx, `UPDATE affiliate_reward_grants SET status = 'clawed_back', updated_at = NOW() WHERE operation_id = $1`, fmt.Sprintf("step2:%d", inviteeID))
-			_, _ = txClient.ExecContext(txCtx, `
-INSERT INTO user_affiliate_ledger (user_id, action, amount, source_user_id, source_order_id, operation_id, created_at, updated_at)
-VALUES ($1, 'clawback_step2', $2, $3, $4, $5, NOW(), NOW())
-ON CONFLICT (operation_id) WHERE operation_id IS NOT NULL DO NOTHING`, inviterID, -service.AffiliateStep2Bonus, inviteeID, orderID, clawOpID)
-		}
-		if newPaid < service.AffiliateStep1MinPaid && step1Status == "granted" {
-			clawOpID := fmt.Sprintf("clawback_step1:%d:%d", orderID, inviteeID)
-			if _, err := txClient.User.Update().Where(user.IDEQ(inviterID)).AddBalance(-service.AffiliateStep1Bonus).Save(txCtx); err != nil {
-				return err
-			}
-			_, _ = txClient.ExecContext(txCtx, `UPDATE user_affiliates SET step1_reward_status = 'clawed_back', qualified_at = NULL, updated_at = NOW() WHERE user_id = $1`, inviteeID)
-			_, _ = txClient.ExecContext(txCtx, `UPDATE affiliate_reward_grants SET status = 'clawed_back', updated_at = NOW() WHERE operation_id = $1`, fmt.Sprintf("step1:%d", inviteeID))
-			_, _ = txClient.ExecContext(txCtx, `
-INSERT INTO user_affiliate_ledger (user_id, action, amount, source_user_id, source_order_id, operation_id, created_at, updated_at)
-VALUES ($1, 'clawback_step1', $2, $3, $4, $5, NOW(), NOW())
-ON CONFLICT (operation_id) WHERE operation_id IS NOT NULL DO NOTHING`, inviterID, -service.AffiliateStep1Bonus, inviteeID, orderID, clawOpID)
-		}
-
-		return nil
-	})
-	return affectedUsers, err
 }

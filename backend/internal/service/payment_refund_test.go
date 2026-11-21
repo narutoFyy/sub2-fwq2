@@ -449,7 +449,10 @@ func TestFinishRefundSuccessStatusesFinalize(t *testing.T) {
 				Where(paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)), paymentauditlog.ActionEQ("REFUND_PENDING")).
 				Count(ctx)
 			require.NoError(t, err)
-			require.Zero(t, pendingAudits)
+			require.Equal(t, 1, pendingAudits)
+			detail, err := svc.latestRefundPendingDetail(ctx, order.ID)
+			require.NoError(t, err)
+			require.True(t, detail.GatewayConfirmed)
 		})
 	}
 }

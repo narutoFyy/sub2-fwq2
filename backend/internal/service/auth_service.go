@@ -989,6 +989,7 @@ func (s *AuthService) bindOAuthAffiliate(ctx context.Context, userID int64, affi
 	if s.affiliateService == nil || userID <= 0 {
 		return
 	}
+	s.affiliateService.RecordRegistrationIP(ctx, userID)
 	if _, err := s.affiliateService.EnsureUserAffiliate(ctx, userID); err != nil {
 		logger.LegacyPrintf("service.auth", "[Auth] Failed to initialize affiliate profile for user %d: %v", userID, err)
 	}
@@ -1006,6 +1007,9 @@ func (s *AuthService) postAuthUserBootstrap(ctx context.Context, user *User, sig
 
 	if strings.TrimSpace(signupSource) == "" {
 		signupSource = "email"
+	}
+	if s.affiliateService != nil {
+		s.affiliateService.RecordRegistrationIP(ctx, user.ID)
 	}
 	s.updateUserSignupSource(ctx, user.ID, signupSource)
 

@@ -218,6 +218,11 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// ── 6. 计费执行（skipBilling 时整块跳过） ────────────────────
 
 		if !skipBilling {
+			apiKey, err = apiKeyService.PrepareAffiliateUserForRequest(c.Request.Context(), apiKey, ip.GetTrustedClientIP(c))
+			if err != nil {
+				AbortWithError(c, 503, "BILLING_SERVICE_ERROR", "Failed to prepare account balance")
+				return
+			}
 			// Key 状态检查
 			switch apiKey.Status {
 			case service.StatusAPIKeyQuotaExhausted:

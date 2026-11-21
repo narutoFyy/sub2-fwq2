@@ -223,6 +223,21 @@ describe('ModelWhitelistSelector', () => {
     expect(copyToClipboard).not.toHaveBeenCalled()
   })
 
+  it.each(['saved', 'preview'])('accepts an ID-only model catalog from a %s account without a warning', async (mode) => {
+    const result = { models: ['gpt-6-astra'], metadata: {} }
+    syncUpstreamModels.mockResolvedValue(result)
+    syncUpstreamModelsPreview.mockResolvedValue(result)
+    const wrapper = mountSelector(mode === 'saved' ? { accountId: 46 } : {
+      syncCredentials: { platform: 'openai', type: 'apikey', base_url: 'https://api.tokenclub.hk', api_key: 'test-key' }
+    })
+    await syncButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['gpt-6-astra']]])
+    expect(showSuccess).toHaveBeenCalledWith('admin.accounts.syncUpstreamModelsSuccess')
+    expect(showWarning).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+  })
+
   it('warns when model IDs sync but capability metadata is incomplete', async () => {
     syncUpstreamModels.mockResolvedValue({
       models: ['x-preview-f-free'],

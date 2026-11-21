@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -524,6 +525,42 @@ func TestAccountHandlerSyncUpstreamModels_UpstreamErrorDoesNotExposeBody(t *test
 }
 
 // Scenario: 能力补全失败显示部分成功。
+func TestAccountHandlerSyncUpstreamModels_IDOnlyUnlistedProviderReturnsSuccess(t *testing.T) {
+	for _, preview := range []bool{false, true} {
+		t.Run(fmt.Sprintf("preview_%t", preview), func(t *testing.T) {
+			svc := &availableModelsAdminService{
+				stubAdminService: newStubAdminService(),
+				account: service.Account{
+					ID: 46, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey,
+					Credentials: map[string]any{"api_key": "key", "base_url": "https://api.tokenclub.hk"},
+				},
+			}
+			upstream := &syncUpstreamHTTPUpstream{responses: []*http.Response{
+				{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":[{"id":"gpt-6-astra"}]}`))},
+				{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"openai":{"api":"https://api.openai.com/v1","models":{}}}`))},
+			}}
+			router := setupSyncUpstreamModelsRouter(svc, upstream)
+			path := "/api/v1/admin/accounts/46/models/sync-upstream"
+			body := ""
+			if preview {
+				path = "/api/v1/admin/accounts/models/sync-upstream-preview"
+				body = `{"platform":"openai","type":"apikey","base_url":"https://api.tokenclub.hk","api_key":"key"}`
+			}
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			require.Equal(t, http.StatusOK, rec.Code)
+			var resp struct {
+				Data service.UpstreamModelCatalog `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			require.Equal(t, []string{"gpt-6-astra"}, resp.Data.Models)
+			require.Empty(t, resp.Data.Warnings)
+		})
+	}
+}
+
 func TestAccountHandlerSyncUpstreamModels_MetadataEnrichmentFailureReturnsWarning(t *testing.T) {
 	svc := &availableModelsAdminService{
 		stubAdminService: newStubAdminService(),

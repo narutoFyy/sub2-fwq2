@@ -145,6 +145,12 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			return
 		}
 
+		apiKey, err = apiKeyService.PrepareAffiliateUserForRequest(c.Request.Context(), apiKey, ip.GetTrustedClientIP(c))
+		if err != nil {
+			abortWithGoogleError(c, 503, "Failed to prepare account balance")
+			return
+		}
+
 		// Key 状态检查（状态字段可能因后台异步刷新而滞后，故显式拦截）。
 		switch apiKey.Status {
 		case service.StatusAPIKeyQuotaExhausted:

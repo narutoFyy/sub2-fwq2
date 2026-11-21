@@ -22,6 +22,7 @@ type UsageBillingCommand struct {
 	RequestFingerprint string
 	RequestPayloadHash string
 
+	ClientIP            string // Trusted request IP; excluded from the financial idempotency fingerprint.
 	UserID              int64
 	AccountID           int64
 	SubscriptionID      *int64
@@ -173,6 +174,7 @@ type UsageBillingApplyResult struct {
 	NewBalance                 *float64           // post-deduction balance (nil = no balance deduction)
 	BalanceOverdrafted         bool               // true when the sufficient-balance guard missed and debt was still recorded
 	QuotaState                 *AccountQuotaState // post-increment quota state (nil = no quota increment)
+	TrialBonusExpiredAmount    float64            // Additional expiry debit committed with this charge.
 	AffiliateCreditedInviterID int64              // non-zero when consumption unlocked inviter step/ladder balance rewards
 }
 

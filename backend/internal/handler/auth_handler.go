@@ -191,7 +191,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	regCtx := service.WithAffiliateClientIP(c.Request.Context(), clientIP)
+	regCtx := service.WithAffiliateClientIP(c.Request.Context(), ip.GetTrustedClientIP(c))
 	_, user, err := h.authService.RegisterWithVerification(
 		regCtx,
 		req.Email,
