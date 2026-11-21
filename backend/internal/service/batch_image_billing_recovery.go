@@ -15,12 +15,13 @@ const (
 )
 
 type BatchImageBillingRecoveryService struct {
-	Repo       BatchImageRepository
-	Billing    UsageBillingRepository
-	AuthCache  APIKeyAuthCacheInvalidator
-	Queue      BatchImageQueue
-	StaleAfter time.Duration
-	Limit      int
+	Repo         BatchImageRepository
+	Billing      UsageBillingRepository
+	AuthCache    APIKeyAuthCacheInvalidator
+	BalanceCache batchImageBalanceCacheInvalidator
+	Queue        BatchImageQueue
+	StaleAfter   time.Duration
+	Limit        int
 }
 
 func (s *BatchImageBillingRecoveryService) ReleaseStaleUnsubmittedOnce(ctx context.Context) (int, error) {
@@ -82,9 +83,7 @@ func (s *BatchImageBillingRecoveryService) ReleaseStaleUnsubmittedOnce(ctx conte
 			lastErr = err
 			continue
 		}
-		if s.AuthCache != nil && job.UserID > 0 {
-			s.AuthCache.InvalidateAuthCacheByUserID(ctx, job.UserID)
-		}
+		invalidateBatchImageBalanceCaches(ctx, s.AuthCache, s.BalanceCache, job.UserID)
 		released++
 	}
 	return released, lastErr

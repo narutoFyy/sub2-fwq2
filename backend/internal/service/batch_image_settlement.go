@@ -60,6 +60,7 @@ type BatchImageSettlementService struct {
 	UsageLogRepo UsageLogRepository
 	Pricing      BatchImagePricingResolver
 	AuthCache    APIKeyAuthCacheInvalidator
+	BalanceCache batchImageBalanceCacheInvalidator
 	Config       *config.Config
 }
 
@@ -149,7 +150,8 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 		return nil, ErrBatchImageSettlementCostExceedsHold
 	}
 
-	if err := captureBatchImageBalanceHold(ctx, s.BillingRepo, job, actualCost, manifestHash); err != nil {
+	billingResult, err := captureBatchImageBalanceHold(ctx, s.BillingRepo, job, actualCost, manifestHash)
+	if err != nil {
 		msg := truncateBatchImageMessage(err.Error(), batchImageMaxErrorMessageLength)
 		if failErr := s.recordSettlementFailure(ctx, job, "SETTLEMENT_BILLING_FAILED", msg); failErr != nil {
 			return nil, failErr
@@ -157,6 +159,9 @@ func (s *BatchImageSettlementService) Settle(ctx context.Context, batchID string
 		return nil, err
 	}
 	s.invalidateAuthCache(ctx, job.UserID)
+	if billingResult != nil && billingResult.AffiliateCreditedInviterID > 0 && billingResult.AffiliateCreditedInviterID != job.UserID {
+		s.invalidateAuthCache(ctx, billingResult.AffiliateCreditedInviterID)
+	}
 
 	now := time.Now()
 	outputExpiresAt := now.Add(s.outputRetentionAfterTerminal())
@@ -284,8 +289,8 @@ func (s *BatchImageSettlementService) recordUsageLog(ctx context.Context, job *B
 }
 
 func (s *BatchImageSettlementService) invalidateAuthCache(ctx context.Context, userID int64) {
-	if s != nil && s.AuthCache != nil && userID > 0 {
-		s.AuthCache.InvalidateAuthCacheByUserID(ctx, userID)
+	if s != nil {
+		invalidateBatchImageBalanceCaches(ctx, s.AuthCache, s.BalanceCache, userID)
 	}
 }
 

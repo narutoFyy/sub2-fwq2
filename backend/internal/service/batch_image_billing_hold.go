@@ -66,6 +66,7 @@ func reserveBatchImageBalanceHold(ctx context.Context, repo UsageBillingReposito
 	if cmd.HoldAmount <= 0 {
 		return nil
 	}
+	cmd.ClientIP = AffiliateClientIPFromContext(ctx)
 	if _, err := repo.ReserveBatchImageBalance(ctx, cmd); err != nil {
 		if errors.Is(err, ErrBatchImageInsufficientBalance) {
 			return ErrBatchImageInsufficientBalance
@@ -75,18 +76,19 @@ func reserveBatchImageBalanceHold(ctx context.Context, repo UsageBillingReposito
 	return nil
 }
 
-func captureBatchImageBalanceHold(ctx context.Context, repo UsageBillingRepository, job *BatchImageJob, actualAmount float64, payloadHash string) error {
+func captureBatchImageBalanceHold(ctx context.Context, repo UsageBillingRepository, job *BatchImageJob, actualAmount float64, payloadHash string) (*BatchImageBalanceHoldResult, error) {
 	if repo == nil {
-		return ErrBatchImageSettlementBillingFailed.WithCause(errors.New("batch image billing repository is not configured"))
+		return nil, ErrBatchImageSettlementBillingFailed.WithCause(errors.New("batch image billing repository is not configured"))
 	}
 	cmd, err := buildBatchImageHoldCommand(job, BatchImageCaptureRequestID(job.BatchID), actualAmount, payloadHash)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if _, err := repo.CaptureBatchImageBalance(ctx, cmd); err != nil {
-		return ErrBatchImageSettlementBillingFailed.WithCause(err)
+	result, err := repo.CaptureBatchImageBalance(ctx, cmd)
+	if err != nil {
+		return nil, ErrBatchImageSettlementBillingFailed.WithCause(err)
 	}
-	return nil
+	return result, nil
 }
 
 func releaseBatchImageBalanceHold(ctx context.Context, repo UsageBillingRepository, job *BatchImageJob, payloadHash string) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -33,6 +34,12 @@ func (r *affiliateRepository) RecordInviteeConsumption(ctx context.Context, invi
 
 // Caller must acquire the affiliate reward scope before balance/affiliate row locks.
 func recordInviteeConsumptionTx(txCtx context.Context, txClient affiliateQueryExecer, inviteeID int64, consumedAmount float64, clientIP string, outcome *service.AffiliateRewardEvalOutcome) error {
+	return recordInviteeConsumptionWithTrialTx(txCtx, txClient, inviteeID, consumedAmount, clientIP, nil, outcome)
+}
+
+// A captured batch consumes its own reserved trial principal. Ordinary charges
+// may use only unreserved principal, regardless of total lifetime consumption.
+func recordInviteeConsumptionWithTrialTx(txCtx context.Context, txClient affiliateQueryExecer, inviteeID int64, consumedAmount float64, clientIP string, heldTrialConsumed *float64, outcome *service.AffiliateRewardEvalOutcome) error {
 	clientIP, _ = service.ComputeIPSubnet(clientIP)
 	rows, err := txClient.QueryContext(txCtx, `
 SELECT inviter_id,
@@ -71,9 +78,19 @@ FOR UPDATE`, inviteeID)
 		return err
 	}
 
-	newConsumed := totalConsumed + consumedAmount
+	trial, err := affiliateTrialBalanceTx(txCtx, txClient, inviteeID)
+	if err != nil {
+		return err
+	}
+	trialUsed := math.Min(consumedAmount, trial.available())
+	if heldTrialConsumed != nil {
+		trialUsed = 0
+		if trial != nil && trial.status != "clawed_back" {
+			trialUsed = math.Min(*heldTrialConsumed, math.Max(0, trial.amount-trial.consumed-trial.expired))
+		}
+	}
 	newTrialStatus := trialStatus
-	if trialStatus == "active" && newConsumed >= trialBonusAmount {
+	if (trialStatus == "active" || trialStatus == "expired") && trial != nil && trial.expired == 0 && trial.consumed+trialUsed >= trialBonusAmount {
 		newTrialStatus = "used"
 	}
 
@@ -82,8 +99,9 @@ UPDATE user_affiliates
 SET total_consumed_amount = total_consumed_amount + $1,
     trial_bonus_status = $2,
     last_active_ip = CASE WHEN $3 <> '' THEN $3 ELSE last_active_ip END,
+    trial_consumed_amount = trial_consumed_amount + $5,
     updated_at = NOW()
-WHERE user_id = $4`, consumedAmount, newTrialStatus, clientIP, inviteeID); err != nil {
+WHERE user_id = $4`, consumedAmount, newTrialStatus, clientIP, inviteeID, trialUsed); err != nil {
 		return fmt.Errorf("update invitee consumption: %w", err)
 	}
 

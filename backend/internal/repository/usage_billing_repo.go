@@ -131,21 +131,21 @@ func (r *usageBillingRepository) claimUsageBillingRequest(ctx context.Context, t
 }
 
 func (r *usageBillingRepository) ReserveBatchImageBalance(ctx context.Context, cmd *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {
-	return r.applyBatchImageBalanceHold(ctx, cmd, reserveUsageBillingBatchImageBalance)
+	return r.applyBatchImageBalanceHold(ctx, cmd, "reserve")
 }
 
 func (r *usageBillingRepository) CaptureBatchImageBalance(ctx context.Context, cmd *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {
-	return r.applyBatchImageBalanceHold(ctx, cmd, captureUsageBillingBatchImageBalance)
+	return r.applyBatchImageBalanceHold(ctx, cmd, "capture")
 }
 
 func (r *usageBillingRepository) ReleaseBatchImageBalance(ctx context.Context, cmd *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {
-	return r.applyBatchImageBalanceHold(ctx, cmd, releaseUsageBillingBatchImageBalance)
+	return r.applyBatchImageBalanceHold(ctx, cmd, "release")
 }
 
 func (r *usageBillingRepository) applyBatchImageBalanceHold(
 	ctx context.Context,
 	cmd *service.BatchImageBalanceHoldCommand,
-	apply func(context.Context, *sql.Tx, *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error),
+	operation string,
 ) (_ *service.BatchImageBalanceHoldResult, err error) {
 	if cmd == nil {
 		return &service.BatchImageBalanceHoldResult{}, nil
@@ -172,19 +172,25 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 	if err != nil {
 		return nil, err
 	}
+	if err := lockAffiliateRewardScopeTx(ctx, tx, cmd.UserID); err != nil {
+		return nil, err
+	}
 	if !applied {
-		return &service.BatchImageBalanceHoldResult{Applied: false}, nil
+		return replayBatchImageHoldResultTx(ctx, tx, cmd)
 	}
 
-	result, err := apply(ctx, tx, cmd)
+	result, err := applyAffiliateBatchImageHoldTx(ctx, tx, cmd, operation)
 	if err != nil {
 		return nil, err
 	}
 	if result == nil {
 		result = &service.BatchImageBalanceHoldResult{}
 	}
-	result.Applied = true
-
+	if !result.Applied {
+		// In particular, a cleanup before reserve must not permanently claim
+		// release and prevent a later real reservation from being released.
+		return result, nil
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -368,6 +374,12 @@ func releaseUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *
 		logger.LegacyPrintf("repository.usage_billing", "[BatchImage] release skipped, hold was never reserved: batch=%s", cmd.BatchID)
 		return &service.BatchImageBalanceHoldResult{}, nil
 	}
+	return releaseRecordedUsageBillingBatchImageBalance(ctx, tx, cmd)
+}
+
+// The caller has already validated a durable reservation. That record outlives
+// dedup retention and is sufficient proof that this batch owns the frozen money.
+func releaseRecordedUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {
 	var balance, frozen float64
 	err := tx.QueryRowContext(ctx, `
 		UPDATE users

@@ -188,6 +188,7 @@ type BatchImageBalanceHoldCommand struct {
 	BatchID            string
 	HoldAmount         float64
 	ActualAmount       float64
+	ClientIP           string // Trusted submit IP; deliberately excluded from the billing fingerprint.
 }
 
 func (c *BatchImageBalanceHoldCommand) Normalize() {
@@ -221,9 +222,11 @@ func buildBatchImageBalanceHoldFingerprint(c *BatchImageBalanceHoldCommand) stri
 }
 
 type BatchImageBalanceHoldResult struct {
-	Applied       bool
-	NewBalance    *float64
-	FrozenBalance *float64
+	Applied                    bool
+	NewBalance                 *float64
+	FrozenBalance              *float64
+	TrialBonusExpiredAmount    float64
+	AffiliateCreditedInviterID int64
 }
 
 type UsageBillingRepository interface {

@@ -925,8 +925,10 @@ func (r *affiliateRepository) ExpireUserTrialBonus(ctx context.Context, userID i
 func expireUserTrialBonusTx(txCtx context.Context, txClient affiliateQueryExecer, userID int64) (float64, error) {
 	rows, err := txClient.QueryContext(txCtx, `
 SELECT COALESCE(trial_bonus_amount, 0)::double precision,
-       COALESCE(total_consumed_amount, 0)::double precision
-FROM user_affiliates
+       COALESCE(trial_consumed_amount, 0)::double precision,
+       COALESCE(trial_expired_amount, 0)::double precision,
+       COALESCE((SELECT SUM(h.trial_reserved_amount) FROM usage_billing_batch_image_holds h WHERE h.user_id = ua.user_id AND h.status = 'reserved'), 0)::double precision
+FROM user_affiliates ua
 WHERE user_id = $1
   AND trial_bonus_status = 'active'
   AND trial_expires_at IS NOT NULL
@@ -939,8 +941,8 @@ FOR UPDATE`, userID)
 		_ = rows.Close()
 		return 0, nil
 	}
-	var trialAmount, totalConsumed float64
-	if err := rows.Scan(&trialAmount, &totalConsumed); err != nil {
+	var trialAmount, trialConsumed, trialExpired, trialReserved float64
+	if err := rows.Scan(&trialAmount, &trialConsumed, &trialExpired, &trialReserved); err != nil {
 		_ = rows.Close()
 		return 0, err
 	}
@@ -948,8 +950,8 @@ FOR UPDATE`, userID)
 		return 0, err
 	}
 
-	unused := math.Max(0, trialAmount-totalConsumed)
-	if unused <= 0 {
+	unused := math.Max(0, trialAmount-trialConsumed-trialExpired-trialReserved)
+	if unused <= 0 && trialReserved <= 0 && trialExpired <= 0 {
 		_, err := txClient.ExecContext(txCtx, `
 UPDATE user_affiliates
 SET trial_bonus_status = 'used',
@@ -979,25 +981,14 @@ WHERE id = $2`, deduct, userID); err != nil {
 	if _, err := txClient.ExecContext(txCtx, `
 UPDATE user_affiliates
 SET trial_bonus_status = 'expired',
-    trial_expired_amount = $1,
+    trial_expired_amount = trial_expired_amount + $1,
     updated_at = NOW()
 WHERE user_id = $2`, deduct, userID); err != nil {
 		return 0, err
 	}
 
 	if deduct > 0 {
-		snapshot, err := queryAffiliateTransferSnapshot(txCtx, txClient, userID)
-		if err != nil {
-			return 0, err
-		}
-		_, err = txClient.ExecContext(txCtx, `
-INSERT INTO user_affiliate_ledger (user_id, action, amount, operation_id, balance_after,
-    aff_quota_after, aff_frozen_quota_after, aff_history_quota_after, created_at, updated_at)
-VALUES ($1, 'trial_expire', $2, $3, $4, $5, $6, $7, NOW(), NOW())
-ON CONFLICT (operation_id) WHERE operation_id IS NOT NULL DO NOTHING`,
-			userID, deduct, fmt.Sprintf("trial_expire:%d", userID), snapshot.BalanceAfter,
-			snapshot.AvailableQuotaAfter, snapshot.FrozenQuotaAfter, snapshot.HistoryQuotaAfter)
-		if err != nil {
+		if err := recordTrialExpiryLedgerTx(txCtx, txClient, userID, deduct, fmt.Sprintf("trial_expire:%d", userID)); err != nil {
 			return 0, err
 		}
 	}
