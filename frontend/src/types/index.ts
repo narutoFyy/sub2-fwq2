@@ -151,6 +151,29 @@ export interface AffiliateInvitee {
   username: string
   created_at?: string
   total_rebate: number
+  total_paid_amount?: number
+  total_consumed_amount?: number
+  trial_bonus_status?: string
+  trial_bonus_amount?: number
+  step1_reward_status?: string
+  step1_reward_amount?: number
+  step2_reward_status?: string
+  step2_reward_amount?: number
+  pending_bonus_amount?: number
+  granted_bonus_amount?: number
+  display_status?: string
+  needs_consume_reminder?: boolean
+  qualified?: boolean
+  qualified_at?: string | null
+}
+
+export interface AffiliateLadderTier {
+  tier_target: number
+  cumulative_bonus: number
+  delta_bonus: number
+  requires_min_total_paid: number
+  auto_grant: boolean
+  status: 'locked' | 'pending_review' | 'granted' | 'rejected' | string
 }
 
 export interface UserAffiliateDetail {
@@ -163,6 +186,19 @@ export interface UserAffiliateDetail {
   aff_history_quota: number
   /** 当前用户作为邀请人时实际生效的返利比例（专属覆盖全局）。0-100。 */
   effective_rebate_rate_percent: number
+  qualified_invitee_count?: number
+  qualified_invitees_paid_total?: number
+  pending_step_bonus_total?: number
+  granted_step_bonus_total?: number
+  pending_ladder_bonus_total?: number
+  granted_ladder_bonus_total?: number
+  withdraw_threshold?: number
+  can_apply_withdraw?: boolean
+  remind_consume_count?: number
+  ladder_tiers?: AffiliateLadderTier[]
+  trial_bonus_status?: string
+  trial_bonus_amount?: number
+  trial_expires_at?: string | null
   invitees: AffiliateInvitee[]
 }
 

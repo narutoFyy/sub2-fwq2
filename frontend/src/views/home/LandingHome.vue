@@ -32,10 +32,11 @@
           <span class="block" data-reveal-line>{{ t('home.landing.hero.titleLine1') }}</span>
           <span class="block" data-reveal-line>{{ t('home.landing.hero.titleLine2') }}</span>
         </h1>
-        <p class="hero-sub">{{ t('home.landing.hero.subtitle') }}</p>
-        <div class="mt-9 flex flex-wrap items-center gap-4">
+        <p ref="heroSub" class="hero-sub">{{ t('home.landing.hero.subtitle') }}</p>
+        <div ref="heroActions" class="mt-9 flex flex-wrap items-center gap-4">
           <span class="sm:hidden"><RollLink to="/tutorials" :label="tutorialCopy.nav" size="lg" variant="plain" arrow /></span>
           <RollLink
+            v-magnetic
             :to="isAuthenticated ? dashboardPath : '/login'"
             :label="isAuthenticated ? t('home.goToDashboard') : t('home.getStarted')"
             size="lg"
@@ -62,15 +63,17 @@
         <GlowDots :center-x="0.5" :center-y="0.62" :seed="47" :max-cells="16000" :gain="0.74" />
         <div class="cta-fade absolute inset-0"></div>
       </div>
-      <div class="mx-auto flex max-w-7xl flex-col items-center px-5 py-32 text-center sm:px-8 sm:py-44">
-        <h2 class="hero-title !text-[clamp(36px,4.8vw,64px)]">{{ t('home.landing.finalCta.title') }}</h2>
-        <RollLink
-          :to="isAuthenticated ? dashboardPath : '/login'"
-          :label="isAuthenticated ? t('home.goToDashboard') : t('home.getStarted')"
-          size="lg"
-          arrow
-          class="mt-10"
-        />
+      <div v-reveal class="mx-auto flex max-w-7xl flex-col items-center px-5 py-32 text-center sm:px-8 sm:py-44">
+        <h2 data-reveal class="hero-title !text-[clamp(36px,4.8vw,64px)]">{{ t('home.landing.finalCta.title') }}</h2>
+        <div data-reveal class="mt-10">
+          <RollLink
+            v-magnetic
+            :to="isAuthenticated ? dashboardPath : '/login'"
+            :label="isAuthenticated ? t('home.goToDashboard') : t('home.getStarted')"
+            size="lg"
+            arrow
+          />
+        </div>
       </div>
     </section>
 
@@ -89,7 +92,7 @@
 <script setup lang="ts">
 import '@fontsource-variable/geist'
 import '@fontsource-variable/geist-mono'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
@@ -102,6 +105,7 @@ import TutorialEntry from '@/features/tutorials/TutorialEntry.vue'
 import PlazaEntry from '@/features/plaza/PlazaEntry.vue'
 import { useTutorialCopy } from '@/features/tutorials/content'
 import { sanitizeUrl } from '@/utils/url'
+import { canAnimate, hideForEntrance, playEntrance, vMagnetic, vReveal } from '@/features/motion'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
 const { t } = useI18n()
@@ -122,9 +126,21 @@ const canReveal =
   !hasRevealPlayed()
 const titleShown = ref(!canReveal)
 let revealGuard: ReturnType<typeof setTimeout> | undefined
+
+// 标题浮现后，副标题和按钮接力出场；标题不播浮现动画时它们也直接显示
+const heroSub = ref<HTMLElement | null>(null)
+const heroActions = ref<HTMLElement | null>(null)
+const heroFollowers = () =>
+  [heroSub.value, ...Array.from(heroActions.value?.children ?? [])].filter((el): el is HTMLElement => el instanceof HTMLElement)
+const relayHero = canReveal && canAnimate()
+
 onMounted(() => {
   // 兜底：任何原因没收到交接信号，6 秒后也要把标题显示出来
   revealGuard = setTimeout(() => (titleShown.value = true), 6000)
+  if (relayHero) hideForEntrance(heroFollowers())
+})
+watch(titleShown, (shown) => {
+  if (shown && relayHero) void playEntrance(heroFollowers(), { delay: 0.22 })
 })
 onBeforeUnmount(() => clearTimeout(revealGuard))
 

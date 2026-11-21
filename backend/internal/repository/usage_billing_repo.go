@@ -12,11 +12,12 @@ import (
 )
 
 type usageBillingRepository struct {
-	db *sql.DB
+	entClient *dbent.Client
+	db        *sql.DB
 }
 
-func NewUsageBillingRepository(_ *dbent.Client, sqlDB *sql.DB) service.UsageBillingRepository {
-	return &usageBillingRepository{db: sqlDB}
+func NewUsageBillingRepository(entClient *dbent.Client, sqlDB *sql.DB) service.UsageBillingRepository {
+	return &usageBillingRepository{entClient: entClient, db: sqlDB}
 }
 
 func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBillingCommand) (_ *service.UsageBillingApplyResult, err error) {
@@ -59,6 +60,17 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 		return nil, err
 	}
 	tx = nil
+
+	if cmd.BalanceCost > 0 && cmd.UserID > 0 && r.entClient != nil {
+		affRepo := &affiliateRepository{client: r.entClient}
+		outcome, affErr := affRepo.RecordInviteeConsumption(ctx, cmd.UserID, cmd.BalanceCost, "")
+		if affErr != nil {
+			logger.LegacyPrintf("repository.usage_billing", "[AffiliateV2] RecordInviteeConsumption failed user=%d cost=%.6f: %v", cmd.UserID, cmd.BalanceCost, affErr)
+		} else if outcome != nil && outcome.InviterID > 0 && (outcome.Step1Granted > 0 || outcome.Step2Granted > 0 || outcome.TierBonusGranted > 0) {
+			result.AffiliateCreditedInviterID = outcome.InviterID
+		}
+	}
+
 	return result, nil
 }
 

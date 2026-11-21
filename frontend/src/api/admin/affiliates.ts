@@ -27,6 +27,7 @@ export interface ListAffiliateRecordsParams {
   page?: number
   page_size?: number
   search?: string
+  status?: string
   start_at?: string
   end_at?: string
   sort_by?: string
@@ -43,6 +44,39 @@ export interface AffiliateInviteRecord {
   invitee_username: string
   aff_code: string
   total_rebate: number
+  total_paid_amount?: number
+  total_consumed_amount?: number
+  trial_bonus_status?: string
+  trial_bonus_amount?: number
+  trial_skip_reason?: string
+  step1_reward_status?: string
+  step2_reward_status?: string
+  qualified?: boolean
+  qualified_at?: string | null
+  register_ip?: string
+  same_ip_warning?: boolean
+  risk_tags?: string
+  created_at: string
+}
+
+export interface AffiliateRewardGrantRecord {
+  id: number
+  operation_id: string
+  inviter_id: number
+  inviter_email: string
+  inviter_username: string
+  invitee_id?: number | null
+  invitee_email?: string
+  invitee_username?: string
+  reward_type: string
+  tier_target: number
+  amount: number
+  status: 'pending_review' | 'granted' | 'rejected' | 'clawed_back' | string
+  review_reason: string
+  review_note: string
+  reviewed_by?: number | null
+  reviewed_at?: string | null
+  granted_at?: string | null
   created_at: string
 }
 
@@ -115,6 +149,10 @@ export interface AffiliateUserOverview {
   rebate_rate_percent: number
   invited_count: number
   rebated_invitee_count: number
+  paid_invitee_count?: number
+  qualified_invitee_count?: number
+  trial_grant_paused?: boolean
+  trial_grant_pause_reason?: string
   available_quota: number
   history_quota: number
 }
@@ -198,6 +236,7 @@ function recordParams(params: ListAffiliateRecordsParams = {}) {
     page: params.page ?? 1,
     page_size: params.page_size ?? 20,
     search: params.search ?? '',
+    status: params.status || undefined,
     start_at: params.start_at || undefined,
     end_at: params.end_at || undefined,
     sort_by: params.sort_by || undefined,
@@ -266,6 +305,50 @@ export async function withdrawUserQuota(
   }
 }
 
+export async function listRewardGrants(
+  params: ListAffiliateRecordsParams = {},
+): Promise<PaginatedResponse<AffiliateRewardGrantRecord>> {
+  const { data } = await apiClient.get<PaginatedResponse<AffiliateRewardGrantRecord>>(
+    '/admin/affiliates/reward-grants',
+    { params: recordParams(params) },
+  )
+  return data
+}
+
+export async function approveRewardGrant(
+  grantId: number,
+  note = '',
+): Promise<AffiliateRewardGrantRecord> {
+  const { data } = await apiClient.post<AffiliateRewardGrantRecord>(
+    `/admin/affiliates/reward-grants/${grantId}/approve`,
+    { note },
+  )
+  return data
+}
+
+export async function rejectRewardGrant(
+  grantId: number,
+  note = '',
+): Promise<AffiliateRewardGrantRecord> {
+  const { data } = await apiClient.post<AffiliateRewardGrantRecord>(
+    `/admin/affiliates/reward-grants/${grantId}/reject`,
+    { note },
+  )
+  return data
+}
+
+export async function setUserTrialGrantPaused(
+  userId: number,
+  paused: boolean,
+  reason = '',
+): Promise<{ user_id: number; paused: boolean }> {
+  const { data } = await apiClient.post<{ user_id: number; paused: boolean }>(
+    `/admin/affiliates/users/${userId}/trial-pause`,
+    { paused, reason },
+  )
+  return data
+}
+
 export const affiliatesAPI = {
   listUsers,
   lookupUsers,
@@ -275,6 +358,10 @@ export const affiliatesAPI = {
   listInviteRecords,
   listRebateRecords,
   listTransferRecords,
+  listRewardGrants,
+  approveRewardGrant,
+  rejectRewardGrant,
+  setUserTrialGrantPaused,
   getUserOverview,
   withdrawUserQuota,
 }

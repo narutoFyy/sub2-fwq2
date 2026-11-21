@@ -418,6 +418,9 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 	} else if p.Cost.ActualCost > 0 && p.User != nil {
 		syncBalanceCacheAfterDeduction(ctx, p, deps, result)
 	}
+	if result != nil && result.AffiliateCreditedInviterID > 0 && deps.billingCacheService != nil {
+		_ = deps.billingCacheService.InvalidateUserBalance(ctx, result.AffiliateCreditedInviterID)
+	}
 
 	if p.Cost.ActualCost > 0 && p.APIKey != nil && p.APIKey.HasRateLimits() && deps.billingCacheService != nil {
 		deps.billingCacheService.QueueUpdateAPIKeyRateLimitUsage(p.APIKey.ID, p.Cost.ActualCost)

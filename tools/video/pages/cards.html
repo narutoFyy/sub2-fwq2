@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>cards</title>
+<style>
+  :root{--fg:#e6edf3;--dim:#8b98a5;--green:#4cd964;--orange:#ff8a5c;--blue:#6cb6ff}
+  *{box-sizing:border-box}
+  html,body{margin:0;width:1280px;height:720px;overflow:hidden;background:radial-gradient(circle at 30% 20%,#18212c,#07090c 70%);font-family:"PingFang SC","Hiragino Sans GB",-apple-system,sans-serif;color:var(--fg)}
+  #root{position:absolute;inset:0;padding:48px 72px;display:flex;flex-direction:column}
+  .h1{font-size:64px;font-weight:800;letter-spacing:2px;transition:all .4s}
+  .h1.big{margin:auto;text-align:center;font-size:96px}
+  .h1.small{font-size:46px;color:var(--orange);margin-bottom:22px}
+  .card{background:#12171e;border:1px solid #2a333d;border-left:8px solid var(--orange);border-radius:18px;padding:20px 32px;margin-bottom:20px;box-shadow:0 12px 40px rgba(0,0,0,.4);animation:in .35s ease-out}
+  .card .q{font-size:42px;font-weight:800}
+  .card .a{font-size:32px;color:#b8c4cf;margin-top:6px;line-height:1.35}
+  .card .n{color:var(--orange);margin-right:14px;font-family:"SF Mono",Menlo,monospace}
+  .card.hero{border-left-color:var(--green)}
+  .step{font-size:50px;font-weight:700;padding:12px 34px;margin-bottom:16px;border-radius:16px;background:#12171e;border:2px solid #2a333d;color:#5d6975;transition:all .3s;display:flex;align-items:center}
+  .step .n{width:62px;height:62px;border-radius:50%;border:2px solid #3a4550;display:inline-flex;align-items:center;justify-content:center;font-size:34px;margin-right:26px;flex:none}
+  .step.on{color:var(--fg);border-color:var(--orange);background:rgba(255,138,92,.12);box-shadow:0 0 30px rgba(255,138,92,.25)}
+  .step.on .n{background:var(--orange);border-color:var(--orange);color:#111}
+  .hero1{margin:auto;text-align:center}
+  .hero1 .big{font-size:140px;font-weight:900;letter-spacing:6px;color:var(--fg)}
+  .hero1 .sub{font-size:58px;margin-top:26px;color:var(--orange);font-weight:700;font-family:"SF Mono",Menlo,"PingFang SC",monospace}
+  .cc{text-align:center}
+  .cc .name{font-size:96px;font-weight:900;margin-top:10px}
+  .cc .d{font-size:44px;color:#c6d1db;margin-top:26px;line-height:1.4}
+  .cc .d2{font-size:44px;color:var(--orange);margin-top:18px;font-weight:700}
+  @keyframes in{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+</style></head><body><div id="root"></div>
+<script>
+const R=document.getElementById('root');
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const C={
+  clear(){R.innerHTML=''},
+  title(t,mode='big'){let h=R.querySelector('.h1');if(!h){h=document.createElement('div');h.className='h1';R.prepend(h)}h.textContent=t;h.className='h1 '+mode},
+  shrink(){R.querySelector('.h1').className='h1 small'},
+  card(q,a,n){const d=document.createElement('div');d.className='card';d.innerHTML='<div class="q"><span class="n">'+n+'</span>'+esc(q)+'</div><div class="a">'+esc(a)+'</div>';R.appendChild(d)},
+  steps(arr){R.innerHTML='';R.style.justifyContent='center';arr.forEach((s,i)=>{const d=document.createElement('div');d.className='step';d.innerHTML='<span class="n">'+(i+1)+'</span>'+esc(s);R.appendChild(d)})},
+  light(i){R.querySelectorAll('.step')[i].classList.add('on')},
+  hero(a,b){R.innerHTML='<div class="hero1"><div class="big">'+esc(a)+'</div><div class="sub">'+esc(b)+'</div></div>'},
+  cc(name,d1,d2){R.innerHTML='<div class="cc" style="margin:auto 0"><div class="name">'+esc(name)+'</div><div class="d">'+esc(d1)+'</div><div class="d2">'+esc(d2)+'</div></div>'}
+};
+</script></body></html>

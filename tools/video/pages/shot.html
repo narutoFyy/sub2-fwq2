@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>shot</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0b0d;overflow:hidden}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  img{max-height:92vh;max-width:92vw;border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,.65);transform-origin:50% 50%;will-change:transform}
+</style>
+<div id="stage"><img id="im"></div>
+<script>
+  // 用法：shot.html#../../../frontend/public/tutorials/shared/xxx.jpg
+  const im = document.getElementById('im');
+  im.src = decodeURIComponent(location.hash.slice(1));
+  // 把图上 (ox,oy)（0~1 的比例）放大 s 倍并移到画面中央；由录制脚本逐帧调用，保证和帧数对齐
+  window.setZoom = (s, ox, oy) => {
+    const w = im.clientWidth, h = im.clientHeight;
+    const dx = (ox - 0.5) * w, dy = (oy - 0.5) * h;
+    im.style.transform = `translate(${-dx * s}px, ${-dy * s}px) scale(${s})`;
+  };
+</script>

@@ -2,6 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ModelIcon from '@/components/common/ModelIcon.vue'
+import { CountUp, vReveal, vSpotlight } from '@/features/motion'
 import { usePlazaCopy, discountEn } from './content'
 import { usePlazaData } from './usePlazaData'
 import { discountZh, featuredModel, formatRate, groupRate, isTokenModel, perMillion, perUnit, unitPrices, billingMode } from './pricing'
@@ -47,19 +48,19 @@ function featuredPrice(g: ModelPlazaGroup) {
 </script>
 
 <template>
-  <section v-if="visible" class="plaza-entry" aria-labelledby="plaza-entry-title">
-    <div class="entry-heading">
+  <section v-if="visible" v-reveal class="plaza-entry" aria-labelledby="plaza-entry-title">
+    <div data-reveal class="entry-heading">
       <h2 id="plaza-entry-title">{{ copy.entryTitle }}</h2>
       <p>{{ copy.entryDesc }}</p>
     </div>
 
-    <RouterLink v-if="status === 'auth'" :to="{ path: '/login', query: { redirect: '/plaza' } }" class="entry-more">
+    <RouterLink v-if="status === 'auth'" data-reveal :to="{ path: '/login', query: { redirect: '/plaza' } }" class="entry-more">
       <span>{{ copy.loginRequired }}</span>
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
     </RouterLink>
 
     <template v-else>
-      <div class="entry-head-row" aria-hidden="true">
+      <div data-reveal class="entry-head-row" aria-hidden="true">
         <span>{{ copy.group }}</span>
         <span>{{ copy.featured }}</span>
         <span class="num">{{ copy.input }}</span>
@@ -67,8 +68,8 @@ function featuredPrice(g: ModelPlazaGroup) {
         <span class="num">{{ copy.rateLabel }}</span>
       </div>
       <ul class="entry-rows">
-        <li v-for="{ group: g, icon, price, discount: off } in preview" :key="g.id">
-          <RouterLink :to="{ path: '/plaza', query: { group: String(g.id) } }" class="entry-row">
+        <li v-for="({ group: g, icon, price, discount: off }, i) in preview" :key="g.id" data-reveal>
+          <RouterLink v-spotlight :to="{ path: '/plaza', query: { group: String(g.id) } }" class="entry-row">
             <span class="group-cell">
               <ModelIcon :model="icon" size="22px" />
               <span class="group-text">
@@ -79,19 +80,19 @@ function featuredPrice(g: ModelPlazaGroup) {
             <template v-if="price">
               <span class="model-cell">{{ price.model }}</span>
               <template v-if="price.kind === 'token'">
-                <span class="num price price-in"><em>{{ copy.input }}</em>{{ price.input }}</span>
-                <span class="num price price-out"><em>{{ copy.output }}</em>{{ price.output }}</span>
+                <span class="num price price-in"><em>{{ copy.input }}</em><CountUp :value="price.input" :delay="0.15 + i * 0.07" /></span>
+                <span class="num price price-out"><em>{{ copy.output }}</em><CountUp :value="price.output" :delay="0.2 + i * 0.07" /></span>
               </template>
-              <span v-else class="num price price-in span-2">{{ price.price }}<em class="unit">{{ price.unit }}</em></span>
+              <span v-else class="num price price-in span-2"><CountUp :value="price.price" :delay="0.15 + i * 0.07" /><em class="unit">{{ price.unit }}</em></span>
             </template>
             <span class="num rate-cell">
-              <b>×{{ formatRate(groupRate(g)) }}</b>
+              <b><CountUp :value="`×${formatRate(groupRate(g))}`" :delay="0.1 + i * 0.07" /></b>
               <small v-if="off">{{ off }}</small>
             </span>
           </RouterLink>
         </li>
       </ul>
-      <div class="entry-foot">
+      <div data-reveal class="entry-foot">
         <span class="unit-note">{{ copy.unitToken }}</span>
         <RouterLink to="/plaza" class="entry-more">
           <span>{{ copy.viewAll }}<small v-if="hiddenCount">{{ copy.moreGroups(hiddenCount) }}</small></span>
@@ -119,7 +120,8 @@ h2 { font-size: clamp(26px, 3vw, 38px); line-height: 1.25; font-weight: 500; }
 .entry-head-row { padding: 0 0 12px; font-size: 12px; color: #8a8a93; border-bottom: 1px solid #dedee1; }
 :global(.dark .plaza-entry .entry-head-row) { color: #7c7f88; border-color: #2b2b30; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
-.entry-row { padding: 18px 0; border-bottom: 1px solid #dedee1; transition: background-color .2s; }
+.entry-row { padding: 18px 0; border-bottom: 1px solid #dedee1; transition: background-color .2s; --spot-color: #e11d48; --spot-strength: 10%; }
+:global(.dark .plaza-entry .entry-row) { --spot-color: #22d3ee; --spot-strength: 15%; }
 :global(.dark .plaza-entry .entry-row) { border-color: #2b2b30; }
 .entry-row:hover { background: color-mix(in srgb, currentColor 3%, transparent); }
 .entry-row:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; border-radius: 4px; }

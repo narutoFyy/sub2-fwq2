@@ -64,25 +64,69 @@ func isValidAffiliateCodeFormat(code string) bool {
 }
 
 type AffiliateSummary struct {
-	UserID               int64     `json:"user_id"`
-	AffCode              string    `json:"aff_code"`
-	AffCodeCustom        bool      `json:"aff_code_custom"`
-	AffRebateRatePercent *float64  `json:"aff_rebate_rate_percent,omitempty"`
-	InviterID            *int64    `json:"inviter_id,omitempty"`
-	AffCount             int       `json:"aff_count"`
-	AffQuota             float64   `json:"aff_quota"`
-	AffFrozenQuota       float64   `json:"aff_frozen_quota"`
-	AffHistoryQuota      float64   `json:"aff_history_quota"`
-	CreatedAt            time.Time `json:"created_at"`
-	UpdatedAt            time.Time `json:"updated_at"`
+	UserID                int64      `json:"user_id"`
+	AffCode               string     `json:"aff_code"`
+	AffCodeCustom         bool       `json:"aff_code_custom"`
+	AffRebateRatePercent  *float64   `json:"aff_rebate_rate_percent,omitempty"`
+	InviterID             *int64     `json:"inviter_id,omitempty"`
+	AffCount              int        `json:"aff_count"`
+	AffQuota              float64    `json:"aff_quota"`
+	AffFrozenQuota        float64    `json:"aff_frozen_quota"`
+	AffHistoryQuota       float64    `json:"aff_history_quota"`
+	RegisterIP            string     `json:"register_ip,omitempty"`
+	RegisterIPSubnet      string     `json:"register_ip_subnet,omitempty"`
+	LastActiveIP          string     `json:"last_active_ip,omitempty"`
+	SameIPWarning         bool       `json:"same_ip_warning"`
+	RiskTags              string     `json:"risk_tags,omitempty"`
+	TrialBonusAmount      float64    `json:"trial_bonus_amount"`
+	TrialBonusStatus      string     `json:"trial_bonus_status"`
+	TrialSkipReason       string     `json:"trial_skip_reason,omitempty"`
+	TrialGrantedAt        *time.Time `json:"trial_granted_at,omitempty"`
+	TrialExpiresAt        *time.Time `json:"trial_expires_at,omitempty"`
+	TrialExpiredAmount    float64    `json:"trial_expired_amount"`
+	TrialRPMLimited       bool       `json:"trial_rpm_limited"`
+	TrialGrantPaused      bool       `json:"trial_grant_paused"`
+	TrialGrantPauseReason string     `json:"trial_grant_pause_reason,omitempty"`
+	TotalPaidAmount       float64    `json:"total_paid_amount"`
+	TotalConsumedAmount   float64    `json:"total_consumed_amount"`
+	Step1RewardStatus     string     `json:"step1_reward_status"`
+	Step1RewardAmount     float64    `json:"step1_reward_amount"`
+	Step2RewardStatus     string     `json:"step2_reward_status"`
+	Step2RewardAmount     float64    `json:"step2_reward_amount"`
+	QualifiedAt           *time.Time `json:"qualified_at,omitempty"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
 }
 
 type AffiliateInvitee struct {
-	UserID      int64      `json:"user_id"`
-	Email       string     `json:"email"`
-	Username    string     `json:"username"`
-	CreatedAt   *time.Time `json:"created_at,omitempty"`
-	TotalRebate float64    `json:"total_rebate"`
+	UserID               int64      `json:"user_id"`
+	Email                string     `json:"email"`
+	Username             string     `json:"username"`
+	CreatedAt            *time.Time `json:"created_at,omitempty"`
+	TotalRebate          float64    `json:"total_rebate"`
+	TotalPaidAmount      float64    `json:"total_paid_amount"`
+	TotalConsumedAmount  float64    `json:"total_consumed_amount"`
+	TrialBonusStatus     string     `json:"trial_bonus_status"`
+	TrialBonusAmount     float64    `json:"trial_bonus_amount"`
+	Step1RewardStatus    string     `json:"step1_reward_status"`
+	Step1RewardAmount    float64    `json:"step1_reward_amount"`
+	Step2RewardStatus    string     `json:"step2_reward_status"`
+	Step2RewardAmount    float64    `json:"step2_reward_amount"`
+	PendingBonusAmount   float64    `json:"pending_bonus_amount"`
+	GrantedBonusAmount   float64    `json:"granted_bonus_amount"`
+	DisplayStatus        string     `json:"display_status"`
+	NeedsConsumeReminder bool       `json:"needs_consume_reminder"`
+	Qualified            bool       `json:"qualified"`
+	QualifiedAt          *time.Time `json:"qualified_at,omitempty"`
+}
+
+type AffiliateLadderTier struct {
+	TierTarget           int     `json:"tier_target"`
+	CumulativeBonus      float64 `json:"cumulative_bonus"`
+	DeltaBonus           float64 `json:"delta_bonus"`
+	RequiresMinTotalPaid float64 `json:"requires_min_total_paid"`
+	AutoGrant            bool    `json:"auto_grant"`
+	Status               string  `json:"status"`
 }
 
 type AffiliateDetail struct {
@@ -96,8 +140,21 @@ type AffiliateDetail struct {
 	// EffectiveRebateRatePercent 是当前用户作为邀请人时实际生效的返利比例：
 	// 优先用户自己的专属比例（aff_rebate_rate_percent），否则回退到全局比例。
 	// 用于在用户的 /affiliate 页面直观展示「分享后能拿到多少」。
-	EffectiveRebateRatePercent float64            `json:"effective_rebate_rate_percent"`
-	Invitees                   []AffiliateInvitee `json:"invitees"`
+	EffectiveRebateRatePercent float64               `json:"effective_rebate_rate_percent"`
+	QualifiedInviteeCount      int                   `json:"qualified_invitee_count"`
+	QualifiedInviteesPaidTotal float64               `json:"qualified_invitees_paid_total"`
+	PendingStepBonusTotal      float64               `json:"pending_step_bonus_total"`
+	GrantedStepBonusTotal      float64               `json:"granted_step_bonus_total"`
+	PendingLadderBonusTotal    float64               `json:"pending_ladder_bonus_total"`
+	GrantedLadderBonusTotal    float64               `json:"granted_ladder_bonus_total"`
+	WithdrawThreshold          float64               `json:"withdraw_threshold"`
+	CanApplyWithdraw           bool                  `json:"can_apply_withdraw"`
+	RemindConsumeCount         int                   `json:"remind_consume_count"`
+	LadderTiers                []AffiliateLadderTier `json:"ladder_tiers"`
+	TrialBonusStatus           string                `json:"trial_bonus_status,omitempty"`
+	TrialBonusAmount           float64               `json:"trial_bonus_amount,omitempty"`
+	TrialExpiresAt             *time.Time            `json:"trial_expires_at,omitempty"`
+	Invitees                   []AffiliateInvitee    `json:"invitees"`
 }
 
 type LaunchCampaignLeaderboardEntry struct {
@@ -178,6 +235,7 @@ type AffiliateAdminEntry struct {
 
 type AffiliateRecordFilter struct {
 	Search   string
+	Status   string
 	Page     int
 	PageSize int
 	StartAt  *time.Time
@@ -187,15 +245,27 @@ type AffiliateRecordFilter struct {
 }
 
 type AffiliateInviteRecord struct {
-	InviterID       int64     `json:"inviter_id"`
-	InviterEmail    string    `json:"inviter_email"`
-	InviterUsername string    `json:"inviter_username"`
-	InviteeID       int64     `json:"invitee_id"`
-	InviteeEmail    string    `json:"invitee_email"`
-	InviteeUsername string    `json:"invitee_username"`
-	AffCode         string    `json:"aff_code"`
-	TotalRebate     float64   `json:"total_rebate"`
-	CreatedAt       time.Time `json:"created_at"`
+	InviterID           int64      `json:"inviter_id"`
+	InviterEmail        string     `json:"inviter_email"`
+	InviterUsername     string     `json:"inviter_username"`
+	InviteeID           int64      `json:"invitee_id"`
+	InviteeEmail        string     `json:"invitee_email"`
+	InviteeUsername     string     `json:"invitee_username"`
+	AffCode             string     `json:"aff_code"`
+	TotalRebate         float64    `json:"total_rebate"`
+	TotalPaidAmount     float64    `json:"total_paid_amount"`
+	TotalConsumedAmount float64    `json:"total_consumed_amount"`
+	TrialBonusStatus    string     `json:"trial_bonus_status"`
+	TrialBonusAmount    float64    `json:"trial_bonus_amount"`
+	TrialSkipReason     string     `json:"trial_skip_reason,omitempty"`
+	Step1RewardStatus   string     `json:"step1_reward_status"`
+	Step2RewardStatus   string     `json:"step2_reward_status"`
+	Qualified           bool       `json:"qualified"`
+	QualifiedAt         *time.Time `json:"qualified_at,omitempty"`
+	RegisterIP          string     `json:"register_ip,omitempty"`
+	SameIPWarning       bool       `json:"same_ip_warning"`
+	RiskTags            string     `json:"risk_tags,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
 }
 
 // AffiliateRebateRecord 是一笔返利入账流水。非订单来源（兑换码、管理员充值）
@@ -252,16 +322,20 @@ type AffiliateWithdrawResult struct {
 }
 
 type AffiliateUserOverview struct {
-	UserID              int64   `json:"user_id"`
-	Email               string  `json:"email"`
-	Username            string  `json:"username"`
-	AffCode             string  `json:"aff_code"`
-	RebateRatePercent   float64 `json:"rebate_rate_percent"`
-	RebateRateCustom    bool    `json:"-"`
-	InvitedCount        int     `json:"invited_count"`
-	RebatedInviteeCount int     `json:"rebated_invitee_count"`
-	AvailableQuota      float64 `json:"available_quota"`
-	HistoryQuota        float64 `json:"history_quota"`
+	UserID                int64   `json:"user_id"`
+	Email                 string  `json:"email"`
+	Username              string  `json:"username"`
+	AffCode               string  `json:"aff_code"`
+	RebateRatePercent     float64 `json:"rebate_rate_percent"`
+	RebateRateCustom      bool    `json:"-"`
+	InvitedCount          int     `json:"invited_count"`
+	RebatedInviteeCount   int     `json:"rebated_invitee_count"`
+	PaidInviteeCount      int     `json:"paid_invitee_count"`
+	QualifiedInviteeCount int     `json:"qualified_invitee_count"`
+	TrialGrantPaused      bool    `json:"trial_grant_paused"`
+	TrialGrantPauseReason string  `json:"trial_grant_pause_reason,omitempty"`
+	AvailableQuota        float64 `json:"available_quota"`
+	HistoryQuota          float64 `json:"history_quota"`
 }
 
 type AffiliateService struct {
@@ -303,6 +377,7 @@ func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64)
 	if s != nil && s.repo != nil {
 		// best-effort: thaw failure is non-fatal
 		_, _ = s.repo.ThawFrozenQuota(ctx, userID)
+		s.tryExpireTrialBonus(ctx, userID)
 	}
 
 	summary, err := s.EnsureUserAffiliate(ctx, userID)
@@ -313,7 +388,7 @@ func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64)
 	if err != nil {
 		return nil, err
 	}
-	return &AffiliateDetail{
+	detail := &AffiliateDetail{
 		UserID:                     summary.UserID,
 		AffCode:                    summary.AffCode,
 		InviterID:                  summary.InviterID,
@@ -322,8 +397,15 @@ func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64)
 		AffFrozenQuota:             summary.AffFrozenQuota,
 		AffHistoryQuota:            summary.AffHistoryQuota,
 		EffectiveRebateRatePercent: s.resolveRebateRatePercent(ctx, summary),
+		WithdrawThreshold:          AffiliateWithdrawThresholdDefault,
+		CanApplyWithdraw:           summary.AffQuota >= AffiliateWithdrawThresholdDefault,
+		TrialBonusStatus:           summary.TrialBonusStatus,
+		TrialBonusAmount:           summary.TrialBonusAmount,
+		TrialExpiresAt:             summary.TrialExpiresAt,
 		Invitees:                   invitees,
-	}, nil
+	}
+	s.enrichAffiliateDetailV2(ctx, summary, detail)
+	return detail, nil
 }
 
 func (s *AffiliateService) AccrueLaunchCampaignCredit(ctx context.Context, inviteeUserID, redeemCodeID int64, amount float64) (bool, error) {
@@ -415,6 +497,7 @@ func (s *AffiliateService) BindInviterByCode(ctx context.Context, userID int64, 
 	if !bound {
 		return ErrAffiliateAlreadyBound
 	}
+	s.postBindInviterV2(ctx, userID, inviterSummary.UserID)
 	return nil
 }
 
@@ -438,6 +521,9 @@ func (s *AffiliateService) AccrueInviteRebateForOrder(ctx context.Context, invit
 	if err != nil {
 		return 0, err
 	}
+	// 沉淀被邀请人累计实付金额、解除未充值体验号 RPM 限速，并评估单人两步奖（3元+5元）与阶梯奖
+	s.postPaidRechargeV2(ctx, inviteeUserID, baseRechargeAmount, sourceOrderID)
+
 	if inviteeSummary.InviterID == nil || *inviteeSummary.InviterID <= 0 {
 		return 0, nil
 	}

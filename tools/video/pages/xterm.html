@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8">
+<link rel="stylesheet" href="vendor/xterm.css">
+<style>
+ html,body{margin:0;width:1920px;height:1080px;background:#0b0c10;overflow:hidden}
+ #win{position:absolute;left:60px;top:40px;width:1800px;height:1000px;background:#14161c;border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.6);border:1px solid #2a2d36;overflow:hidden}
+ #bar{height:56px;background:#1d2028;display:flex;align-items:center;padding:0 22px;position:relative}
+ #bar i{width:16px;height:16px;border-radius:50%;margin-right:10px;display:block}
+ #ttl{position:absolute;left:0;right:0;text-align:center;color:#8b92a3;font:500 19px "PingFang SC",-apple-system,sans-serif}
+ #badge{position:absolute;right:22px;top:11px;font:600 20px "PingFang SC",sans-serif;color:#ff8a5c;display:none;padding:2px 14px;border:1px solid #6b3a28;border-radius:8px;background:rgba(255,138,92,.1)}
+ #t{position:absolute;left:28px;top:70px;right:28px;bottom:14px}
+ .xterm-rows{font-feature-settings:"liga" 0}
+</style>
+<div id="win"><div id="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><div id="ttl">终端</div><div id="badge"></div></div><div id="t"></div></div>
+<script src="vendor/xterm.js"></script><script src="vendor/addon-unicode11.js"></script>
+<script>
+ const COLS=+(new URLSearchParams(location.search).get('c')||110), ROWS=+(new URLSearchParams(location.search).get('r')||28), FS=+(new URLSearchParams(location.search).get('fs')||25);
+ const term=new Terminal({cols:COLS,rows:ROWS,fontSize:FS,lineHeight:1.05,fontFamily:'Menlo,"SF Mono","PingFang SC","Hiragino Sans GB",monospace',cursorBlink:false,allowProposedApi:true,
+   theme:{background:'#14161c',foreground:'#e6e8ee',cursor:'#e6e8ee',selectionBackground:'#3a3f4d'},scrollback:0,convertEol:false});
+ const u=new (Unicode11Addon.Unicode11Addon)(); term.loadAddon(u); term.unicode.activeVersion='11';
+ term.open(document.getElementById('t'));
+ const dec=b=>Uint8Array.from(atob(b),c=>c.charCodeAt(0));
+ window.W=(b64)=>new Promise(r=>term.write(dec(b64),r));
+ window.setBadge=(s)=>{const b=document.getElementById('badge');b.style.display=s?'block':'none';b.textContent=s||''};
+ window.setTitle=(s)=>{document.getElementById('ttl').textContent=s};
+</script>

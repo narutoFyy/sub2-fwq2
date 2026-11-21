@@ -7,6 +7,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -278,9 +279,98 @@ func (h *AffiliateHandler) ListTransferRecords(c *gin.Context) {
 	response.Paginated(c, items, total, filter.Page, filter.PageSize)
 }
 
+// ListRewardGrants returns two-step and ladder reward grant records (including pending_review items).
+// GET /api/v1/admin/affiliates/reward-grants
+func (h *AffiliateHandler) ListRewardGrants(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	filter := parseAffiliateRecordFilter(c, page, pageSize)
+	items, total, err := h.affiliateService.AdminListRewardGrants(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, items, total, filter.Page, filter.PageSize)
+}
+
+type ReviewRewardGrantRequest struct {
+	Note string `json:"note"`
+}
+
+// ApproveRewardGrant approves a pending_review step/ladder reward and credits the inviter's balance.
+// POST /api/v1/admin/affiliates/reward-grants/:id/approve
+func (h *AffiliateHandler) ApproveRewardGrant(c *gin.Context) {
+	grantID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || grantID <= 0 {
+		response.BadRequest(c, "Invalid grant id")
+		return
+	}
+	var req ReviewRewardGrantRequest
+	_ = c.ShouldBindJSON(&req)
+
+	var reviewerID int64
+	if subject, ok := middleware.GetAuthSubjectFromContext(c); ok {
+		reviewerID = subject.UserID
+	}
+	record, err := h.affiliateService.AdminApproveRewardGrant(c.Request.Context(), grantID, reviewerID, req.Note)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+// RejectRewardGrant rejects a pending_review step/ladder reward.
+// POST /api/v1/admin/affiliates/reward-grants/:id/reject
+func (h *AffiliateHandler) RejectRewardGrant(c *gin.Context) {
+	grantID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || grantID <= 0 {
+		response.BadRequest(c, "Invalid grant id")
+		return
+	}
+	var req ReviewRewardGrantRequest
+	_ = c.ShouldBindJSON(&req)
+
+	var reviewerID int64
+	if subject, ok := middleware.GetAuthSubjectFromContext(c); ok {
+		reviewerID = subject.UserID
+	}
+	record, err := h.affiliateService.AdminRejectRewardGrant(c.Request.Context(), grantID, reviewerID, req.Note)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
+}
+
+type SetTrialGrantPausedRequest struct {
+	Paused bool   `json:"paused"`
+	Reason string `json:"reason"`
+}
+
+// SetUserTrialGrantPaused pauses or unpauses an inviter's trial bonus grant (joint risk control review).
+// POST /api/v1/admin/affiliates/users/:user_id/trial-pause
+func (h *AffiliateHandler) SetUserTrialGrantPaused(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user_id")
+		return
+	}
+	var req SetTrialGrantPausedRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := h.affiliateService.AdminSetInviterTrialGrantPaused(c.Request.Context(), userID, req.Paused, req.Reason); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"user_id": userID, "paused": req.Paused})
+}
+
 func parseAffiliateRecordFilter(c *gin.Context, page, pageSize int) service.AffiliateRecordFilter {
 	filter := service.AffiliateRecordFilter{
 		Search:   c.Query("search"),
+		Status:   c.Query("status"),
 		Page:     page,
 		PageSize: pageSize,
 		SortBy:   c.Query("sort_by"),

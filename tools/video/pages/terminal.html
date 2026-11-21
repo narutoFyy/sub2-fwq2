@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>terminal</title>
+<style>
+  :root{--bg:#0b0f14;--win:#12171e;--bar:#1b222b;--fg:#e6edf3;--dim:#8b98a5;--green:#4cd964;--orange:#ff8a5c;--red:#ff6b6b;--redbg:#4a1d22;--greenbg:#173a24;--blue:#6cb6ff}
+  *{box-sizing:border-box}
+  html,body{margin:0;width:1280px;height:720px;overflow:hidden;background:radial-gradient(circle at 30% 20%,#18212c,#07090c 70%);}
+  .win{position:absolute;left:28px;top:28px;right:28px;bottom:28px;background:var(--win);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 1px #2a333d;overflow:hidden;display:flex;flex-direction:column}
+  .bar{height:52px;flex:none;background:var(--bar);display:flex;align-items:center;padding:0 20px;position:relative;border-bottom:1px solid #2a333d}
+  .dot{width:16px;height:16px;border-radius:50%;margin-right:10px}
+  .d1{background:#ff5f57}.d2{background:#febc2e}.d3{background:#28c840}
+  .ttl{position:absolute;left:0;right:0;text-align:center;color:var(--dim);font:500 18px "PingFang SC",-apple-system,sans-serif;pointer-events:none}
+  #badge{position:absolute;right:22px;top:11px;font:600 20px "SF Mono",Menlo,monospace;color:var(--orange);display:none;padding:2px 12px;border:1px solid #6b3a28;border-radius:8px;background:rgba(255,138,92,.1)}
+  #body{flex:1;padding:18px 28px;overflow:hidden;font:400 26px/1.5 "SF Mono",Menlo,"PingFang SC","Hiragino Sans GB",monospace;color:var(--fg);white-space:pre-wrap;overflow-wrap:anywhere}
+  .ln{min-height:1.5em}
+  .p{color:var(--green);font-weight:700}
+  .caret{display:inline-block;width:14px;height:1.1em;background:var(--fg);vertical-align:text-bottom;margin-left:2px;opacity:.85}
+  .dim{color:var(--dim)} .warn{color:#e5c07b} .ok{color:var(--green)}
+  .box{border:2px solid #d77757;border-radius:12px;padding:6px 16px;margin:6px 0 10px}
+  .box .a{color:var(--orange);font-weight:700}
+  .tool{margin-top:8px}.tool b{color:var(--fg)}
+  .tool .b{color:var(--green)}
+  .sub{color:var(--dim);padding-left:2ch}
+  .del{background:var(--redbg);color:#ffb3b3;border-radius:4px;padding-left:2ch}
+  .add{background:var(--greenbg);color:#b6f3c4;border-radius:4px;padding-left:2ch}
+  code{color:var(--blue);background:rgba(108,182,255,.1);padding:0 6px;border-radius:5px}
+  .hl0.on{color:#111;background:#ffd23f;border-radius:8px;padding:0 10px;font-weight:800;box-shadow:0 0 0 4px rgba(255,210,63,.3)}
+</style></head><body>
+<div class="win"><div class="bar"><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i><div class="ttl">终端</div><div id="badge"></div></div><div id="body"></div></div>
+<script>
+const body=document.getElementById('body');let curT=null,caret=null;
+function sc(){body.scrollTop=body.scrollHeight}
+const T={
+  clear(){body.innerHTML='';curT=null;caret=null},
+  badge(t){const b=document.getElementById('badge');b.textContent=t;b.style.display=t?'block':'none'},
+  html(h,cls=''){const d=document.createElement('div');d.className='ln '+cls;d.innerHTML=h;body.appendChild(d);sc();return d},
+  text(t,cls=''){const d=document.createElement('div');d.className='ln '+cls;d.textContent=t;body.appendChild(d);sc();return d},
+  blank(){return T.html('&nbsp;')},
+  cmdStart(prompt='$'){T.caretOff();const d=T.html('<span class="p">'+prompt+'</span> <span class="t"></span><span class="caret"></span>');curT=d.querySelector('.t');caret=d.querySelector('.caret')},
+  cmdAdd(s){curT.textContent+=s;sc()},
+  caretOff(){if(caret){caret.remove();caret=null}},
+  // Claude Code 输入框：逐字输入
+  boxStart(){T.caretOff();const d=T.html('<span class="a">&gt;</span> <span class="t"></span><span class="caret"></span>','box');curT=d.querySelector('.t');caret=d.querySelector('.caret')},
+  hl(){document.querySelectorAll('.hl0').forEach(e=>e.classList.add('on'))}
+};
+</script></body></html>

@@ -13,6 +13,15 @@
             <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
           </button>
           <button
+            v-if="props.type === 'invites'"
+            type="button"
+            class="btn btn-primary ml-auto"
+            data-test="affiliate-reward-review-open"
+            @click="openRewardReviewDialog"
+          >
+            奖励人工审核列表
+          </button>
+          <button
             v-if="props.type === 'transfers'"
             type="button"
             class="btn btn-primary ml-auto"
@@ -66,6 +75,64 @@
           </template>
           <template #cell-aff_code="{ row }">
             <span class="font-mono text-sm text-gray-700 dark:text-gray-300">{{ row.aff_code || '-' }}</span>
+          </template>
+          <template #cell-paid_progress="{ row }">
+            <div class="space-y-0.5 text-xs">
+              <div class="text-gray-900 dark:text-white">实付: ${{ formatAmount(row.total_paid_amount) }}</div>
+              <div class="text-gray-500 dark:text-dark-400">消耗: ${{ formatAmount(row.total_consumed_amount) }}</div>
+            </div>
+          </template>
+          <template #cell-reward_status="{ row }">
+            <div class="flex flex-wrap items-center gap-1 text-xs">
+              <span
+                class="rounded px-1.5 py-0.5 font-medium"
+                :class="row.trial_bonus_status === 'active' || row.trial_bonus_status === 'used'
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400'"
+              >
+                体验金: {{ row.trial_bonus_status || 'none' }}
+              </span>
+              <span
+                class="rounded px-1.5 py-0.5 font-medium"
+                :class="row.step1_reward_status === 'granted'
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  : row.step1_reward_status === 'pending_review' || row.step1_reward_status === 'pending_consume'
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                    : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400'"
+              >
+                3元: {{ row.step1_reward_status || 'none' }}
+              </span>
+              <span
+                class="rounded px-1.5 py-0.5 font-medium"
+                :class="row.step2_reward_status === 'granted'
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  : row.step2_reward_status === 'pending_review' || row.step2_reward_status === 'pending_consume'
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                    : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-400'"
+              >
+                5元: {{ row.step2_reward_status || 'none' }}
+              </span>
+            </div>
+          </template>
+          <template #cell-risk_info="{ row }">
+            <div class="space-y-1 text-xs">
+              <div v-if="row.register_ip" class="font-mono text-gray-600 dark:text-gray-300">{{ row.register_ip }}</div>
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-if="row.same_ip_warning"
+                  class="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                >
+                  同 IP 预警
+                </span>
+                <span
+                  v-if="row.risk_tags"
+                  class="rounded bg-red-50 px-1.5 py-0.5 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                >
+                  {{ row.risk_tags }}
+                </span>
+                <span v-if="!row.register_ip && !row.same_ip_warning && !row.risk_tags" class="text-gray-400">-</span>
+              </div>
+            </div>
           </template>
           <template #cell-order="{ row }">
             <span v-if="row.order_id == null" class="text-sm text-gray-400 dark:text-dark-500">-</span>
@@ -140,6 +207,115 @@
       @success="handleWithdrawSuccess"
     />
 
+    <!-- 阶梯奖与风控奖励人工审核列表弹窗 -->
+    <BaseDialog
+      :show="rewardReviewDialog"
+      title="阶梯奖（50/100人档）与风控奖励人工审核"
+      width="wide"
+      @close="rewardReviewDialog = false"
+    >
+      <div class="space-y-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2 text-sm">
+            <button
+              type="button"
+              class="btn btn-sm"
+              :class="rewardReviewFilterStatus === 'pending_review' ? 'btn-primary' : 'btn-secondary'"
+              @click="changeRewardReviewStatus('pending_review')"
+            >
+              待人工审核
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm"
+              :class="rewardReviewFilterStatus === '' ? 'btn-primary' : 'btn-secondary'"
+              @click="changeRewardReviewStatus('')"
+            >
+              全部记录
+            </button>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="rewardReviewLoading" @click="loadRewardGrants">
+            刷新
+          </button>
+        </div>
+
+        <div v-if="rewardReviewLoading" class="flex justify-center py-8">
+          <div class="h-6 w-6 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
+        </div>
+        <div v-else-if="rewardGrants.length === 0" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-dark-400">
+          暂无匹配的奖励审核记录
+        </div>
+        <div v-else class="overflow-x-auto">
+          <table class="w-full min-w-[680px] text-left text-sm">
+            <thead>
+              <tr class="border-b border-gray-200 text-gray-500 dark:border-dark-700 dark:text-dark-400">
+                <th class="px-3 py-2 font-medium">邀请人</th>
+                <th class="px-3 py-2 font-medium">奖励类型</th>
+                <th class="px-3 py-2 font-medium">金额</th>
+                <th class="px-3 py-2 font-medium">触发原因</th>
+                <th class="px-3 py-2 font-medium">状态</th>
+                <th class="px-3 py-2 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="grant in rewardGrants"
+                :key="grant.id"
+                class="border-b border-gray-100 last:border-b-0 dark:border-dark-800"
+              >
+                <td class="px-3 py-2.5">
+                  <div class="font-medium text-gray-900 dark:text-white">{{ grant.inviter_email || `#${grant.inviter_id}` }}</div>
+                  <div v-if="grant.invitee_email" class="text-xs text-gray-500">关联好友: {{ grant.invitee_email }}</div>
+                </td>
+                <td class="px-3 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-300">
+                  {{ grant.reward_type }}
+                </td>
+                <td class="px-3 py-2.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                  ${{ formatAmount(grant.amount) }}
+                </td>
+                <td class="px-3 py-2.5 text-xs text-gray-600 dark:text-gray-300">
+                  {{ grant.review_reason || '-' }}
+                </td>
+                <td class="px-3 py-2.5 text-xs">
+                  <span
+                    class="rounded px-2 py-0.5 font-medium"
+                    :class="grant.status === 'granted'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : grant.status === 'pending_review'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'"
+                  >
+                    {{ grant.status }}
+                  </span>
+                </td>
+                <td class="px-3 py-2.5 text-right">
+                  <div v-if="grant.status === 'pending_review'" class="inline-flex gap-2">
+                    <button
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                      :disabled="reviewingGrantId === grant.id"
+                      @click="handleApproveGrant(grant.id)"
+                    >
+                      通过并发放
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm text-red-600"
+                      :disabled="reviewingGrantId === grant.id"
+                      @click="handleRejectGrant(grant.id)"
+                    >
+                      拒绝
+                    </button>
+                  </div>
+                  <span v-else class="text-xs text-gray-400">-</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </BaseDialog>
+
     <BaseDialog
       :show="overviewDialog"
       :title="t('admin.affiliates.overview.title')"
@@ -160,8 +336,30 @@
           <OverviewStat :label="t('admin.affiliates.overview.rebateRate')" :value="formatPercent(selectedOverview.rebate_rate_percent)" />
           <OverviewStat :label="t('admin.affiliates.overview.invitedCount')" :value="String(selectedOverview.invited_count)" />
           <OverviewStat :label="t('admin.affiliates.overview.rebatedInviteeCount')" :value="String(selectedOverview.rebated_invitee_count)" />
+          <OverviewStat label="有效邀请人数" :value="String(selectedOverview.qualified_invitee_count ?? 0)" />
+          <OverviewStat label="实付充值人数" :value="String(selectedOverview.paid_invitee_count ?? 0)" />
           <OverviewStat :label="t('admin.affiliates.overview.availableQuota')" :value="'$' + formatAmount(selectedOverview.available_quota)" />
           <OverviewStat :label="t('admin.affiliates.overview.historyQuota')" :value="'$' + formatAmount(selectedOverview.history_quota)" />
+        </div>
+        <div class="flex items-center justify-between rounded-lg border border-gray-200 p-3 text-sm dark:border-dark-700">
+          <div>
+            <div class="font-medium text-gray-900 dark:text-white">
+              新人 1 元体验金连带风控状态：
+              <span :class="selectedOverview.trial_grant_paused ? 'text-red-600' : 'text-emerald-600'">
+                {{ selectedOverview.trial_grant_paused ? '已暂停发放（待复核）' : '正常发放' }}
+              </span>
+            </div>
+            <div v-if="selectedOverview.trial_grant_pause_reason" class="mt-0.5 text-xs text-gray-500">
+              {{ selectedOverview.trial_grant_pause_reason }}
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            @click="toggleInviterTrialPause"
+          >
+            {{ selectedOverview.trial_grant_paused ? '解除体验金熔断' : '暂停体验金发放' }}
+          </button>
         </div>
       </div>
     </BaseDialog>
@@ -181,7 +379,15 @@ import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
 import AffiliateOfflineWithdrawDialog from './AffiliateOfflineWithdrawDialog.vue'
 import type { Column } from '@/components/common/types'
 import { useAppStore } from '@/stores/app'
-import { affiliatesAPI, type AffiliateInviteRecord, type AffiliateRebateRecord, type AffiliateTransferRecord, type AffiliateUserOverview, type ListAffiliateRecordsParams } from '@/api/admin/affiliates'
+import {
+  affiliatesAPI,
+  type AffiliateInviteRecord,
+  type AffiliateRebateRecord,
+  type AffiliateRewardGrantRecord,
+  type AffiliateTransferRecord,
+  type AffiliateUserOverview,
+  type ListAffiliateRecordsParams,
+} from '@/api/admin/affiliates'
 import type { PaginatedResponse } from '@/types'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDisplayDateTime } from '@/utils/format'
@@ -203,6 +409,11 @@ const overviewDialog = ref(false)
 const overviewLoading = ref(false)
 const selectedOverview = ref<AffiliateUserOverview | null>(null)
 const withdrawDialog = ref(false)
+const rewardReviewDialog = ref(false)
+const rewardReviewLoading = ref(false)
+const rewardReviewFilterStatus = ref('pending_review')
+const rewardGrants = ref<AffiliateRewardGrantRecord[]>([])
+const reviewingGrantId = ref<number | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const columns = computed<Column[]>(() => {
@@ -211,6 +422,9 @@ const columns = computed<Column[]>(() => {
       { key: 'inviter', label: t('admin.affiliates.records.inviter'), sortable: true },
       { key: 'invitee', label: t('admin.affiliates.records.invitee'), sortable: true },
       { key: 'aff_code', label: t('admin.affiliates.records.affCode'), sortable: true },
+      { key: 'paid_progress', label: '实付 / 消耗', sortable: false },
+      { key: 'reward_status', label: '体验金 / 两步奖', sortable: false },
+      { key: 'risk_info', label: 'IP / 风控标记', sortable: false },
       { key: 'total_rebate', label: t('admin.affiliates.records.totalRebate'), sortable: true },
       { key: 'created_at', label: t('admin.affiliates.records.invitedAt'), sortable: true },
     ]
@@ -369,6 +583,75 @@ async function openUserOverview(userId: number) {
     appStore.showError(extractI18nErrorMessage(error, t, 'admin.affiliates.errors', t('common.error')))
   } finally {
     overviewLoading.value = false
+  }
+}
+
+async function toggleInviterTrialPause() {
+  if (!selectedOverview.value || !affiliatesAPI.setUserTrialGrantPaused) return
+  const nextPaused = !selectedOverview.value.trial_grant_paused
+  const reason = nextPaused ? '管理员手动暂停新人体验金发放' : ''
+  try {
+    await affiliatesAPI.setUserTrialGrantPaused(selectedOverview.value.user_id, nextPaused, reason)
+    selectedOverview.value.trial_grant_paused = nextPaused
+    selectedOverview.value.trial_grant_pause_reason = reason
+    appStore.showSuccess(nextPaused ? '已暂停该邀请人新人体验金发放' : '已解除该邀请人体验金连带熔断')
+  } catch (error) {
+    appStore.showError(extractI18nErrorMessage(error, t, 'admin.affiliates.errors', t('common.error')))
+  }
+}
+
+function openRewardReviewDialog() {
+  rewardReviewDialog.value = true
+  void loadRewardGrants()
+}
+
+function changeRewardReviewStatus(status: string) {
+  rewardReviewFilterStatus.value = status
+  void loadRewardGrants()
+}
+
+async function loadRewardGrants() {
+  if (!affiliatesAPI.listRewardGrants) return
+  rewardReviewLoading.value = true
+  try {
+    const res = await affiliatesAPI.listRewardGrants({
+      page: 1,
+      page_size: 50,
+      status: rewardReviewFilterStatus.value || undefined,
+    })
+    rewardGrants.value = res.items || []
+  } catch (error) {
+    appStore.showError(extractI18nErrorMessage(error, t, 'admin.affiliates.errors', t('common.error')))
+  } finally {
+    rewardReviewLoading.value = false
+  }
+}
+
+async function handleApproveGrant(grantId: number) {
+  if (!affiliatesAPI.approveRewardGrant) return
+  reviewingGrantId.value = grantId
+  try {
+    await affiliatesAPI.approveRewardGrant(grantId, '管理员审核通过')
+    appStore.showSuccess('奖励已审核通过并发放到账')
+    await Promise.all([loadRewardGrants(), loadRecords()])
+  } catch (error) {
+    appStore.showError(extractI18nErrorMessage(error, t, 'admin.affiliates.errors', t('common.error')))
+  } finally {
+    reviewingGrantId.value = null
+  }
+}
+
+async function handleRejectGrant(grantId: number) {
+  if (!affiliatesAPI.rejectRewardGrant) return
+  reviewingGrantId.value = grantId
+  try {
+    await affiliatesAPI.rejectRewardGrant(grantId, '管理员审核拒绝')
+    appStore.showSuccess('已拒绝该笔奖励发放')
+    await Promise.all([loadRewardGrants(), loadRecords()])
+  } catch (error) {
+    appStore.showError(extractI18nErrorMessage(error, t, 'admin.affiliates.errors', t('common.error')))
+  } finally {
+    reviewingGrantId.value = null
   }
 }
 

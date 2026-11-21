@@ -281,6 +281,8 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 			if err := s.affiliateService.BindInviterByCode(ctx, user.ID, code); err != nil {
 				// 邀请返利码绑定失败不影响注册，只记录日志
 				logger.LegacyPrintf("service.auth", "[Auth] Failed to bind affiliate inviter for user %d: %v", user.ID, err)
+			} else if updatedUser, err := s.userRepo.GetByID(ctx, user.ID); err == nil && updatedUser != nil {
+				user = updatedUser
 			}
 		}
 	}

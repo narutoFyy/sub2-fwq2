@@ -1,0 +1,23 @@
+/* v-spotlight：光标处的柔光。颜色取 --spot-color（默认跟随文字色），强度取 --spot-strength */
+[data-spotlight] {
+  position: relative;
+  isolation: isolate;
+}
+[data-spotlight]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  background: radial-gradient(
+    var(--spot-size, 360px) circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    color-mix(in srgb, var(--spot-color, currentColor) var(--spot-strength, 9%), transparent),
+    transparent 70%
+  );
+}
+[data-spotlight]:hover::before {
+  opacity: 1;
+}

@@ -524,6 +524,7 @@ func (s *PaymentService) finalizePendingRefundSuccess(ctx context.Context, p *Re
 	if !p.deductionHeld && p.DeductionType == payment.DeductionTypeBalance && p.BalanceToDeduct > 0 {
 		s.invalidateRefundBalanceCache(ctx, p.Order.UserID)
 	}
+	s.clawbackAffiliateRewardsOnRefund(ctx, p)
 	return result, nil
 }
 
@@ -773,7 +774,22 @@ func (s *PaymentService) markRefundOk(ctx context.Context, p *RefundPlan) (*Refu
 		return nil, fmt.Errorf("mark refund: %w", err)
 	}
 	s.writeAuditLog(ctx, p.OrderID, "REFUND_SUCCESS", "admin", map[string]any{"refundAmount": p.RefundAmount, "reason": p.Reason, "balanceDeducted": p.BalanceToDeduct, "force": p.Force})
+	s.clawbackAffiliateRewardsOnRefund(ctx, p)
 	return &RefundResult{Success: true, BalanceDeducted: p.BalanceToDeduct, SubDaysDeducted: p.SubDaysToDeduct}, nil
+}
+
+func (s *PaymentService) clawbackAffiliateRewardsOnRefund(ctx context.Context, p *RefundPlan) {
+	if s == nil || s.affiliateService == nil || p == nil || p.Order == nil {
+		return
+	}
+	paidBase := affiliateRebateBaseAmount(p.Order)
+	refundPaid := p.RefundAmount
+	if p.Order.Amount > 0 && paidBase > 0 && paidBase < p.Order.Amount {
+		refundPaid = p.RefundAmount * (paidBase / p.Order.Amount)
+	}
+	if err := s.affiliateService.ClawbackOrderAffiliateRewards(ctx, p.OrderID, p.Order.UserID, refundPaid); err != nil {
+		slog.Warn("affiliate reward clawback on refund failed", "orderID", p.OrderID, "userID", p.Order.UserID, "error", err)
+	}
 }
 
 func (s *PaymentService) markRefundOkTx(ctx context.Context, client *dbent.Client, p *RefundPlan) (*RefundResult, error) {

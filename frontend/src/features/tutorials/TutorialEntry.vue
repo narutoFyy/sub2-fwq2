@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { useTutorialCopy, tutorialClients, clientName } from './content'
 import ModelIcon from '@/components/common/ModelIcon.vue'
+import { vReveal, vSpotlight } from '@/features/motion'
 const copy = useTutorialCopy()
 </script>
 
 <template>
-  <section class="tutorial-entry" aria-labelledby="tutorial-entry-title">
-    <div class="entry-heading">
+  <section v-reveal class="tutorial-entry" aria-labelledby="tutorial-entry-title">
+    <div data-reveal class="entry-heading">
       <h2 id="tutorial-entry-title">{{ copy.entryTitle }}</h2>
       <p>{{ copy.entryDesc }}</p>
     </div>
     <div class="entry-links">
-      <RouterLink v-for="client in tutorialClients" :key="client" :to="`/tutorials/${client}`" class="entry-link">
+      <RouterLink v-for="client in tutorialClients" :key="client" v-spotlight data-reveal :to="`/tutorials/${client}`" class="entry-link">
         <ModelIcon :model="client === 'codex' ? 'gpt-5' : 'claude'" :class="{ 'tutorial-codex-icon': client === 'codex' }" size="32px" />
         <span><strong>{{ clientName(client) }}</strong><small>{{ copy.read }}</small></span>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg>
@@ -28,7 +29,8 @@ h2 { font-size: clamp(26px, 3vw, 38px); line-height: 1.25; font-weight: 500; }
 p, small { color: #63636b; }
 :global(.dark .tutorial-entry :is(p, small)) { color: #a0a4ad; }
 .entry-links { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
-.entry-link { display: flex; align-items: center; gap: 20px; padding: 28px 0; border-bottom: 1px solid #dedee1; }
+.entry-link { display: flex; align-items: center; gap: 20px; padding: 28px 0; border-bottom: 1px solid #dedee1; --spot-color: #e11d48; --spot-strength: 10%; }
+:global(.dark .tutorial-entry .entry-link) { --spot-color: #22d3ee; --spot-strength: 15%; }
 :global(.dark .entry-link) { border-color: #2b2b30; }
 .entry-link span { flex: 1; }
 strong { display: block; font-size: 24px; font-weight: 500; }

@@ -856,6 +856,9 @@ func registerAffiliateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		affiliates.GET("/invites", h.Admin.Affiliate.ListInviteRecords)
 		affiliates.GET("/rebates", h.Admin.Affiliate.ListRebateRecords)
 		affiliates.GET("/transfers", h.Admin.Affiliate.ListTransferRecords)
+		affiliates.GET("/reward-grants", h.Admin.Affiliate.ListRewardGrants)
+		affiliates.POST("/reward-grants/:id/approve", h.Admin.Affiliate.ApproveRewardGrant)
+		affiliates.POST("/reward-grants/:id/reject", h.Admin.Affiliate.RejectRewardGrant)
 
 		users := affiliates.Group("/users")
 		{
@@ -864,6 +867,7 @@ func registerAffiliateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 			users.POST("/batch-rate", h.Admin.Affiliate.BatchSetRate)
 			users.GET("/:user_id/overview", h.Admin.Affiliate.GetUserOverview)
 			users.POST("/:user_id/withdraw", h.Admin.Affiliate.WithdrawQuota)
+			users.POST("/:user_id/trial-pause", h.Admin.Affiliate.SetUserTrialGrantPaused)
 			users.PUT("/:user_id", h.Admin.Affiliate.UpdateUserSettings)
 			users.DELETE("/:user_id", h.Admin.Affiliate.ClearUserSettings)
 		}

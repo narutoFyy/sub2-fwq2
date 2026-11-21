@@ -32,6 +32,10 @@ SELECT ua.user_id,
        (ua.aff_rebate_rate_percent IS NOT NULL) AS has_custom_rate,
        ua.aff_count,
        COALESCE(rebated.rebated_invitee_count, 0),
+       COALESCE(inv_stats.paid_invitee_count, 0),
+       COALESCE(inv_stats.qualified_invitee_count, 0),
+       COALESCE(ua.trial_grant_paused, false),
+       COALESCE(ua.trial_grant_pause_reason, ''),
        (ua.aff_quota + COALESCE(matured.matured_frozen_quota, 0))::double precision,
        ua.aff_history_quota::double precision
 FROM user_affiliates ua
@@ -42,6 +46,14 @@ LEFT JOIN (
     WHERE action = 'accrue' AND source_user_id IS NOT NULL
     GROUP BY user_id
 ) rebated ON rebated.user_id = ua.user_id
+LEFT JOIN (
+    SELECT inviter_id,
+           COUNT(*) FILTER (WHERE total_paid_amount > 0)::integer AS paid_invitee_count,
+           COUNT(*) FILTER (WHERE qualified_at IS NOT NULL)::integer AS qualified_invitee_count
+    FROM user_affiliates
+    WHERE inviter_id IS NOT NULL
+    GROUP BY inviter_id
+) inv_stats ON inv_stats.inviter_id = ua.user_id
 LEFT JOIN (
     SELECT user_id, COALESCE(SUM(amount), 0)::double precision AS matured_frozen_quota
     FROM user_affiliate_ledger
@@ -517,7 +529,16 @@ SELECT ua.user_id,
        COALESCE(u.email, ''),
        COALESCE(u.username, ''),
        ua.created_at,
-       COALESCE(SUM(ual.amount), 0)::double precision AS total_rebate
+       COALESCE(SUM(ual.amount), 0)::double precision AS total_rebate,
+       COALESCE(ua.total_paid_amount, 0)::double precision,
+       COALESCE(ua.total_consumed_amount, 0)::double precision,
+       COALESCE(ua.trial_bonus_status, 'none'),
+       COALESCE(ua.trial_bonus_amount, 0)::double precision,
+       COALESCE(ua.step1_reward_status, 'none'),
+       COALESCE(ua.step1_reward_amount, 0)::double precision,
+       COALESCE(ua.step2_reward_status, 'none'),
+       COALESCE(ua.step2_reward_amount, 0)::double precision,
+       ua.qualified_at
 FROM user_affiliates ua
 LEFT JOIN users u ON u.id = ua.user_id
 LEFT JOIN user_affiliate_ledger ual
@@ -525,7 +546,12 @@ LEFT JOIN user_affiliate_ledger ual
       AND ual.source_user_id = ua.user_id
       AND ual.action = 'accrue'
 WHERE ua.inviter_id = $1
-GROUP BY ua.user_id, u.email, u.username, ua.created_at
+GROUP BY ua.user_id, u.email, u.username, ua.created_at,
+         ua.total_paid_amount, ua.total_consumed_amount,
+         ua.trial_bonus_status, ua.trial_bonus_amount,
+         ua.step1_reward_status, ua.step1_reward_amount,
+         ua.step2_reward_status, ua.step2_reward_amount,
+         ua.qualified_at
 ORDER BY ua.created_at DESC
 LIMIT $2`, inviterID, limit)
 	if err != nil {
@@ -537,10 +563,31 @@ LIMIT $2`, inviterID, limit)
 	for rows.Next() {
 		var item service.AffiliateInvitee
 		var createdAt time.Time
-		if err := rows.Scan(&item.UserID, &item.Email, &item.Username, &createdAt, &item.TotalRebate); err != nil {
+		var qualifiedAt sql.NullTime
+		if err := rows.Scan(
+			&item.UserID,
+			&item.Email,
+			&item.Username,
+			&createdAt,
+			&item.TotalRebate,
+			&item.TotalPaidAmount,
+			&item.TotalConsumedAmount,
+			&item.TrialBonusStatus,
+			&item.TrialBonusAmount,
+			&item.Step1RewardStatus,
+			&item.Step1RewardAmount,
+			&item.Step2RewardStatus,
+			&item.Step2RewardAmount,
+			&qualifiedAt,
+		); err != nil {
 			return nil, err
 		}
 		item.CreatedAt = &createdAt
+		if qualifiedAt.Valid {
+			t := qualifiedAt.Time
+			item.QualifiedAt = &t
+			item.Qualified = true
+		}
 		invitees = append(invitees, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -553,7 +600,7 @@ func (r *affiliateRepository) ListAffiliateInviteRecords(ctx context.Context, fi
 	client := clientFromContext(ctx, r.client)
 	where, args := buildAffiliateRecordWhere(filter, "ua.created_at", []string{
 		"inviter.email", "inviter.username", "invitee.email", "invitee.username",
-		"ua.inviter_id::text", "ua.user_id::text", "inviter_aff.aff_code",
+		"ua.inviter_id::text", "ua.user_id::text", "inviter_aff.aff_code", "ua.register_ip",
 	})
 
 	total, err := queryAffiliateRecordCount(ctx, client, `
@@ -568,11 +615,13 @@ JOIN user_affiliates inviter_aff ON inviter_aff.user_id = ua.inviter_id
 	}
 
 	orderBy := buildAffiliateRecordOrderBy(filter, map[string]string{
-		"inviter":      "inviter.email",
-		"invitee":      "invitee.email",
-		"aff_code":     "inviter_aff.aff_code",
-		"total_rebate": "total_rebate",
-		"created_at":   "ua.created_at",
+		"inviter":               "inviter.email",
+		"invitee":               "invitee.email",
+		"aff_code":              "inviter_aff.aff_code",
+		"total_rebate":          "total_rebate",
+		"total_paid_amount":     "ua.total_paid_amount",
+		"total_consumed_amount": "ua.total_consumed_amount",
+		"created_at":            "ua.created_at",
 	}, "ua.created_at")
 	args = append(args, filter.PageSize, (filter.Page-1)*filter.PageSize)
 	rows, err := client.QueryContext(ctx, `
@@ -584,6 +633,17 @@ SELECT ua.inviter_id,
        COALESCE(invitee.username, ''),
        COALESCE(inviter_aff.aff_code, ''),
        COALESCE(SUM(ual.amount), 0)::double precision AS total_rebate,
+       COALESCE(ua.total_paid_amount, 0)::double precision,
+       COALESCE(ua.total_consumed_amount, 0)::double precision,
+       COALESCE(ua.trial_bonus_status, 'none'),
+       COALESCE(ua.trial_bonus_amount, 0)::double precision,
+       COALESCE(ua.trial_skip_reason, ''),
+       COALESCE(ua.step1_reward_status, 'none'),
+       COALESCE(ua.step2_reward_status, 'none'),
+       ua.qualified_at,
+       COALESCE(ua.register_ip, ''),
+       COALESCE(ua.same_ip_warning, false),
+       COALESCE(ua.risk_tags, ''),
        ua.created_at
 FROM user_affiliates ua
 JOIN users invitee ON invitee.id = ua.user_id
@@ -594,7 +654,9 @@ LEFT JOIN user_affiliate_ledger ual
       AND ual.source_user_id = ua.user_id
       AND ual.action = 'accrue'
 `+where+`
-GROUP BY ua.inviter_id, inviter.email, inviter.username, ua.user_id, invitee.email, invitee.username, inviter_aff.aff_code, ua.created_at
+GROUP BY ua.inviter_id, inviter.email, inviter.username, ua.user_id, invitee.email, invitee.username, inviter_aff.aff_code,
+         ua.total_paid_amount, ua.total_consumed_amount, ua.trial_bonus_status, ua.trial_bonus_amount, ua.trial_skip_reason,
+         ua.step1_reward_status, ua.step2_reward_status, ua.qualified_at, ua.register_ip, ua.same_ip_warning, ua.risk_tags, ua.created_at
 `+orderBy+`
 LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 	if err != nil {
@@ -605,6 +667,7 @@ LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 	items := make([]service.AffiliateInviteRecord, 0)
 	for rows.Next() {
 		var item service.AffiliateInviteRecord
+		var qualifiedAt sql.NullTime
 		if err := rows.Scan(
 			&item.InviterID,
 			&item.InviterEmail,
@@ -614,9 +677,25 @@ LIMIT $`+fmt.Sprint(len(args)-1)+` OFFSET $`+fmt.Sprint(len(args)), args...)
 			&item.InviteeUsername,
 			&item.AffCode,
 			&item.TotalRebate,
+			&item.TotalPaidAmount,
+			&item.TotalConsumedAmount,
+			&item.TrialBonusStatus,
+			&item.TrialBonusAmount,
+			&item.TrialSkipReason,
+			&item.Step1RewardStatus,
+			&item.Step2RewardStatus,
+			&qualifiedAt,
+			&item.RegisterIP,
+			&item.SameIPWarning,
+			&item.RiskTags,
 			&item.CreatedAt,
 		); err != nil {
 			return nil, 0, err
+		}
+		if qualifiedAt.Valid {
+			t := qualifiedAt.Time
+			item.QualifiedAt = &t
+			item.Qualified = true
 		}
 		items = append(items, item)
 	}
@@ -838,6 +917,10 @@ func (r *affiliateRepository) GetAffiliateUserOverview(ctx context.Context, user
 		&hasCustomRate,
 		&overview.InvitedCount,
 		&overview.RebatedInviteeCount,
+		&overview.PaidInviteeCount,
+		&overview.QualifiedInviteeCount,
+		&overview.TrialGrantPaused,
+		&overview.TrialGrantPauseReason,
 		&overview.AvailableQuota,
 		&overview.HistoryQuota,
 	); err != nil {
@@ -1245,8 +1328,7 @@ ON CONFLICT (user_id) DO NOTHING`, userID, code)
 	return queryAffiliateByUserID(ctx, client, userID)
 }
 
-func queryAffiliateByUserID(ctx context.Context, client affiliateQueryExecer, userID int64) (*service.AffiliateSummary, error) {
-	rows, err := client.QueryContext(ctx, `
+const affiliateSummarySelectColumns = `
 SELECT user_id,
        aff_code,
        aff_code_custom,
@@ -1256,24 +1338,38 @@ SELECT user_id,
        aff_quota::double precision,
        aff_frozen_quota::double precision,
        aff_history_quota::double precision,
+       COALESCE(register_ip, ''),
+       COALESCE(register_ip_subnet, ''),
+       COALESCE(last_active_ip, ''),
+       COALESCE(same_ip_warning, false),
+       COALESCE(risk_tags, ''),
+       COALESCE(trial_bonus_amount, 0)::double precision,
+       COALESCE(trial_bonus_status, 'none'),
+       COALESCE(trial_skip_reason, ''),
+       trial_granted_at,
+       trial_expires_at,
+       COALESCE(trial_expired_amount, 0)::double precision,
+       COALESCE(trial_rpm_limited, false),
+       COALESCE(trial_grant_paused, false),
+       COALESCE(trial_grant_pause_reason, ''),
+       COALESCE(total_paid_amount, 0)::double precision,
+       COALESCE(total_consumed_amount, 0)::double precision,
+       COALESCE(step1_reward_status, 'none'),
+       COALESCE(step1_reward_amount, 0)::double precision,
+       COALESCE(step2_reward_status, 'none'),
+       COALESCE(step2_reward_amount, 0)::double precision,
+       qualified_at,
        created_at,
        updated_at
-FROM user_affiliates
-WHERE user_id = $1`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-		return nil, service.ErrAffiliateProfileNotFound
-	}
+FROM user_affiliates`
 
+func scanAffiliateSummaryRow(rows *sql.Rows) (*service.AffiliateSummary, error) {
 	var out service.AffiliateSummary
 	var inviterID sql.NullInt64
 	var rebateRate sql.NullFloat64
+	var trialGrantedAt sql.NullTime
+	var trialExpiresAt sql.NullTime
+	var qualifiedAt sql.NullTime
 	if err := rows.Scan(
 		&out.UserID,
 		&out.AffCode,
@@ -1284,6 +1380,27 @@ WHERE user_id = $1`, userID)
 		&out.AffQuota,
 		&out.AffFrozenQuota,
 		&out.AffHistoryQuota,
+		&out.RegisterIP,
+		&out.RegisterIPSubnet,
+		&out.LastActiveIP,
+		&out.SameIPWarning,
+		&out.RiskTags,
+		&out.TrialBonusAmount,
+		&out.TrialBonusStatus,
+		&out.TrialSkipReason,
+		&trialGrantedAt,
+		&trialExpiresAt,
+		&out.TrialExpiredAmount,
+		&out.TrialRPMLimited,
+		&out.TrialGrantPaused,
+		&out.TrialGrantPauseReason,
+		&out.TotalPaidAmount,
+		&out.TotalConsumedAmount,
+		&out.Step1RewardStatus,
+		&out.Step1RewardAmount,
+		&out.Step2RewardStatus,
+		&out.Step2RewardAmount,
+		&qualifiedAt,
 		&out.CreatedAt,
 		&out.UpdatedAt,
 	); err != nil {
@@ -1295,64 +1412,50 @@ WHERE user_id = $1`, userID)
 	if rebateRate.Valid {
 		v := rebateRate.Float64
 		out.AffRebateRatePercent = &v
+	}
+	if trialGrantedAt.Valid {
+		t := trialGrantedAt.Time
+		out.TrialGrantedAt = &t
+	}
+	if trialExpiresAt.Valid {
+		t := trialExpiresAt.Time
+		out.TrialExpiresAt = &t
+	}
+	if qualifiedAt.Valid {
+		t := qualifiedAt.Time
+		out.QualifiedAt = &t
 	}
 	return &out, nil
 }
 
-func queryAffiliateByCode(ctx context.Context, client affiliateQueryExecer, code string) (*service.AffiliateSummary, error) {
-	rows, err := client.QueryContext(ctx, `
-SELECT user_id,
-       aff_code,
-       aff_code_custom,
-       aff_rebate_rate_percent,
-       inviter_id,
-       aff_count,
-       aff_quota::double precision,
-       aff_frozen_quota::double precision,
-       aff_history_quota::double precision,
-       created_at,
-       updated_at
-FROM user_affiliates
-WHERE aff_code = $1
-LIMIT 1`, strings.ToUpper(strings.TrimSpace(code)))
+func queryAffiliateByUserID(ctx context.Context, client affiliateQueryExecer, userID int64) (*service.AffiliateSummary, error) {
+	rows, err := client.QueryContext(ctx, affiliateSummarySelectColumns+` WHERE user_id = $1`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
 			return nil, err
 		}
 		return nil, service.ErrAffiliateProfileNotFound
 	}
+	return scanAffiliateSummaryRow(rows)
+}
 
-	var out service.AffiliateSummary
-	var inviterID sql.NullInt64
-	var rebateRate sql.NullFloat64
-	if err := rows.Scan(
-		&out.UserID,
-		&out.AffCode,
-		&out.AffCodeCustom,
-		&rebateRate,
-		&inviterID,
-		&out.AffCount,
-		&out.AffQuota,
-		&out.AffFrozenQuota,
-		&out.AffHistoryQuota,
-		&out.CreatedAt,
-		&out.UpdatedAt,
-	); err != nil {
+func queryAffiliateByCode(ctx context.Context, client affiliateQueryExecer, code string) (*service.AffiliateSummary, error) {
+	rows, err := client.QueryContext(ctx, affiliateSummarySelectColumns+` WHERE aff_code = $1 LIMIT 1`, strings.ToUpper(strings.TrimSpace(code)))
+	if err != nil {
 		return nil, err
 	}
-	if inviterID.Valid {
-		out.InviterID = &inviterID.Int64
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, service.ErrAffiliateProfileNotFound
 	}
-	if rebateRate.Valid {
-		v := rebateRate.Float64
-		out.AffRebateRatePercent = &v
-	}
-	return &out, nil
+	return scanAffiliateSummaryRow(rows)
 }
 
 func queryUserBalance(ctx context.Context, client affiliateQueryExecer, userID int64) (float64, error) {
