@@ -64,6 +64,32 @@
         />
       </button>
 
+      <button
+        v-if="showAffiliateEntry"
+        @click="router.push('/affiliate')"
+        data-testid="quick-action-affiliate"
+        class="group flex w-full items-center gap-4 rounded-xl bg-gray-50 p-4 text-left transition-all duration-200 hover:bg-gray-100 dark:bg-dark-800/50 dark:hover:bg-dark-800"
+      >
+        <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-rose-100 transition-transform group-hover:scale-105 dark:bg-cyan-400/15">
+          <Icon name="users" size="lg" class="text-rose-600 dark:text-cyan-300" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('dashboard.inviteFriends') }}</p>
+          <p class="text-xs text-gray-500 dark:text-dark-400">
+            {{
+              affiliateRebateRate
+                ? t('dashboard.inviteFriendsDescWithRate', { rate: affiliateRebateRate })
+                : t('dashboard.inviteFriendsDesc')
+            }}
+          </p>
+        </div>
+        <Icon
+          name="chevronRight"
+          size="md"
+          class="text-gray-400 transition-colors group-hover:text-rose-500 dark:text-dark-500 dark:group-hover:text-cyan-300"
+        />
+      </button>
+
       <!-- 重新打开新手引导：跳过、做完或关掉邀请后，仍可随时再来一遍 -->
       <button v-if="showGuideEntry" @click="guide.start()" data-testid="reopen-guide" class="group flex w-full items-center gap-4 rounded-xl bg-gray-50 p-4 text-left transition-all duration-200 hover:bg-gray-100 dark:bg-dark-800/50 dark:hover:bg-dark-800">
         <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 transition-transform group-hover:scale-105 dark:bg-violet-900/30">
@@ -87,18 +113,36 @@
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { getActivePinia } from 'pinia'
 import Icon from '@/components/icons/Icon.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { tryUseAffiliateSummaryStore } from '@/stores/affiliateSummary'
+import { formatRebateRate } from '@/features/affiliate/helpers'
+import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { useGuideCopy } from '@/features/onboarding/copy'
 import { useGuideStore } from '@/features/onboarding/guideStore'
 const router = useRouter()
 const { t } = useI18n()
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
 const authStore = useAuthStore()
+const appStore = getActivePinia() ? useAppStore() : null
+const affiliateSummaryStore = tryUseAffiliateSummaryStore()
 const guide = useGuideStore()
 const guideCopy = useGuideCopy()
 const showGuideEntry = computed(() => authStore.isAuthenticated && !authStore.isAdmin && !guide.active)
+const showAffiliateEntry = computed(() =>
+  Boolean(
+    authStore.isAuthenticated &&
+      !authStore.isAdmin &&
+      !authStore.isSimpleMode &&
+      resolveFeatureFlag(appStore?.cachedPublicSettings, FeatureFlags.affiliate),
+  ),
+)
+const affiliateRebateRate = computed(() =>
+  formatRebateRate(affiliateSummaryStore?.detail?.effective_rebate_rate_percent),
+)
 
 onMounted(() => {
   void refreshBatchImageAccess()

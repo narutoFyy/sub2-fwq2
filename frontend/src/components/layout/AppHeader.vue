@@ -84,21 +84,37 @@
           >
             {{ balanceFrozenLabel }}
           </span>
-          <div
-            class="pointer-events-none absolute right-0 top-full mt-2 hidden w-56 rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-lg group-hover:block dark:border-dark-700 dark:bg-dark-800"
-          >
-            <div class="flex items-center justify-between">
-              <span class="text-gray-500 dark:text-dark-400">{{ balanceAvailableText }}</span>
-              <span class="font-medium text-gray-900 dark:text-white">{{ formatHeaderMoney(availableBalance) }}</span>
-            </div>
-            <div class="mt-2 flex items-center justify-between">
-              <span class="text-gray-500 dark:text-dark-400">{{ balanceFrozenText }}</span>
-              <span class="font-medium text-amber-700 dark:text-amber-200">{{ formatHeaderMoney(frozenBalance) }}</span>
-            </div>
-            <div class="mt-2 border-t border-gray-100 pt-2 dark:border-dark-700">
+          <div class="absolute right-0 top-full z-40 hidden pt-2 group-hover:block">
+            <div
+              class="w-60 rounded-xl border border-gray-200 bg-white p-3 text-xs shadow-lg dark:border-dark-700 dark:bg-dark-800"
+            >
               <div class="flex items-center justify-between">
-                <span class="text-gray-500 dark:text-dark-400">{{ balanceTotalText }}</span>
-                <span class="font-semibold text-gray-900 dark:text-white">{{ formatHeaderMoney(totalBalance) }}</span>
+                <span class="text-gray-500 dark:text-dark-400">{{ balanceAvailableText }}</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{ formatHeaderMoney(availableBalance) }}</span>
+              </div>
+              <div class="mt-2 flex items-center justify-between">
+                <span class="text-gray-500 dark:text-dark-400">{{ balanceFrozenText }}</span>
+                <span class="font-medium text-amber-700 dark:text-amber-200">{{ formatHeaderMoney(frozenBalance) }}</span>
+              </div>
+              <div class="mt-2 border-t border-gray-100 pt-2 dark:border-dark-700">
+                <div class="flex items-center justify-between">
+                  <span class="text-gray-500 dark:text-dark-400">{{ balanceTotalText }}</span>
+                  <span class="font-semibold text-gray-900 dark:text-white">{{ formatHeaderMoney(totalBalance) }}</span>
+                </div>
+              </div>
+              <div v-if="showAffiliateEntry" class="mt-2 border-t border-gray-100 pt-2 dark:border-dark-700">
+                <router-link
+                  to="/affiliate"
+                  class="flex items-center justify-between rounded-lg px-1.5 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50 dark:text-cyan-300 dark:hover:bg-cyan-400/10"
+                >
+                  <span>
+                    {{
+                      availableAffiliateQuota > 0
+                        ? t('affiliate.headerPopover.available', { amount: formatYuan(availableAffiliateQuota, localeCode) })
+                        : t('affiliate.headerPopover.inviteCta')
+                    }}
+                  </span>
+                </router-link>
               </div>
             </div>
           </div>
@@ -161,6 +177,11 @@
                 <router-link v-if="!authStore.isAdmin" to="/tutorials" @click="closeDropdown" class="dropdown-item">
                   <Icon name="book" size="sm" />
                   {{ t('nav.tutorials') }}
+                </router-link>
+
+                <router-link v-if="showAffiliateEntry" to="/affiliate" @click="closeDropdown" class="dropdown-item">
+                  <Icon name="users" size="sm" />
+                  {{ t('nav.affiliate') }}
                 </router-link>
 
                 <!-- 用户版新手引导（兑换、创建密钥、接入工具）：跳过或关掉后从这里随时重开 -->
@@ -267,21 +288,33 @@ import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMi
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeUrl } from '@/utils/url'
-import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
+import { FeatureFlags, isFeatureFlagEnabled, resolveFeatureFlag } from '@/utils/featureFlags'
 import { resolveRouteMetaKeys } from '@/router/title'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
 import { useGuideCopy } from '@/features/onboarding/copy'
 import { useGuideStore } from '@/features/onboarding/guideStore'
+import { tryUseAffiliateSummaryStore } from '@/stores/affiliateSummary'
+import { formatYuan } from '@/features/affiliate/helpers'
 
 const router = useRouter()
 const route = useRoute()
-const { t } = useI18n()
+const i18n = useI18n()
+const { t } = i18n
+const localeCode = computed(() => {
+  const raw = i18n.locale as unknown
+  if (typeof raw === 'string') return raw
+  if (raw && typeof raw === 'object' && 'value' in raw) {
+    return String((raw as { value?: string }).value || 'zh')
+  }
+  return 'zh'
+})
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
 const guide = useGuideStore()
 const guideCopy = useGuideCopy()
+const affiliateSummaryStore = tryUseAffiliateSummaryStore()
 
 const user = computed(() => authStore.user)
 const dropdownOpen = ref(false)
@@ -304,6 +337,17 @@ const showOnboardingButton = computed(() => {
 
 // 普通用户的新手引导入口（与控制台首页「快捷操作」里的入口一致）
 const showUserGuideEntry = computed(() => !authStore.isAdmin && !appStore.backendModeEnabled && !guide.active)
+
+const showAffiliateEntry = computed(() =>
+  Boolean(
+    authStore.isAuthenticated &&
+      user.value &&
+      !authStore.isAdmin &&
+      !authStore.isSimpleMode &&
+      resolveFeatureFlag(appStore.cachedPublicSettings, FeatureFlags.affiliate),
+  ),
+)
+const availableAffiliateQuota = computed(() => affiliateSummaryStore?.detail?.aff_quota ?? 0)
 
 const displayName = computed(() => {
   if (!user.value) return ''
@@ -388,6 +432,9 @@ function handleClickOutside(event: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  if (showAffiliateEntry.value) {
+    void affiliateSummaryStore?.ensureLoaded()
+  }
 })
 
 onBeforeUnmount(() => {

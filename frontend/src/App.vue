@@ -4,7 +4,7 @@ import { computed, defineAsyncComponent, ref, onMounted, onBeforeUnmount, watch 
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import { resolveRouteDocumentTitle } from '@/router/title'
-import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore } from '@/stores'
+import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore, useAffiliateSummaryStore } from '@/stores'
 import { getSetupStatus } from '@/api/setup'
 import { updateFavicon } from '@/utils/branding'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
@@ -24,6 +24,7 @@ const subscriptionStore = useSubscriptionStore()
 const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
+const affiliateSummaryStore = useAffiliateSummaryStore()
 const guide = useGuideStore()
 // 第一次有公告要弹出时才加载弹窗组件；加载后保持挂载，保证关闭动画完整。
 const popupNeeded = ref(false)
@@ -129,6 +130,7 @@ watch(
       subscriptionStore.clear()
       announcementStore.reset()
       adminComplianceStore.reset()
+      affiliateSummaryStore.reset()
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   },

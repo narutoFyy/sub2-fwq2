@@ -10,6 +10,13 @@
           {{ t('auth.sendCodeDesc') }}
           <span class="font-medium text-gray-700 dark:text-gray-300">{{ email }}</span>
         </p>
+        <p
+          v-if="affCode"
+          data-testid="email-verify-affiliate-hint"
+          class="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 dark:bg-cyan-400/15 dark:text-cyan-200"
+        >
+          {{ t('auth.emailVerifyAffiliateHint') }}
+        </p>
       </div>
 
       <!-- No Data Warning -->

@@ -44,6 +44,26 @@
               <p class="text-xs font-medium text-gray-400 dark:text-gray-500">{{ t('payment.rechargeAccount') }}</p>
               <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">{{ user?.username || '' }}</p>
               <p class="mt-0.5 text-sm font-medium text-green-600 dark:text-green-400">{{ t('payment.currentBalance') }}: {{ user?.balance?.toFixed(2) || '0.00' }}</p>
+              <div
+                v-if="showAffiliatePromo"
+                class="mt-3 border-t border-gray-100 pt-3 dark:border-dark-700"
+              >
+                <router-link
+                  to="/affiliate"
+                  class="flex items-center justify-between gap-2 text-xs font-medium text-rose-600 transition-colors hover:text-rose-500 dark:text-cyan-300 dark:hover:text-cyan-200"
+                >
+                  <span class="truncate">
+                    {{
+                      availableAffiliateQuota > 0
+                        ? t('affiliate.inlinePromo.redeemHasQuota', { amount: formatYuan(availableAffiliateQuota, localeCode) })
+                        : affiliateRebateRate
+                          ? t('affiliate.inlinePromo.redeemDefaultWithRate', { rate: affiliateRebateRate })
+                          : t('affiliate.inlinePromo.redeemDefault')
+                    }}
+                  </span>
+                  <Icon name="chevronRight" size="xs" class="shrink-0" />
+                </router-link>
+              </div>
             </div>
             <div v-if="enabledMethods.length === 0" class="card py-16 text-center">
               <p class="text-gray-500 dark:text-gray-400">{{ t('payment.notAvailable') }}</p>
@@ -288,8 +308,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { usePaymentStore } from '@/stores/payment'
 import { useSubscriptionStore } from '@/stores/subscriptions'
+import { tryUseAffiliateSummaryStore } from '@/stores/affiliateSummary'
 import { useAppStore } from '@/stores'
 import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
+import { formatRebateRate, formatYuan } from '@/features/affiliate/helpers'
 import { paymentAPI } from '@/api/payment'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
@@ -329,9 +351,22 @@ const authStore = useAuthStore()
 const paymentStore = usePaymentStore()
 const subscriptionStore = useSubscriptionStore()
 const appStore = useAppStore()
+const affiliateSummaryStore = tryUseAffiliateSummaryStore()
 
 const user = computed(() => authStore.user)
 const activeSubscriptions = computed(() => subscriptionStore.activeSubscriptions)
+const showAffiliatePromo = computed(() =>
+  Boolean(
+    authStore.user &&
+      !authStore.isAdmin &&
+      !authStore.isSimpleMode &&
+      resolveFeatureFlag(appStore.cachedPublicSettings, FeatureFlags.affiliate),
+  ),
+)
+const availableAffiliateQuota = computed(() => affiliateSummaryStore?.detail?.aff_quota ?? 0)
+const affiliateRebateRate = computed(() =>
+  formatRebateRate(affiliateSummaryStore?.detail?.effective_rebate_rate_percent),
+)
 
 function getDaysRemaining(expiresAt: string): number {
   const diff = new Date(expiresAt).getTime() - Date.now()
@@ -1221,6 +1256,9 @@ onMounted(async () => {
   // Fetch active subscriptions (uses cache, non-blocking); skipped when the subscription feature is off
   if (subscriptionEnabled.value) {
     subscriptionStore.fetchActiveSubscriptions().catch(() => {})
+  }
+  if (showAffiliatePromo.value) {
+    void affiliateSummaryStore?.ensureLoaded()
   }
 })
 </script>

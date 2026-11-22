@@ -539,7 +539,13 @@ export default {
     invalidResetLink: '无效的重置链接',
     invalidResetLinkHint: '此密码重置链接无效或已过期。请重新请求一个新链接。',
     requestNewResetLink: '请求新的重置链接',
-    invalidOrExpiredToken: '密码重置链接无效或已过期。请重新请求一个新链接。'
+    invalidOrExpiredToken: '密码重置链接无效或已过期。请重新请求一个新链接。',
+    affiliatePerkBanner: '好友专属福利：使用 QQ / 163 / Gmail / Outlook / iCloud 等主流邮箱完成注册，立领 1 元体验额度（7 天有效）。',
+    affiliateEmailEligible: '该邮箱符合 1 元体验金自动发放条件',
+    affiliateEmailIneligible: '该邮箱仍可正常注册，但不在 1 元体验金自动发放名单内；如需体验金建议换用 QQ / 163 / Gmail / Outlook / iCloud 邮箱。',
+    affiliateBoundLabel: '已绑定好友邀请码',
+    affiliateEditCode: '修改',
+    emailVerifyAffiliateHint: '完成邮箱验证后自动绑定好友邀请（主流邮箱立领 1 元体验额度）'
   },
 
   // Step-up（敏感操作二次验证）

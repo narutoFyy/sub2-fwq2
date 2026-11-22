@@ -19,6 +19,27 @@
         </div>
       </div>
 
+      <!-- Affiliate Light Entry -->
+      <router-link
+        v-if="showAffiliatePromo"
+        to="/affiliate"
+        class="flex items-center justify-between gap-3 rounded-2xl border border-gray-200/80 bg-white px-4 py-3 text-sm transition-colors hover:border-rose-300/70 hover:bg-rose-50/40 dark:border-white/[0.08] dark:bg-[#141417] dark:hover:border-cyan-400/30 dark:hover:bg-cyan-400/[0.06]"
+      >
+        <div class="flex min-w-0 items-center gap-2.5">
+          <Icon name="users" size="sm" class="shrink-0 text-rose-600 dark:text-cyan-300" />
+          <span class="truncate text-gray-700 dark:text-gray-200">
+            {{
+              availableAffiliateQuota > 0
+                ? t('affiliate.inlinePromo.redeemHasQuota', { amount: formatYuan(availableAffiliateQuota, localeCode) })
+                : affiliateRebateRate
+                  ? t('affiliate.inlinePromo.redeemDefaultWithRate', { rate: affiliateRebateRate })
+                  : t('affiliate.inlinePromo.redeemDefault')
+            }}
+          </span>
+        </div>
+        <Icon name="chevronRight" size="sm" class="shrink-0 text-gray-400 dark:text-dark-400" />
+      </router-link>
+
       <!-- Redeem Form -->
       <div class="card">
         <div class="p-6">
@@ -126,6 +147,23 @@
                     </p>
                   </div>
                 </div>
+              </div>
+            </div>
+            <!-- Post-redeem minimal share strip -->
+            <div
+              v-if="showAffiliatePromo && affiliateCode"
+              class="mt-4 flex flex-col gap-2.5 border-t border-emerald-200/80 pt-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-800/40"
+            >
+              <span class="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+                {{ t('affiliate.inlinePromo.shareAfterSuccess') }}
+              </span>
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" class="btn btn-secondary btn-sm" @click="copyAffiliateShareCopy">
+                  {{ t('affiliate.inlinePromo.copyShareCopy') }}
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" @click="showPosterDialog = true">
+                  {{ t('affiliate.inlinePromo.openPoster') }}
+                </button>
               </div>
             </div>
           </div>
@@ -362,6 +400,13 @@
         </div>
       </div>
     </div>
+
+    <AffiliatePosterDialog
+      v-if="showPosterDialog"
+      :show="showPosterDialog"
+      :aff-code="affiliateCode"
+      @close="showPosterDialog = false"
+    />
   </AppLayout>
 </template>
 
@@ -371,19 +416,66 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useSubscriptionStore } from '@/stores/subscriptions'
+import { tryUseAffiliateSummaryStore } from '@/stores/affiliateSummary'
 import { useGuideStore } from '@/features/onboarding/guideStore'
 import { redeemAPI, authAPI, type RedeemHistoryItem } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
+import AffiliatePosterDialog from '@/features/affiliate/AffiliatePosterDialog.vue'
+import { buildShareCopy, copyTextToClipboard, formatRebateRate, formatYuan, isZhLocale } from '@/features/affiliate/helpers'
+import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { formatDateTime } from '@/utils/format'
 
-const { t } = useI18n()
+const i18n = useI18n()
+const { t } = i18n
+const localeCode = computed(() => {
+  const raw = i18n.locale as unknown
+  if (typeof raw === 'string') return raw
+  if (raw && typeof raw === 'object' && 'value' in raw) {
+    return String((raw as { value?: string }).value || 'zh')
+  }
+  return 'zh'
+})
 const authStore = useAuthStore()
 const appStore = useAppStore()
 const subscriptionStore = useSubscriptionStore()
 const guideStore = useGuideStore()
+const affiliateSummaryStore = tryUseAffiliateSummaryStore()
 
 const user = computed(() => authStore.user)
+const showPosterDialog = ref(false)
+const showAffiliatePromo = computed(() =>
+  Boolean(
+    authStore.user &&
+      !authStore.isAdmin &&
+      !authStore.isSimpleMode &&
+      resolveFeatureFlag(appStore.cachedPublicSettings, FeatureFlags.affiliate),
+  ),
+)
+const availableAffiliateQuota = computed(() => affiliateSummaryStore?.detail?.aff_quota ?? 0)
+const affiliateCode = computed(() => affiliateSummaryStore?.detail?.aff_code ?? '')
+const affiliateRebateRate = computed(() =>
+  formatRebateRate(affiliateSummaryStore?.detail?.effective_rebate_rate_percent),
+)
+
+async function copyAffiliateShareCopy(): Promise<void> {
+  if (!affiliateCode.value) return
+  const translated = t('home.landing.brandName')
+  const brandName =
+    translated && translated !== 'home.landing.brandName'
+      ? translated
+      : isZhLocale(localeCode.value)
+        ? '石头中转站'
+        : 'yf-mail'
+  const ok = await copyTextToClipboard(
+    buildShareCopy(affiliateCode.value, undefined, brandName, localeCode.value),
+  )
+  if (ok) {
+    appStore.showSuccess(t('affiliate.poster.captionCopied'))
+  } else {
+    appStore.showError(t('common.copyFailed'))
+  }
+}
 
 const redeemCode = ref('')
 const submitting = ref(false)
@@ -526,6 +618,9 @@ const handleRedeem = async () => {
 
 onMounted(async () => {
   fetchHistory()
+  if (showAffiliatePromo.value) {
+    void affiliateSummaryStore?.ensureLoaded()
+  }
   try {
     const settings = await authAPI.getPublicSettings()
     contactInfo.value = settings.contact_info || ''

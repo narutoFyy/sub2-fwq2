@@ -13,6 +13,7 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { pickOAuthAffiliateCode, storeAffiliateReferralCode } from '@/utils/oauthAffiliate'
 
 /**
  * Route definitions with lazy loading
@@ -871,6 +872,12 @@ function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: bo
 }
 
 router.beforeEach(async (to, _from, next) => {
+  // 全局静默保存 30 天邀请归因，防止访客先逛首页/教程再注册导致归因丢失
+  const incomingAffCode = pickOAuthAffiliateCode(to.query?.aff, to.query?.aff_code)
+  if (incomingAffCode) {
+    storeAffiliateReferralCode(incomingAffCode)
+  }
+
   // 开始导航加载状态
   navigationLoading.startNavigation()
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { routerKey } from 'vue-router'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -124,6 +125,151 @@ describe('AnnouncementPopup', () => {
 
     expect(dismissPopup).toHaveBeenCalledTimes(1)
     expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('navigates internally and dismisses when clicking an internal link in normal mode', async () => {
+    const store = useAnnouncementStore()
+    store.currentPopup = {
+      ...announcement,
+      content: '邀请好友赚返利：[立即前往](/affiliate)',
+    }
+    const dismissPopup = vi.spyOn(store, 'dismissPopup').mockResolvedValue()
+    const push = vi.fn().mockResolvedValue(undefined)
+
+    const wrapper = mount(AnnouncementPopup, {
+      global: {
+        provide: {
+          [routerKey as symbol]: { push },
+        },
+      },
+    })
+    await wrapper.vm.$nextTick()
+
+    const link = document.body.querySelector<HTMLAnchorElement>('.markdown-body a')
+    expect(link?.getAttribute('href')).toBe('/affiliate')
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link?.dispatchEvent(clickEvent)
+    await wrapper.vm.$nextTick()
+
+    expect(clickEvent.defaultPrevented).toBe(true)
+    expect(push).toHaveBeenCalledWith('/affiliate')
+    expect(dismissPopup).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('navigates without marking read when clicking an internal link in preview mode', async () => {
+    const store = useAnnouncementStore()
+    const dismissPopup = vi.spyOn(store, 'dismissPopup').mockResolvedValue()
+    const push = vi.fn().mockResolvedValue(undefined)
+
+    const wrapper = mount(AnnouncementPopup, {
+      props: {
+        announcement: {
+          ...announcement,
+          content: '[去返利页](/affiliate?from=popup)',
+        },
+        preview: true,
+      },
+      global: {
+        provide: {
+          [routerKey as symbol]: { push },
+        },
+      },
+    })
+    await wrapper.vm.$nextTick()
+
+    const link = document.body.querySelector<HTMLAnchorElement>('.markdown-body a')
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link?.dispatchEvent(clickEvent)
+    await wrapper.vm.$nextTick()
+
+    expect(clickEvent.defaultPrevented).toBe(true)
+    expect(push).toHaveBeenCalledWith('/affiliate?from=popup')
+    expect(dismissPopup).not.toHaveBeenCalled()
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('does not intercept external links inside announcement markdown', async () => {
+    const store = useAnnouncementStore()
+    store.currentPopup = {
+      ...announcement,
+      content: '[外链](https://example.com/docs)',
+    }
+    const dismissPopup = vi.spyOn(store, 'dismissPopup').mockResolvedValue()
+    const push = vi.fn().mockResolvedValue(undefined)
+
+    const wrapper = mount(AnnouncementPopup, {
+      global: {
+        provide: {
+          [routerKey as symbol]: { push },
+        },
+      },
+    })
+    await wrapper.vm.$nextTick()
+
+    const link = document.body.querySelector<HTMLAnchorElement>('.markdown-body a')
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link?.dispatchEvent(clickEvent)
+    await wrapper.vm.$nextTick()
+
+    expect(clickEvent.defaultPrevented).toBe(false)
+    expect(push).not.toHaveBeenCalled()
+    expect(dismissPopup).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('preserves native browser behavior on Ctrl/Cmd modifier clicks on internal links', async () => {
+    const store = useAnnouncementStore()
+    store.currentPopup = {
+      ...announcement,
+      content: '[去返利](/affiliate)',
+    }
+    const dismissPopup = vi.spyOn(store, 'dismissPopup').mockResolvedValue()
+    const push = vi.fn().mockResolvedValue(undefined)
+
+    const wrapper = mount(AnnouncementPopup, {
+      global: {
+        provide: {
+          [routerKey as symbol]: { push },
+        },
+      },
+    })
+    await wrapper.vm.$nextTick()
+
+    const link = document.body.querySelector<HTMLAnchorElement>('.markdown-body a')
+    const ctrlClick = new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true })
+    link?.dispatchEvent(ctrlClick)
+    const metaClick = new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true })
+    link?.dispatchEvent(metaClick)
+    await wrapper.vm.$nextTick()
+
+    expect(ctrlClick.defaultPrevented).toBe(false)
+    expect(metaClick.defaultPrevented).toBe(false)
+    expect(push).not.toHaveBeenCalled()
+    expect(dismissPopup).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('does not swallow internal link clicks when router is unavailable', async () => {
+    const store = useAnnouncementStore()
+    store.currentPopup = {
+      ...announcement,
+      content: '[去返利](/affiliate)',
+    }
+    const dismissPopup = vi.spyOn(store, 'dismissPopup').mockResolvedValue()
+
+    const wrapper = mount(AnnouncementPopup)
+    await wrapper.vm.$nextTick()
+
+    const link = document.body.querySelector<HTMLAnchorElement>('.markdown-body a')
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link?.dispatchEvent(clickEvent)
+    await wrapper.vm.$nextTick()
+
+    expect(clickEvent.defaultPrevented).toBe(false)
+    expect(dismissPopup).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

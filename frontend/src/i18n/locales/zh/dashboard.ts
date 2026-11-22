@@ -56,7 +56,10 @@ export default {
     viewUsage: '查看使用记录',
     checkDetailedLogs: '查看详细的使用日志',
     redeemCode: '兑换码',
-    addBalanceWithCode: '使用兑换码充值'
+    addBalanceWithCode: '使用兑换码充值',
+    inviteFriends: '邀请好友赚余额',
+    inviteFriendsDesc: '好友领 1 元体验，最高赚 8 元 + 永久返现',
+    inviteFriendsDescWithRate: '好友领 1 元体验，最高赚 8 元 + {rate}% 永久返现'
   },
 
   // Groups (shared)
@@ -754,6 +757,13 @@ export default {
     invitees: {
       title: '已邀请用户',
       empty: '暂无邀请记录',
+      filterTruncatedHint: '当前仅筛选最近 1000 条好友记录。',
+      filters: {
+        all: '全部',
+        pendingConsume: '待消费解锁',
+        unpaid: '未充值',
+        qualified: '已达标'
+      },
       columns: {
         email: '邮箱',
         username: '用户名',
@@ -761,12 +771,92 @@ export default {
         joinedAt: '注册时间'
       }
     },
+    hero: {
+      badge: '首期活动进行中 · 30 天内达标均有效'
+    },
+    estimator: {
+      title: '一看就懂 · 收益速算',
+      rateNote: '按当前 {rate}% 返现比例估算',
+      upTo: '最高 {amount}+',
+      card1Title: '邀 1 位充 50 元好友',
+      card1Desc: '两步奖 {stepBonus} 余额 + {rate}% 返利 {rebate}（后续复购持续返现）',
+      card2Title: '邀满 5 位有效好友',
+      card2Desc: '单人两步奖最高 {stepTotal} + 5 人阶梯奖 {ladderBonus} + 5 位好友长期 {rate}% 返现',
+      card3Title: '邀满 20 位有效好友',
+      card3Desc: '单人两步奖最高 {stepTotal} + 阶梯累计 {ladderBonus} + 20 位好友长期 {rate}% 返现'
+    },
     tips: {
       title: '使用说明',
       line1: '将邀请码或邀请链接分享给新用户。',
       line2: '被邀请用户充值后，你可获得 {rate} 的返利额度。',
       line3: '返利额度可随时转入账户余额。',
       line4: '新产生的返利需要经过冻结期后才能提现。'
+    },
+    sidebarBadge: {
+      pendingUnlock: '待解锁',
+      transferable: '可转余额',
+      defaultPromo: '奖 8 元'
+    },
+    headerPopover: {
+      available: '可用返利：{amount} · 去转入 →',
+      inviteCta: '邀请好友最高赚 8 元 →'
+    },
+    inlinePromo: {
+      redeemHasQuota: '你有 {amount} 可用返利，无需买码即可 1:1 转入余额 →',
+      redeemDefault: '想免费攒额度？邀请 1 位好友最高得 8.00 元余额 + 永久返现 →',
+      redeemDefaultWithRate: '想免费攒额度？邀请 1 位好友最高得 8.00 元余额 + {rate}% 永久返现 →',
+      shareAfterSuccess: '用得顺手？顺手推给同事或群友',
+      copyShareCopy: '复制推荐语',
+      openPoster: '生成扫码海报'
+    },
+    banner: {
+      consumeReminderTitle: '您有 {count} 位好友已充值达标，待到账 {amount}',
+      consumeReminderDesc: '提醒好友配置 API Key 或去聊天页试用满 3 元即可立即解锁奖励。',
+      copyRemindCopy: '复制提醒话术',
+      remindCopied: '提醒话术已复制',
+      viewDetails: '查看明细 →',
+      transferableTitle: '当前有 {amount} 可用返利可 1:1 转入余额',
+      transferableDesc: '无门槛实时到账，直接用于调用所有模型。',
+      transferableWithdrawDesc: '已满 {threshold} 元提现门槛，可联系客服申请人工提现，也可直接转余额。',
+      quickTransfer: '一键转余额',
+      trialActiveTitle: '{amount} 好友体验金生效中（剩余 {days} 天）',
+      trialActiveDesc: '体验期限速 3 次/分钟，任意首充立即解除，现在就可以体验模型。',
+      tryInChat: '去聊天试用',
+      setupGuides: '接入教程',
+      ladderSprintTitle: '距离下一个阶梯大奖只差 {remaining} 位有效好友（+{bonus}）',
+      ladderSprintDesc: '累计达 {target} 位有效邀请可解锁本档余额奖励。',
+      ladderSprintPaidNeed: '且有效好友累计实付还差 {paidAmount}。',
+      ladderSprintManualReview: '达标后需人工审核发放。',
+      viewProgress: '查看进度 →',
+      defaultPromoTitle: '邀请好友领 1 元体验，最高赚 8 元额度 + {rate}% 永久返现',
+      defaultPromoTitleNoRate: '邀请好友领 1 元体验，最高赚 8 元额度 + 永久返现',
+      defaultPromoDesc: '复制专属链接或生成扫码分享海报，拉满阶梯另有最高 200 元余额大奖。',
+      generatePoster: '生成海报',
+      moreDetails: '详情 →',
+      bonusArrivedToast: '新到账邀请奖励 {amount}，已计入账户余额'
+    },
+    poster: {
+      title: '专属扫码分享海报',
+      generating: '正在生成高清海报…',
+      retry: '重新生成',
+      previewAlt: '邀请好友扫码分享海报',
+      mobileHint: '手机端可直接长按海报保存或转发给好友',
+      download: '下载 PNG 海报',
+      downloaded: '海报已开始下载',
+      copyImage: '复制图片',
+      imageCopied: '海报图片已复制，可直接粘贴发送',
+      copyImageUnsupported: '当前浏览器不支持直接复制图片，请点击「下载 PNG 海报」或长按图片保存',
+      copyCaption: '复制配图文案',
+      captionCopied: '推荐文案已复制',
+      generateFailed: '海报生成失败，请重试'
+    },
+    shareActions: {
+      copyShareCopy: '复制推荐文案（含链接）',
+      generatePoster: '生成扫码分享海报',
+      qqCopied: 'QQ 群号已复制',
+      copyQqGroup: '复制 QQ 群号',
+      qqGroupLabel: 'QQ 群',
+      copyRemindMini: '复制提醒语'
     }
   },
 

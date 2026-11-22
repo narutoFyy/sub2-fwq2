@@ -9,25 +9,24 @@
           class="w-full max-w-[680px] overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-black/5 dark:bg-dark-800 dark:ring-white/10"
           @click.stop
         >
-          <!-- Header with warm gradient -->
-          <div class="relative overflow-hidden border-b border-amber-100/80 bg-gradient-to-br from-amber-50/80 via-orange-50/50 to-yellow-50/30 px-8 py-6 dark:border-dark-700/50 dark:from-amber-900/20 dark:via-orange-900/10 dark:to-yellow-900/5">
-            <!-- Decorative background -->
-            <div class="absolute right-0 top-0 h-full w-64 bg-gradient-to-l from-orange-100/30 to-transparent dark:from-orange-900/20"></div>
-            <div class="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br from-amber-400/20 to-orange-500/20 blur-3xl"></div>
-            <div class="absolute -left-4 -bottom-4 h-24 w-24 rounded-full bg-gradient-to-tr from-yellow-400/20 to-amber-500/20 blur-2xl"></div>
+          <!-- Header with subtle neutral + glow surface -->
+          <div class="relative overflow-hidden border-b border-gray-100 bg-gray-50/90 px-8 py-6 dark:border-dark-700/60 dark:bg-dark-900/70">
+            <!-- Decorative glow -->
+            <div class="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-rose-400/15 blur-3xl dark:bg-cyan-400/20"></div>
+            <div class="pointer-events-none absolute -left-6 -bottom-8 h-24 w-24 rounded-full bg-teal-400/10 blur-2xl dark:bg-cyan-300/10"></div>
 
             <div class="relative z-10">
               <!-- Icon and badge -->
-              <div class="mb-3 flex items-center gap-2">
-                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/30">
+              <div class="mb-3 flex items-center gap-2.5">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-white shadow-sm dark:bg-white/10 dark:text-cyan-300">
                   <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                   </svg>
                 </div>
-                <span class="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-2.5 py-1 text-xs font-medium text-white shadow-lg shadow-amber-500/30">
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-200/70 dark:bg-cyan-400/15 dark:text-cyan-200 dark:ring-cyan-400/30">
                   <span class="relative flex h-2 w-2">
-                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
-                    <span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
+                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60 dark:bg-cyan-300"></span>
+                    <span class="relative inline-flex h-2 w-2 rounded-full bg-rose-600 dark:bg-cyan-300"></span>
                   </span>
                   {{ t('announcements.unread') }}
                 </span>
@@ -39,7 +38,7 @@
               </h2>
 
               <!-- Time -->
-              <div class="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
+              <div class="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -51,8 +50,8 @@
           <!-- Body -->
           <div class="max-h-[50vh] overflow-y-auto bg-white px-8 py-8 dark:bg-dark-800">
             <div class="relative">
-              <div class="absolute left-0 top-0 bottom-0 w-1 rounded-full bg-gradient-to-b from-amber-500 via-orange-500 to-yellow-500"></div>
-              <div class="pl-6">
+              <div class="absolute left-0 top-0 bottom-0 w-1 rounded-full bg-gradient-to-b from-rose-400/70 via-gray-300/60 to-transparent dark:from-cyan-400/70 dark:via-zinc-600/50 dark:to-transparent"></div>
+              <div class="pl-6" @click="handleContentClick">
                 <div
                   class="markdown-body prose prose-sm max-w-none dark:prose-invert"
                   v-html="renderedContent"
@@ -67,7 +66,7 @@
               <button
                 @click="handleDismiss"
                 data-testid="announcement-popup-dismiss"
-                class="rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-amber-500/30 transition-all hover:shadow-xl hover:scale-105"
+                class="rounded-full bg-gray-900 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <span class="flex items-center gap-2">
                   <svg v-if="preview" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -88,7 +87,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, watch } from 'vue'
+import { routerKey } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -112,6 +112,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const router = inject(routerKey, null)
 const announcementStore = useAnnouncementStore()
 const displayedAnnouncement = computed(() => (
   props.preview ? props.announcement : announcementStore.currentPopup
@@ -128,6 +129,65 @@ const renderedContent = computed(() => {
   const html = marked.parse(content) as string
   return DOMPurify.sanitize(html)
 })
+
+function resolveInternalTargetPath(rawHref: string): string | null {
+  const trimmed = rawHref.trim()
+  if (
+    !trimmed ||
+    trimmed.startsWith('#') ||
+    trimmed.startsWith('mailto:') ||
+    trimmed.startsWith('tel:') ||
+    trimmed.startsWith('javascript:')
+  ) {
+    return null
+  }
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    return trimmed
+  }
+  if (typeof window !== 'undefined' && /^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed)
+      if (parsed.origin === window.location.origin) {
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`
+      }
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function handleContentClick(event: MouseEvent) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    return
+  }
+
+  const target = event.target as HTMLElement | null
+  const anchor = target?.closest('a')
+  if (!anchor) return
+
+  const targetAttr = anchor.getAttribute('target')?.trim().toLowerCase()
+  if (targetAttr && targetAttr !== '_self') return
+
+  if (!router) return
+
+  const href = anchor.getAttribute('href')
+  if (!href) return
+
+  const internalPath = resolveInternalTargetPath(href)
+  if (!internalPath) return
+
+  event.preventDefault()
+  void router.push(internalPath)
+  handleDismiss()
+}
 
 function handleDismiss() {
   if (props.preview) {

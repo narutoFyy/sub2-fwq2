@@ -540,7 +540,13 @@ export default {
     invalidResetLink: 'Invalid Reset Link',
     invalidResetLinkHint: 'This password reset link is invalid or has expired. Please request a new one.',
     requestNewResetLink: 'Request New Reset Link',
-    invalidOrExpiredToken: 'The password reset link is invalid or has expired. Please request a new one.'
+    invalidOrExpiredToken: 'The password reset link is invalid or has expired. Please request a new one.',
+    affiliatePerkBanner: 'Friend invite perk: register with QQ / 163 / Gmail / Outlook / iCloud or other mainstream emails to receive 1.00 CNY trial credit (valid for 7 days).',
+    affiliateEmailEligible: 'This email qualifies for automatic 1.00 CNY trial credit',
+    affiliateEmailIneligible: 'You can still register with this email, but it is not on the automatic 1.00 CNY trial credit list. Switch to QQ / 163 / Gmail / Outlook / iCloud to receive the trial credit.',
+    affiliateBoundLabel: 'Friend invite code bound',
+    affiliateEditCode: 'Edit',
+    emailVerifyAffiliateHint: 'Friend invitation will be linked after email verification (1.00 CNY trial credit for mainstream emails)'
   },
 
   // Step-up (sudo) 2FA prompt

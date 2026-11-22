@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { keysAPI } from '@/api/keys'
 import { useAppStore, useAuthStore, useSubscriptionStore } from '@/stores'
+import { tryUseAffiliateSummaryStore } from '@/stores/affiliateSummary'
+import { formatRebateRate, isTrialBonusActive } from '@/features/affiliate/helpers'
+import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { useTutorialWelcomeStore } from '@/features/tutorials/welcomeStore'
 import { useUiLabels } from '@/features/tutorials/uiLabels'
 import GlowDots from '@/components/visual/GlowDots.vue'
@@ -30,10 +33,19 @@ const { t, locale } = useI18n()
 const auth = useAuthStore()
 const app = useAppStore()
 const subs = useSubscriptionStore()
+const affiliateSummary = tryUseAffiliateSummaryStore()
 const welcome = useTutorialWelcomeStore()
 const guide = useGuideStore()
 const copy = useGuideCopy()
 const uiLabels = useUiLabels()
+
+const affiliateEnabled = computed(() =>
+  resolveFeatureFlag(app.cachedPublicSettings, FeatureFlags.affiliate),
+)
+const isTrialActive = computed(() => isTrialBonusActive(affiliateSummary?.detail ?? null))
+const affiliateRebateRate = computed(() =>
+  formatRebateRate(affiliateSummary?.detail?.effective_rebate_rate_percent),
+)
 
 /** 只在普通用户的控制台页面里出现：管理员、backend 模式、登录前的页面都不触发。 */
 const eligible = computed(
@@ -47,6 +59,16 @@ const eligible = computed(
 )
 
 watch(() => auth.user?.id ?? null, (id) => guide.load(id), { immediate: true })
+
+watch(
+  [eligible, () => guide.active, affiliateEnabled],
+  ([ok, active, enabled]) => {
+    if (ok && active && enabled && !auth.isSimpleMode) {
+      void affiliateSummary?.ensureLoaded()
+    }
+  },
+  { immediate: true },
+)
 
 // 新注册用户（含 OAuth 首登）：复用教程欢迎弹窗的「待提示」标记启动引导。
 watch(
@@ -263,8 +285,8 @@ const view = computed<GuideView | null>(() => {
       return {
         kind: 'modal',
         key: 'welcome',
-        title: c.welcome.title,
-        body: c.welcome.body,
+        title: isTrialActive.value ? c.welcome.trialTitle : c.welcome.title,
+        body: isTrialActive.value ? c.welcome.trialBody : c.welcome.body,
         primary: { label: c.welcome.start, run: advance },
         secondary: { label: c.welcome.skip, run: () => guide.skip() },
         resolvers: []
@@ -498,6 +520,7 @@ const view = computed<GuideView | null>(() => {
         key: 'success',
         title: c.success.title,
         body: c.success.body,
+        hint: affiliateEnabled.value && !auth.isSimpleMode ? c.success.affiliateHint(affiliateRebateRate.value) : undefined,
         primary: {
           label: c.success.usage,
           run: () => {

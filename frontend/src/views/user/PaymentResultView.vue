@@ -95,16 +95,44 @@
           <button class="btn btn-secondary flex-1" @click="router.push('/purchase')">{{ t('payment.result.backToRecharge') }}</button>
           <button class="btn btn-primary flex-1" @click="router.push('/orders')">{{ t('payment.result.viewOrders') }}</button>
         </div>
+
+        <!-- Post-payment minimal affiliate share card -->
+        <div
+          v-if="showAffiliateShare && affiliateCode"
+          class="rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm dark:border-white/[0.08] dark:bg-[#141417]"
+        >
+          <p class="text-xs font-medium text-gray-700 dark:text-gray-200">
+            {{ t('affiliate.inlinePromo.shareAfterSuccess') }}
+          </p>
+          <div class="mt-3 flex gap-2">
+            <button type="button" class="btn btn-secondary btn-sm flex-1" @click="copyShareText">
+              {{ t('affiliate.inlinePromo.copyShareCopy') }}
+            </button>
+            <button type="button" class="btn btn-primary btn-sm flex-1" @click="showPosterDialog = true">
+              {{ t('affiliate.inlinePromo.openPoster') }}
+            </button>
+          </div>
+        </div>
       </template>
     </div>
+
+    <AffiliatePosterDialog
+      v-if="showPosterDialog"
+      :show="showPosterDialog"
+      :aff-code="affiliateCode"
+      @close="showPosterDialog = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { getActivePinia } from 'pinia'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
+import AffiliatePosterDialog from '@/features/affiliate/AffiliatePosterDialog.vue'
+import { buildShareCopy, copyTextToClipboard, isZhLocale } from '@/features/affiliate/helpers'
 import {
   PAYMENT_RECOVERY_STORAGE_KEY,
   clearPaymentRecoverySnapshot,
@@ -112,6 +140,9 @@ import {
 } from '@/components/payment/paymentFlow'
 import { usePaymentStore } from '@/stores/payment'
 import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
+import { tryUseAffiliateSummaryStore } from '@/stores/affiliateSummary'
+import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import { paymentAPI } from '@/api/payment'
 import type { PublicOrderVerifyResult } from '@/api/payment'
 import type { OrderStatus, PaymentOrder } from '@/types/payment'
@@ -124,6 +155,9 @@ const route = useRoute()
 const router = useRouter()
 const paymentStore = usePaymentStore()
 const authStore = useAuthStore()
+const appStore = getActivePinia() ? useAppStore() : null
+const affiliateSummaryStore = tryUseAffiliateSummaryStore()
+const showPosterDialog = ref(false)
 
 type ResolvedOrder = PaymentOrder | PublicOrderVerifyResult
 
@@ -176,6 +210,48 @@ const localeCode = computed(() => {
 const isSuccess = computed(() => {
   return isSuccessStatus(order.value?.status)
 })
+
+const showAffiliateShare = computed(() =>
+  Boolean(
+    isSuccess.value &&
+      authStore.isAuthenticated &&
+      authStore.user &&
+      !authStore.isAdmin &&
+      !authStore.isSimpleMode &&
+      resolveFeatureFlag(appStore?.cachedPublicSettings, FeatureFlags.affiliate),
+  ),
+)
+
+const affiliateCode = computed(() => affiliateSummaryStore?.detail?.aff_code ?? '')
+
+watch(
+  showAffiliateShare,
+  (visible) => {
+    if (visible) {
+      void affiliateSummaryStore?.ensureLoaded()
+    }
+  },
+  { immediate: true },
+)
+
+async function copyShareText(): Promise<void> {
+  if (!affiliateCode.value) return
+  const translated = t('home.landing.brandName')
+  const brandName =
+    translated && translated !== 'home.landing.brandName'
+      ? translated
+      : isZhLocale(localeCode.value)
+        ? '石头中转站'
+        : 'yf-mail'
+  const ok = await copyTextToClipboard(
+    buildShareCopy(affiliateCode.value, undefined, brandName, localeCode.value),
+  )
+  if (ok) {
+    appStore?.showSuccess(t('affiliate.poster.captionCopied'))
+  } else {
+    appStore?.showError(t('common.copyFailed'))
+  }
+}
 
 const isPending = computed(() => {
   return isPendingStatus(order.value?.status)

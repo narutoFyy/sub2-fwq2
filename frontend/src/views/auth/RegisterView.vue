@@ -28,6 +28,16 @@
 
       <!-- Registration Form -->
       <form v-else @submit.prevent="handleRegister" class="space-y-5">
+        <!-- Affiliate Friend Perk Banner -->
+        <div
+          v-if="showAffiliateRegisterPerks"
+          data-testid="affiliate-register-perk-banner"
+          class="flex items-start gap-2.5 rounded-xl border border-rose-200/80 bg-rose-50/70 px-3.5 py-3 text-xs leading-relaxed text-rose-900 dark:border-cyan-400/25 dark:bg-cyan-400/10 dark:text-cyan-100"
+        >
+          <Icon name="gift" size="sm" class="mt-0.5 shrink-0 text-rose-600 dark:text-cyan-300" />
+          <span>{{ t('auth.affiliatePerkBanner') }}</span>
+        </div>
+
         <!-- Email Input -->
         <div>
           <label for="email" class="input-label">
@@ -50,6 +60,20 @@
               :placeholder="t('auth.emailPlaceholder')"
             />
           </div>
+          <p
+            v-if="emailTrialEligibility === 'eligible'"
+            data-testid="affiliate-email-eligible"
+            class="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"
+          >
+            <span>✓ {{ t('auth.affiliateEmailEligible') }}</span>
+          </p>
+          <p
+            v-else-if="emailTrialEligibility === 'ineligible'"
+            data-testid="affiliate-email-ineligible"
+            class="mt-1.5 text-xs leading-relaxed text-amber-700 dark:text-amber-400"
+          >
+            {{ t('auth.affiliateEmailIneligible') }}
+          </p>
         </div>
 
         <!-- Password Input -->
@@ -168,23 +192,46 @@
 
         <!-- Affiliate Invitation Code Input (Optional) -->
         <div v-else-if="affiliateEnabled" data-testid="affiliate-invitation-field">
-          <label for="affiliate_code" class="input-label">
-            {{ t('auth.invitationCodeLabel') }}
-            <span class="ml-1 text-xs font-normal text-gray-400 dark:text-dark-500">({{ t('common.optional') }})</span>
-          </label>
-          <div class="relative">
-            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-              <Icon name="key" size="md" class="text-gray-400 dark:text-dark-500" />
+          <div
+            v-if="isAffiliateFieldCollapsed"
+            data-testid="affiliate-bound-badge"
+            class="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3.5 py-2.5 text-xs dark:border-emerald-700/50 dark:bg-emerald-950/30"
+          >
+            <div class="flex min-w-0 items-center gap-2 text-emerald-800 dark:text-emerald-300">
+              <Icon name="checkCircle" size="sm" class="shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span class="truncate">
+                {{ t('auth.affiliateBoundLabel') }}:
+                <span class="font-mono font-semibold">{{ formData.aff_code }}</span>
+              </span>
             </div>
-            <input
-              id="affiliate_code"
-              v-model="formData.aff_code"
-              type="text"
-              :disabled="registrationActionDisabled"
-              class="input pl-11"
-              :placeholder="t('auth.invitationCodePlaceholder')"
-            />
+            <button
+              type="button"
+              data-testid="affiliate-edit-btn"
+              class="shrink-0 font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-300"
+              @click="editingAffiliateCode = true"
+            >
+              {{ t('auth.affiliateEditCode') }}
+            </button>
           </div>
+          <template v-else>
+            <label for="affiliate_code" class="input-label">
+              {{ t('auth.invitationCodeLabel') }}
+              <span class="ml-1 text-xs font-normal text-gray-400 dark:text-dark-500">({{ t('common.optional') }})</span>
+            </label>
+            <div class="relative">
+              <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                <Icon name="key" size="md" class="text-gray-400 dark:text-dark-500" />
+              </div>
+              <input
+                id="affiliate_code"
+                v-model="formData.aff_code"
+                type="text"
+                :disabled="registrationActionDisabled"
+                class="input pl-11"
+                :placeholder="t('auth.invitationCodePlaceholder')"
+              />
+            </div>
+          </template>
         </div>
 
         <!-- Promo Code Input (Optional) -->
@@ -398,6 +445,7 @@ import {
   loadAffiliateReferralCode,
   resolveAffiliateReferralCode
 } from '@/utils/oauthAffiliate'
+import { hasCompleteEmailDomain, isMainstreamTrialEmail } from '@/features/affiliate/helpers'
 import type { LoginAgreementDocument } from '@/types'
 
 const { t, locale } = useI18n()
@@ -418,6 +466,8 @@ const errorMessage = ref<string>('')
 const showPassword = ref<boolean>(false)
 const showConfirmPassword = ref<boolean>(false)
 const confirmPassword = ref('')
+const affiliateCodePresetFromSource = ref<boolean>(false)
+const editingAffiliateCode = ref<boolean>(false)
 
 // Public settings
 const registrationEnabled = ref<boolean>(true)
@@ -542,6 +592,21 @@ const registrationActionDisabled = computed(
   () => isLoading.value || !settingsLoaded.value || agreementGateActive.value
 )
 
+const showAffiliateRegisterPerks = computed(
+  () => affiliateEnabled.value && !invitationCodeEnabled.value && formData.aff_code.trim().length > 0
+)
+
+const emailTrialEligibility = computed<'none' | 'eligible' | 'ineligible'>(() => {
+  if (!showAffiliateRegisterPerks.value || !hasCompleteEmailDomain(formData.email)) {
+    return 'none'
+  }
+  return isMainstreamTrialEmail(formData.email) ? 'eligible' : 'ineligible'
+})
+
+const isAffiliateFieldCollapsed = computed(
+  () => affiliateCodePresetFromSource.value && !editingAffiliateCode.value && formData.aff_code.trim().length > 0
+)
+
 watch(validationToastMessage, (value, previousValue) => {
   if (value && value !== previousValue) {
     appStore.showError(value)
@@ -552,6 +617,7 @@ function syncAffiliateReferralCode(): string {
   const code = resolveAffiliateReferralCode(route.query.aff, route.query.aff_code)
   if (code) {
     formData.aff_code = code
+    affiliateCodePresetFromSource.value = true
   }
   return code
 }

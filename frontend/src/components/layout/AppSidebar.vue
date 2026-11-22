@@ -143,10 +143,7 @@
               <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
               <span
                 class="sidebar-label"
-                :class="{
-                  'sidebar-label-collapsed': sidebarCollapsed,
-                  'font-semibold !text-red-500 dark:!text-red-400': item.path === '/activities'
-                }"
+                :class="{ 'sidebar-label-collapsed': sidebarCollapsed }"
                 :aria-hidden="sidebarCollapsed ? 'true' : 'false'"
               >
                 <span class="truncate">{{ item.label }}</span>
@@ -166,10 +163,7 @@
               <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
               <span
                 class="sidebar-label"
-                :class="{
-                  'sidebar-label-collapsed': sidebarCollapsed,
-                  'font-semibold !text-red-500 dark:!text-red-400': item.path === '/activities'
-                }"
+                :class="{ 'sidebar-label-collapsed': sidebarCollapsed }"
                 :aria-hidden="sidebarCollapsed ? 'true' : 'false'"
               >{{ item.label }}</span>
             </router-link>
@@ -196,10 +190,7 @@
               <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
               <span
                 class="sidebar-label"
-                :class="{
-                  'sidebar-label-collapsed': sidebarCollapsed,
-                  'font-semibold !text-red-500 dark:!text-red-400': item.path === '/activities'
-                }"
+                :class="{ 'sidebar-label-collapsed': sidebarCollapsed }"
                 :aria-hidden="sidebarCollapsed ? 'true' : 'false'"
               >
                 <span class="truncate">{{ item.label }}</span>
@@ -221,10 +212,19 @@
                 class="sidebar-label"
                 :class="{
                   'sidebar-label-collapsed': sidebarCollapsed,
-                  'font-semibold !text-red-500 dark:!text-red-400': item.path === '/activities'
+                  'sidebar-label-flex flex-1': item.path === '/affiliate' && affiliateBadge && !sidebarCollapsed
                 }"
                 :aria-hidden="sidebarCollapsed ? 'true' : 'false'"
-              >{{ item.label }}</span>
+              >
+                <span class="min-w-0 truncate">{{ item.label }}</span>
+                <span
+                  v-if="item.path === '/affiliate' && affiliateBadge && !sidebarCollapsed"
+                  class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none"
+                  :class="affiliateBadgeClass"
+                >
+                  {{ t(`affiliate.sidebarBadge.${affiliateBadge.key}`) }}
+                </span>
+              </span>
             </router-link>
           </template>
         </div>
@@ -269,6 +269,8 @@ import { sanitizeSvg } from '@/utils/sanitize'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { tryUseAffiliateSummaryStore } from '@/stores/affiliateSummary'
+import { resolveSidebarBadge } from '@/features/affiliate/helpers'
 
 interface NavItem {
   path: string
@@ -316,6 +318,7 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 const onboardingStore = useOnboardingStore()
 const adminSettingsStore = useAdminSettingsStore()
+const affiliateSummaryStore = tryUseAffiliateSummaryStore()
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
@@ -787,6 +790,22 @@ const purchaseNavLabel = computed(() => {
   }
 })
 const flagAffiliate = makeSidebarFlag(FeatureFlags.affiliate)
+const affiliatePromoEligible = computed(
+  () => Boolean(authStore.isAuthenticated && authStore.user && !isAdmin.value && !authStore.isSimpleMode && flagAffiliate()),
+)
+const affiliateBadge = computed(() =>
+  affiliatePromoEligible.value ? resolveSidebarBadge(affiliateSummaryStore?.detail ?? null) : null,
+)
+const affiliateBadgeClass = computed(() => {
+  switch (affiliateBadge.value?.tone) {
+    case 'amber':
+      return 'bg-amber-500/15 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300'
+    case 'emerald':
+      return 'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300'
+    default:
+      return 'bg-rose-500/10 text-rose-700 dark:bg-cyan-400/15 dark:text-cyan-200'
+  }
+})
 const flagRiskControl = makeSidebarFlag(FeatureFlags.riskControl)
 const flagPluginManagement = makeSidebarFlag(FeatureFlags.pluginManagement)
 const flagMCP = makeSidebarFlag(FeatureFlags.mcp)
@@ -817,7 +836,6 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/purchase', label: purchaseNavLabel.value, icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
-    { path: '/activities', label: t('nav.limitedActivities'), icon: GiftIcon, hideInSimpleMode: true },
     { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
     { path: '/profile', label: t('nav.profile'), icon: UserIcon },
     { path: '/settings/mcp', label: t('mcp.title'), icon: MCPIcon, featureFlag: flagMCP },
@@ -1047,6 +1065,9 @@ onMounted(() => {
   void refreshBatchImageAccess()
   if (isAdmin.value) {
     adminSettingsStore.fetch()
+  }
+  if (affiliatePromoEligible.value) {
+    void affiliateSummaryStore?.ensureLoaded()
   }
   // Restore sidebar scroll position after route change re-mounts the component
   if (appStore.sidebarScrollTop > 0 && sidebarNavRef.value) {

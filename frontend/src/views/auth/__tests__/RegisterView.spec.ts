@@ -8,13 +8,15 @@ const {
   showErrorMock,
   pushMock,
   verifyActionMock,
-  appStoreMock
+  appStoreMock,
+  routeState
 } = vi.hoisted(() => ({
   getPublicSettingsMock: vi.fn(),
   registerMock: vi.fn(),
   showErrorMock: vi.fn(),
   pushMock: vi.fn(),
   verifyActionMock: vi.fn(),
+  routeState: { query: {} as Record<string, unknown> },
   appStoreMock: {
     cachedPublicSettings: null as { promo_code_enabled?: boolean } | null,
     showError: (...args: unknown[]) => showErrorMock(...args),
@@ -42,7 +44,7 @@ const publicSettings = {
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: pushMock }),
-  useRoute: () => ({ query: {} })
+  useRoute: () => routeState
 }))
 
 vi.mock('vue-i18n', () => ({
@@ -103,7 +105,9 @@ describe('RegisterView', () => {
     pushMock.mockReset()
     verifyActionMock.mockReset()
     appStoreMock.cachedPublicSettings = null
+    routeState.query = {}
     sessionStorage.removeItem('register_data')
+    localStorage.clear()
     verifyActionMock.mockResolvedValue({ token: 'ticket', randstr: 'randstr' })
     getPublicSettingsMock.mockResolvedValue(publicSettings)
     registerMock.mockResolvedValue({})
@@ -324,5 +328,37 @@ describe('RegisterView', () => {
       expect.objectContaining({ email: 'user@allowed.com' })
     )
     expect(showErrorMock).not.toHaveBeenCalled()
+  })
+
+  it('shows friend perk banner, mainstream email hints, and collapses preset affiliate code until edit is clicked', async () => {
+    routeState.query = { aff: 'FRIEND88' }
+    const wrapper = mountRegister()
+    await flushPromises()
+
+    // Perk banner is visible and code is collapsed into bound badge
+    expect(wrapper.find('[data-testid="affiliate-register-perk-banner"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="affiliate-bound-badge"]').text()).toContain('FRIEND88')
+    expect(wrapper.find('#affiliate_code').exists()).toBe(false)
+
+    // Incomplete email does not prematurely show eligibility hint
+    await wrapper.get('#email').setValue('alice@')
+    expect(wrapper.find('[data-testid="affiliate-email-eligible"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="affiliate-email-ineligible"]').exists()).toBe(false)
+
+    // Mainstream email shows green eligible hint
+    await wrapper.get('#email').setValue('alice@qq.com')
+    expect(wrapper.find('[data-testid="affiliate-email-eligible"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="affiliate-email-ineligible"]').exists()).toBe(false)
+
+    // Non-mainstream email shows amber warning hint
+    await wrapper.get('#email').setValue('alice@custom-corp.io')
+    expect(wrapper.find('[data-testid="affiliate-email-eligible"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="affiliate-email-ineligible"]').exists()).toBe(true)
+
+    // Clicking edit expands the affiliate_code input with common.optional
+    await wrapper.get('[data-testid="affiliate-edit-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="affiliate-bound-badge"]').exists()).toBe(false)
+    expect((wrapper.get('#affiliate_code').element as HTMLInputElement).value).toBe('FRIEND88')
+    expect(wrapper.get('[data-testid="affiliate-invitation-field"]').text()).toContain('common.optional')
   })
 })

@@ -56,7 +56,10 @@ export default {
     viewUsage: 'View Usage',
     checkDetailedLogs: 'Check detailed usage logs',
     redeemCode: 'Redeem Code',
-    addBalanceWithCode: 'Add balance with a code'
+    addBalanceWithCode: 'Add balance with a code',
+    inviteFriends: 'Invite Friends & Earn',
+    inviteFriendsDesc: 'Friends get 1 CNY trial, earn up to 8 CNY + lifetime rebate',
+    inviteFriendsDescWithRate: 'Friends get 1 CNY trial, earn up to 8 CNY + {rate}% lifetime rebate'
   },
 
   // Groups (shared)
@@ -750,6 +753,13 @@ export default {
     invitees: {
       title: 'Invited Users',
       empty: 'No invited users yet',
+      filterTruncatedHint: 'Filtering within the latest 1,000 invitees.',
+      filters: {
+        all: 'All',
+        pendingConsume: 'Pending Unlock',
+        unpaid: 'Unpaid',
+        qualified: 'Qualified'
+      },
       columns: {
         email: 'Email',
         username: 'Username',
@@ -757,12 +767,92 @@ export default {
         joinedAt: 'Joined At'
       }
     },
+    hero: {
+      badge: 'Campaign Active · Qualify within 30 days'
+    },
+    estimator: {
+      title: 'Quick Earnings Estimator',
+      rateNote: 'Estimated at your current {rate}% rebate rate',
+      upTo: 'Up to {amount}+',
+      card1Title: 'Invite 1 friend (50 CNY top-up)',
+      card1Desc: '{stepBonus} milestone bonus + {rate}% rebate ({rebate}), plus ongoing rebates on future top-ups',
+      card2Title: '5 qualified friends',
+      card2Desc: 'Up to {stepTotal} step bonuses + {ladderBonus} ladder bonus + ongoing {rate}% rebate',
+      card3Title: '20 qualified friends',
+      card3Desc: 'Up to {stepTotal} step bonuses + {ladderBonus} cumulative ladder bonus + ongoing {rate}% rebate'
+    },
     tips: {
       title: 'How It Works',
       line1: 'Share your affiliate code or invite link with new users.',
       line2: 'When invitees recharge, you receive {rate} of the recharge as rebate quota.',
       line3: 'Transfer rebate quota to balance at any time.',
       line4: 'Newly earned rebates may have a waiting period before they can be transferred.'
+    },
+    sidebarBadge: {
+      pendingUnlock: 'Unlock',
+      transferable: 'Claim',
+      defaultPromo: 'Earn 8'
+    },
+    headerPopover: {
+      available: 'Rebate available: {amount} · Transfer →',
+      inviteCta: 'Invite friends & earn up to 8 CNY →'
+    },
+    inlinePromo: {
+      redeemHasQuota: 'You have {amount} rebate ready — transfer 1:1 to balance without buying a code →',
+      redeemDefault: 'Want free credit? Invite 1 friend to earn up to 8.00 CNY + lifetime rebate →',
+      redeemDefaultWithRate: 'Want free credit? Invite 1 friend to earn up to 8.00 CNY + {rate}% lifetime rebate →',
+      shareAfterSuccess: 'Enjoying it? Share with teammates or friends',
+      copyShareCopy: 'Copy Share Text',
+      openPoster: 'QR Poster'
+    },
+    banner: {
+      consumeReminderTitle: '{count} invited friends recharged — {amount} pending unlock',
+      consumeReminderDesc: 'Remind them to configure an API key or spend 3.00 CNY in Chat to unlock your bonus.',
+      copyRemindCopy: 'Copy Reminder',
+      remindCopied: 'Reminder message copied',
+      viewDetails: 'Details →',
+      transferableTitle: '{amount} rebate quota ready to transfer 1:1 to balance',
+      transferableDesc: 'No minimum threshold — credit arrives instantly for all models.',
+      transferableWithdrawDesc: 'Reached the {threshold} CNY withdrawal threshold — contact support to withdraw or transfer to balance.',
+      quickTransfer: 'Transfer Now',
+      trialActiveTitle: '{amount} friend trial credit active ({days}d left)',
+      trialActiveDesc: 'Trial rate limit is 3 req/min and lifts immediately after any first top-up.',
+      tryInChat: 'Try in Chat',
+      setupGuides: 'Setup Guides',
+      ladderSprintTitle: 'Only {remaining} more qualified friend(s) to unlock +{bonus}',
+      ladderSprintDesc: 'Reach {target} qualified invitees for this ladder milestone.',
+      ladderSprintPaidNeed: 'Qualified invitees also need {paidAmount} more in total payments.',
+      ladderSprintManualReview: 'Manual review required before payout.',
+      viewProgress: 'View Progress →',
+      defaultPromoTitle: 'Friends get 1 CNY trial — earn up to 8 CNY + {rate}% lifetime rebate',
+      defaultPromoTitleNoRate: 'Friends get 1 CNY trial — earn up to 8 CNY + lifetime rebate',
+      defaultPromoDesc: 'Copy your invite link or share a QR poster. Unlock up to 200 CNY in ladder bonuses.',
+      generatePoster: 'QR Poster',
+      moreDetails: 'Details →',
+      bonusArrivedToast: 'New affiliate bonus {amount} credited to your balance'
+    },
+    poster: {
+      title: 'Shareable QR Invite Poster',
+      generating: 'Generating high-res poster…',
+      retry: 'Retry',
+      previewAlt: 'Affiliate QR invite poster preview',
+      mobileHint: 'On mobile, long-press the poster to save or share directly',
+      download: 'Download PNG',
+      downloaded: 'Poster download started',
+      copyImage: 'Copy Image',
+      imageCopied: 'Poster image copied to clipboard',
+      copyImageUnsupported: 'Direct image copy is not supported in this browser — download the PNG or long-press to save',
+      copyCaption: 'Copy Caption',
+      captionCopied: 'Share caption copied',
+      generateFailed: 'Failed to generate poster. Please try again.'
+    },
+    shareActions: {
+      copyShareCopy: 'Copy Share Caption (with link)',
+      generatePoster: 'Generate QR Poster',
+      qqCopied: 'QQ group number copied',
+      copyQqGroup: 'Copy QQ group',
+      qqGroupLabel: 'QQ Group',
+      copyRemindMini: 'Copy Reminder'
     }
   },
 

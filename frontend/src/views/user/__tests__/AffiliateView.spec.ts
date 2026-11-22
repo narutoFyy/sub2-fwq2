@@ -10,28 +10,41 @@ const PaginationStub = {
   template: '<div />',
 }
 
-const { copyToClipboard, getAffiliateDetail } = vi.hoisted(() => ({
-  copyToClipboard: vi.fn(),
-  getAffiliateDetail: vi.fn(),
-}))
+const { copyToClipboard, getAffiliateDetail, transferAffiliateQuota, syncFromDetail, authState, showError, showSuccess } =
+  vi.hoisted(() => ({
+    copyToClipboard: vi.fn(),
+    getAffiliateDetail: vi.fn(),
+    transferAffiliateQuota: vi.fn(),
+    syncFromDetail: vi.fn(() => true),
+    authState: {
+      user: { id: 1 } as { id: number } | null,
+      refreshUser: vi.fn().mockResolvedValue(undefined),
+    },
+    showError: vi.fn(),
+    showSuccess: vi.fn(),
+  }))
 
 vi.mock('@/api/user', () => ({
   default: {
     getAffiliateDetail,
-    transferAffiliateQuota: vi.fn(),
+    transferAffiliateQuota,
   },
 }))
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
-    showSuccess: vi.fn(),
+    showError,
+    showSuccess,
   }),
 }))
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({
-    refreshUser: vi.fn(),
+  useAuthStore: () => authState,
+}))
+
+vi.mock('@/stores/affiliateSummary', () => ({
+  tryUseAffiliateSummaryStore: () => ({
+    syncFromDetail,
   }),
 }))
 
@@ -54,6 +67,7 @@ describe('AffiliateView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    authState.user = { id: 1 }
     copyToClipboard.mockResolvedValue(true)
     getAffiliateDetail.mockResolvedValue({
       user_id: 1,
@@ -207,5 +221,305 @@ describe('AffiliateView', () => {
     pager.vm.$emit('update:pageSize', 50)
     await flushPromises()
     expect(getAffiliateDetail).toHaveBeenLastCalledWith({ page: 1, page_size: 50 })
+  })
+
+  it('fetches all pages for cross-page filtering and resets pagination to filtered total', async () => {
+    getAffiliateDetail.mockImplementation(({ page, page_size }) => {
+      if (page_size === 20) {
+        return Promise.resolve({
+          user_id: 1,
+          aff_code: 'MULTI',
+          aff_count: 120,
+          aff_quota: 0,
+          aff_frozen_quota: 0,
+          aff_history_quota: 0,
+          effective_rebate_rate_percent: 5,
+          invitees_total: 120,
+          invitees_page: page,
+          invitees_page_size: page_size,
+          invitees: [
+            { user_id: 1, email: 'page1-unpaid@qq.com', username: 'u1', total_rebate: 0, total_paid_amount: 0, needs_consume_reminder: false },
+          ],
+        })
+      }
+      if (page === 1) {
+        return Promise.resolve({
+          user_id: 1,
+          aff_code: 'MULTI',
+          aff_count: 120,
+          aff_quota: 0,
+          aff_frozen_quota: 0,
+          aff_history_quota: 0,
+          effective_rebate_rate_percent: 5,
+          invitees_total: 120,
+          invitees_page: 1,
+          invitees_page_size: 100,
+          invitees: Array.from({ length: 100 }, (_, idx) => ({
+            user_id: idx + 1,
+            email: `u${idx + 1}@qq.com`,
+            username: `u${idx + 1}`,
+            total_rebate: 0,
+            total_paid_amount: 0,
+            needs_consume_reminder: false,
+          })),
+        })
+      }
+      return Promise.resolve({
+        user_id: 1,
+        aff_code: 'MULTI',
+        aff_count: 120,
+        aff_quota: 0,
+        aff_frozen_quota: 0,
+        aff_history_quota: 0,
+        effective_rebate_rate_percent: 5,
+        invitees_total: 120,
+        invitees_page: 2,
+        invitees_page_size: 100,
+        invitees: [
+          {
+            user_id: 105,
+            email: 'page2-pending@qq.com',
+            username: 'pendingFriend',
+            total_rebate: 0.5,
+            total_paid_amount: 10,
+            total_consumed_amount: 1,
+            display_status: 'pending_consume_3',
+            needs_consume_reminder: true,
+          },
+        ],
+      })
+    })
+
+    const wrapper = mount(AffiliateView, {
+      global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, Icon: true, Pagination: PaginationStub } },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="affiliate-filter-pending_consume"]').trigger('click')
+    await flushPromises()
+
+    expect(getAffiliateDetail).toHaveBeenCalledWith({ page: 1, page_size: 100 })
+    expect(getAffiliateDetail).toHaveBeenCalledWith({ page: 2, page_size: 100 })
+    expect(wrapper.get('[data-testid="affiliate-invitees"]').text()).toContain('page2-pending@qq.com')
+    const pager = wrapper.findComponent(PaginationStub)
+    expect(pager.props()).toMatchObject({ total: 1, page: 1 })
+  })
+
+  it('does not pollute affiliateSummary store when unmounted or switched to another user before response resolves', async () => {
+    let resolvePending!: (val: unknown) => void
+    getAffiliateDetail.mockImplementationOnce(
+      () => new Promise((resolve) => { resolvePending = resolve }),
+    )
+
+    const wrapper = mount(AffiliateView, {
+      global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, Icon: true } },
+    })
+    wrapper.unmount()
+
+    resolvePending({
+      user_id: 1,
+      aff_code: 'STALE',
+      aff_count: 0,
+      aff_quota: 99,
+      aff_frozen_quota: 0,
+      aff_history_quota: 99,
+      effective_rebate_rate_percent: 5,
+      invitees: [],
+    })
+    await flushPromises()
+    expect(syncFromDetail).not.toHaveBeenCalled()
+
+    // Now test user switch while mounted
+    let resolveSwitch!: (val: unknown) => void
+    getAffiliateDetail.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveSwitch = resolve }),
+    )
+    const wrapper2 = mount(AffiliateView, {
+      global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, Icon: true } },
+    })
+    authState.user = { id: 2 }
+    resolveSwitch({
+      user_id: 1,
+      aff_code: 'OLD-USER',
+      aff_count: 0,
+      aff_quota: 50,
+      aff_frozen_quota: 0,
+      aff_history_quota: 50,
+      effective_rebate_rate_percent: 5,
+      invitees: [],
+    })
+    await flushPromises()
+    expect(syncFromDetail).not.toHaveBeenCalled()
+    wrapper2.unmount()
+  })
+
+  it('keeps server page and pageSize aligned when changing page size inside a filter and switching back to all', async () => {
+    getAffiliateDetail.mockImplementation(({ page, page_size }) => {
+      if (page_size === 20) {
+        return Promise.resolve({
+          user_id: 1,
+          aff_code: 'DECPL',
+          aff_count: 120,
+          aff_quota: 0,
+          aff_frozen_quota: 0,
+          aff_history_quota: 0,
+          effective_rebate_rate_percent: 5,
+          invitees_total: 120,
+          invitees_page: page,
+          invitees_page_size: 20,
+          invitees: [
+            { user_id: page * 1000 + 1, email: `server-p${page}@qq.com`, username: `p${page}`, total_rebate: 0, total_paid_amount: 0 },
+          ],
+        })
+      }
+      return Promise.resolve({
+        user_id: 1,
+        aff_code: 'DECPL',
+        aff_count: 120,
+        aff_quota: 0,
+        aff_frozen_quota: 0,
+        aff_history_quota: 0,
+        effective_rebate_rate_percent: 5,
+        invitees_total: 120,
+        invitees_page: page,
+        invitees_page_size: 100,
+        invitees:
+          page === 1
+            ? Array.from({ length: 100 }, (_, i) => ({
+                user_id: i + 1,
+                email: `u${i + 1}@qq.com`,
+                username: `u${i + 1}`,
+                total_rebate: 0,
+                total_paid_amount: 0,
+              }))
+            : Array.from({ length: 20 }, (_, i) => ({
+                user_id: 101 + i,
+                email: `u${101 + i}@qq.com`,
+                username: `u${101 + i}`,
+                total_rebate: 0,
+                total_paid_amount: 0,
+              })),
+      })
+    })
+
+    const wrapper = mount(AffiliateView, {
+      global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, Icon: true, Pagination: PaginationStub } },
+    })
+    await flushPromises()
+
+    const pager = wrapper.findComponent(PaginationStub)
+    // Navigate to server page 3 (pageSize 20)
+    pager.vm.$emit('update:page', 3)
+    await flushPromises()
+    expect(pager.props()).toMatchObject({ total: 120, page: 3, pageSize: 20 })
+    expect(wrapper.get('[data-testid="affiliate-invitees"]').text()).toContain('server-p3@qq.com')
+
+    // Switch to 'unpaid' filter and change filter pageSize to 100
+    await wrapper.get('[data-testid="affiliate-filter-unpaid"]').trigger('click')
+    await flushPromises()
+    const filteredPager = wrapper.findComponent(PaginationStub)
+    filteredPager.vm.$emit('update:pageSize', 100)
+    await flushPromises()
+    expect(wrapper.findComponent(PaginationStub).props()).toMatchObject({ total: 120, page: 1, pageSize: 100 })
+
+    // Switch back to 'all': server page 3 and pageSize 20 must remain intact
+    await wrapper.get('[data-testid="affiliate-filter-all"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(PaginationStub).props()).toMatchObject({ total: 120, page: 3, pageSize: 20 })
+    expect(wrapper.get('[data-testid="affiliate-invitees"]').text()).toContain('server-p3@qq.com')
+  })
+
+  it('refreshes the full cross-page filter cache after transferQuota while filtered', async () => {
+    let quota = 30
+    transferAffiliateQuota.mockImplementation(async () => {
+      quota = 0
+      return { transferred_quota: 30, balance: 40 }
+    })
+    getAffiliateDetail.mockImplementation(({ page, page_size }) => {
+      if (page_size === 20) {
+        return Promise.resolve({
+          user_id: 1,
+          aff_code: 'FILT-XFER',
+          aff_count: 120,
+          aff_quota: quota,
+          aff_frozen_quota: 0,
+          aff_history_quota: 30,
+          effective_rebate_rate_percent: 5,
+          invitees_total: 120,
+          invitees_page: page,
+          invitees_page_size: 20,
+          invitees: [
+            { user_id: 1, email: 'page1-only@qq.com', username: 'u1', total_rebate: 0, total_paid_amount: 0, needs_consume_reminder: false },
+          ],
+        })
+      }
+      if (page === 1) {
+        return Promise.resolve({
+          user_id: 1,
+          aff_code: 'FILT-XFER',
+          aff_count: 120,
+          aff_quota: quota,
+          aff_frozen_quota: 0,
+          aff_history_quota: 30,
+          effective_rebate_rate_percent: 5,
+          invitees_total: 120,
+          invitees_page: 1,
+          invitees_page_size: 100,
+          invitees: Array.from({ length: 100 }, (_, i) => ({
+            user_id: i + 1,
+            email: `p1-${i + 1}@qq.com`,
+            username: `u${i + 1}`,
+            total_rebate: 0,
+            total_paid_amount: 0,
+            needs_consume_reminder: false,
+          })),
+        })
+      }
+      return Promise.resolve({
+        user_id: 1,
+        aff_code: 'FILT-XFER',
+        aff_count: 120,
+        aff_quota: quota,
+        aff_frozen_quota: 0,
+        aff_history_quota: 30,
+        effective_rebate_rate_percent: 5,
+        invitees_total: 120,
+        invitees_page: 2,
+        invitees_page_size: 100,
+        invitees: [
+          {
+            user_id: 110,
+            email: 'page2-target@qq.com',
+            username: 'targetFriend',
+            total_rebate: 1,
+            total_paid_amount: 10,
+            total_consumed_amount: 1,
+            display_status: 'pending_consume_3',
+            needs_consume_reminder: true,
+          },
+        ],
+      })
+    })
+
+    const wrapper = mount(AffiliateView, {
+      global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, Icon: true, Pagination: PaginationStub } },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="affiliate-filter-pending_consume"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="affiliate-invitees"]').text()).toContain('page2-target@qq.com')
+
+    // Click transfer button while still on filtered tab
+    const transferBtn = wrapper.findAll('button').find((b) => b.text().includes('affiliate.transfer.button'))!
+    await transferBtn.trigger('click')
+    await flushPromises()
+
+    expect(transferAffiliateQuota).toHaveBeenCalledTimes(1)
+    expect(showSuccess).toHaveBeenCalledTimes(1)
+    expect(showError).not.toHaveBeenCalled()
+    // Filter cache must be re-fetched across pages, NOT degraded to page 1 only
+    expect(wrapper.get('[data-testid="affiliate-invitees"]').text()).toContain('page2-target@qq.com')
+    expect(wrapper.findComponent(PaginationStub).props()).toMatchObject({ total: 1, page: 1 })
   })
 })

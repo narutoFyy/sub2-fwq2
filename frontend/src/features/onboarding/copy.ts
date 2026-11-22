@@ -15,6 +15,8 @@ export const guideCopyZh = {
   welcome: {
     title: '几分钟，把 AI 用起来',
     body: '跟着引导走：兑换额度、创建密钥，然后接上编程工具，或者直接在网页里聊天。每一步都有指引，随时可以跳过。',
+    trialTitle: '1 元好友体验额度已到账',
+    trialBody: '有效期 7 天、体验期限速 3 次/分钟、任意首充即解除，无需先充值，建好密钥就能试用。',
     start: '开始',
     skip: '跳过引导'
   },
@@ -171,6 +173,10 @@ export const guideCopyZh = {
   success: {
     title: '接通了！',
     body: '第一次调用成功。之后每次调用都能在「使用记录」里看到，余额消耗也会实时更新。',
+    affiliateHint: (rate?: string | null) =>
+      rate
+        ? `觉得顺手？去「邀请返利」领链接和扫码海报，好友领 1 元体验，你最高赚 8 元 + ${rate}% 返利。`
+        : '觉得顺手？去「邀请返利」领链接和扫码海报，好友领 1 元体验，你最高赚 8 元 + 永久返利。',
     usage: '查看使用记录',
     done: '完成'
   },
@@ -217,6 +223,8 @@ export const guideCopyEn: GuideCopy = {
   welcome: {
     title: 'Put AI to work in minutes',
     body: 'Follow along: add credit, create a key, then connect a coding tool or just chat in the browser. Every step is guided, and you can skip any time.',
+    trialTitle: '1.00 CNY friend trial credit is ready',
+    trialBody: 'Valid for 7 days (3 requests/min during trial, lifted after any top-up). No recharge needed — create a key and try right away.',
     start: 'Start',
     skip: 'Skip guide'
   },
@@ -373,6 +381,10 @@ export const guideCopyEn: GuideCopy = {
   success: {
     title: "You're connected!",
     body: 'Your first call went through. Every call shows up in Usage records, and your balance updates in real time.',
+    affiliateHint: (rate?: string | null) =>
+      rate
+        ? `Enjoying it? Grab your invite link & QR poster on Affiliate Rebates — friends get 1 CNY to try, and you earn up to 8 CNY + ${rate}% rebate.`
+        : 'Enjoying it? Grab your invite link & QR poster on Affiliate Rebates — friends get 1 CNY to try, and you earn up to 8 CNY + lifetime rebate.',
     usage: 'View usage records',
     done: 'Done'
   },
