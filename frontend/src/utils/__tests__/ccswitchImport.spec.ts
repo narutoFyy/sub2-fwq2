@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ANTHROPIC_CC_SWITCH_CLAUDE_MODEL,
   CC_SWITCH_USAGE_SCRIPT,
   GROK_CC_SWITCH_MODEL,
   OPENAI_CC_SWITCH_CODEX_MODEL,
@@ -14,7 +15,7 @@ function paramsFromDeeplink(deeplink: string): URLSearchParams {
 
 describe('ccswitchImport utils', () => {
   it('defaults OpenAI CC Switch imports to the current Codex model', () => {
-    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-5.5')
+    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-6.1-sol')
   })
 
   it('defaults Grok Build imports to the current Grok model', () => {
@@ -70,8 +71,23 @@ describe('ccswitchImport utils', () => {
     expect(params.get('model')).toBe(GROK_CC_SWITCH_MODEL)
   })
 
+  it.each([null, 'anthropic' as GroupPlatform])('defaults Claude group imports (%s) to Opus 5.5', (platform) => {
+    expect(ANTHROPIC_CC_SWITCH_CLAUDE_MODEL).toBe('claude-opus-5-5')
+    const params = paramsFromDeeplink(
+      buildCcSwitchImportDeeplink({
+        ...baseInput,
+        platform,
+        clientType: 'claude'
+      })
+    )
+
+    expect(params.get('app')).toBe('claude')
+    expect(params.get('endpoint')).toBe(baseInput.baseUrl)
+    expect(params.get('model')).toBe('claude-opus-5-5')
+  })
+
   it.each([
-    { platform: 'anthropic' as GroupPlatform, clientType: 'claude' as const, app: 'claude' },
+    { platform: 'composite' as GroupPlatform, clientType: 'claude' as const, app: 'claude' },
     { platform: 'gemini' as GroupPlatform, clientType: 'gemini' as const, app: 'gemini' }
   ])('does not add a model parameter for $platform imports', ({ platform, clientType, app }) => {
     const params = paramsFromDeeplink(

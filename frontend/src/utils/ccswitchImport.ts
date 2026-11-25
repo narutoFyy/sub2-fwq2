@@ -1,6 +1,7 @@
 import type { GroupPlatform } from '@/types'
 
-export const OPENAI_CC_SWITCH_CODEX_MODEL = 'gpt-5.5'
+export const OPENAI_CC_SWITCH_CODEX_MODEL = 'gpt-6.1-sol'
+export const ANTHROPIC_CC_SWITCH_CLAUDE_MODEL = 'claude-opus-5-5'
 export const GROK_CC_SWITCH_MODEL = 'grok-4.5'
 
 export type CcSwitchClientType = 'claude' | 'gemini'
@@ -83,6 +84,12 @@ export function resolveCcSwitchImportConfig(
         app: 'grokbuild',
         endpoint: withV1Endpoint(baseUrl),
         model: GROK_CC_SWITCH_MODEL
+      }
+    case 'anthropic':
+      return {
+        app: 'claude',
+        endpoint: baseUrl,
+        model: ANTHROPIC_CC_SWITCH_CLAUDE_MODEL
       }
     default:
       return {
