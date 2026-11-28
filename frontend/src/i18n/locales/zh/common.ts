@@ -162,9 +162,14 @@ export default {
   },
 
   // Navigation
+  imageStudio: {
+    description: '写一句话就能出图，也能接进 Codex / Claude Code'
+  },
+
   nav: {
     dashboard: '仪表盘',
     chat: '聊天',
+    image: '生图',
     announcements: '公告',
     apiKeys: 'API 密钥',
     tutorials: '图文教程',

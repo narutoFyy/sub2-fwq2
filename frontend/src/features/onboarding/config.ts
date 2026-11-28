@@ -4,12 +4,15 @@
 export const SUPPORT_QQ_GROUP = '1127453722'
 
 /**
- * 引导里可选的用法：两个编程工具（要装软件、经 CC Switch 导入），
- * 以及两个直接在站内聊天页使用的（纯聊天、玄学测算），不用装任何东西。
+ * 引导里可选的用法：两个编程工具（要装软件、经 CC Switch 导入）、生图（网页里直接画，
+ * 或复制一段话让 Codex / Claude Code 自己装 my-image），以及两个直接在站内聊天页使用的（纯聊天、玄学测算）。
  */
-export type GuideClient = 'codex' | 'claude-code' | 'chat' | 'fortune'
+export type GuideClient = 'codex' | 'claude-code' | 'image' | 'chat' | 'fortune'
 
-export const GUIDE_CLIENTS: GuideClient[] = ['codex', 'claude-code', 'chat', 'fortune']
+export const GUIDE_CLIENTS: GuideClient[] = ['codex', 'claude-code', 'image', 'chat', 'fortune']
+
+/** 生图的两种方式：web 在本站生图页画；agent 把 my-image 装进 Codex / Claude Code。 */
+export type ImageMode = 'web' | 'agent'
 
 /** 站内聊天类用法：建好密钥后直接去 /chat，跳过安装和导入。 */
 export function isChatClient(client: GuideClient | null | undefined): client is 'chat' | 'fortune' {

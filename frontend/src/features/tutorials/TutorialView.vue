@@ -18,6 +18,7 @@ import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
 import TutorialCode from './TutorialCode.vue'
 import TutorialDownloads from './TutorialDownloads.vue'
 import TutorialShot from './TutorialShot.vue'
+import TutorialImage from './TutorialImage.vue'
 import { clientName, tutorialClients, useTutorialCopy, type TutorialClient } from './content'
 import { buildSteps } from './tutorialSteps'
 import { useUiLabels } from './uiLabels'
@@ -33,6 +34,8 @@ const copy = useTutorialCopy()
 const ui = useUiLabels()
 const client = computed<TutorialClient>(() => route.params.client === 'codex' ? 'codex' : 'claude-code')
 const isIndex = computed(() => !route.params.client)
+const isImage = computed(() => route.params.client === 'image')
+const imageCardCopy = computed(() => locale.value.startsWith('zh') ? { name: '生图', desc: '网页里写一句话就出图，也能装进 Codex / Claude Code。' } : { name: 'Images', desc: 'Describe a picture in the browser, or add image making to Codex / Claude Code.' })
 const name = computed(() => clientName(client.value))
 const siteName = computed(() => app.cachedPublicSettings?.site_name || app.siteName || 'Sub2API')
 const endpoint = computed(() => (app.cachedPublicSettings?.api_base_url || window.location.origin).replace(/\/+$/, ''))
@@ -92,8 +95,18 @@ onBeforeUnmount(() => observer?.disconnect())
           <p>{{ item === 'codex' ? copy.codexDesc : copy.claudeDesc }}</p>
           <span>{{ copy.read }} <span aria-hidden="true">↗</span></span>
         </RouterLink>
+        <RouterLink to="/tutorials/image" class="index-guide">
+          <div class="tutorial-image-glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M3.5 16l4.6-4.6a1.6 1.6 0 0 1 2.3 0l4.9 4.9m-1.6-1.6 1.2-1.2a1.6 1.6 0 0 1 2.3 0l2.3 2.3" /><path d="M15.5 7.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z" /></svg></div>
+          <h2>{{ imageCardCopy.name }}</h2>
+          <p>{{ imageCardCopy.desc }}</p>
+          <span>{{ copy.read }} <span aria-hidden="true">↗</span></span>
+        </RouterLink>
       </div>
       <ol class="index-steps"><li v-for="(label, i) in copy.steps" :key="label"><span>{{ String(i + 1).padStart(2, '0') }}</span>{{ label }}</li></ol>
+    </main>
+
+    <main v-else-if="isImage" class="guide-main">
+      <TutorialImage />
     </main>
 
     <main v-else class="guide-main">

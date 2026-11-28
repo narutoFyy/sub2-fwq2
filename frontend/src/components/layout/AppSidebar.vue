@@ -369,6 +369,15 @@ const ChatIcon = {
     )
 }
 
+const ImageIcon = {
+  render: () =>
+    h('svg', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' }, [
+      h('rect', { x: '3.75', y: '4.5', width: '16.5', height: '15', rx: '2.25' }),
+      h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', d: 'M3.75 16.5l4.69-4.69a1.5 1.5 0 012.12 0l4.94 4.94m-1.5-1.5l1.19-1.19a1.5 1.5 0 012.12 0l2.69 2.69' }),
+      h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', d: 'M15.75 7.5l.53 1.22 1.22.53-1.22.53-.53 1.22-.53-1.22-1.22-.53 1.22-.53z' })
+    ])
+}
+
 const KeyIcon = {
   render: () =>
     h(
@@ -825,6 +834,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   }
   items.push(
     { path: '/chat', label: t('nav.chat'), icon: ChatIcon },
+    { path: '/image', label: t('nav.image'), icon: ImageIcon },
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/tutorials', label: t('nav.tutorials'), icon: BookIcon },
     { path: '/reset-radar', label: t('nav.resetRadar'), icon: RadarIcon },

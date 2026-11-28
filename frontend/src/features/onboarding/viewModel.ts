@@ -15,6 +15,8 @@ export type GuideBlock =
   | { type: 'note'; text: string }
   /** 带脉冲小点的等待状态（如「正在等待第一次调用」）。 */
   | { type: 'status'; text: string }
+  /** 一段要复制给智能体的话：展示时密钥打码，复制完整版本。 */
+  | { type: 'prompt'; heading: string; shown: string; value: string; note?: string }
   /** 推荐模型：名字 + 一句话能力介绍。 */
   | { type: 'models'; heading: string; hint?: string; items: { name: string; pitch: string; tag?: string }[] }
 
@@ -25,8 +27,11 @@ export interface GuideAction {
   quiet?: boolean
 }
 
+/** 选项卡片：选用法（GuideClient），或选生图方式（image-web / image-agent）。 */
+export type GuideOptionId = GuideClient | 'image-web' | 'image-agent'
+
 export interface GuideClientOption {
-  id: GuideClient
+  id: GuideOptionId
   name: string
   desc: string
 }

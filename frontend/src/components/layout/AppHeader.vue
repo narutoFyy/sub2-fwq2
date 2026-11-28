@@ -124,6 +124,7 @@
         <div v-if="user" class="relative" ref="dropdownRef">
           <button
             @click="toggleDropdown"
+            data-tour="header-avatar"
             class="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
             :aria-label="t('common.userMenu')"
           >

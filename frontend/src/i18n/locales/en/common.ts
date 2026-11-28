@@ -162,9 +162,14 @@ export default {
   },
 
   // Navigation
+  imageStudio: {
+    description: 'Describe a picture and get it back, or use it in Codex / Claude Code'
+  },
+
   nav: {
     dashboard: 'Dashboard',
     chat: 'Chat',
+    image: 'Images',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
     tutorials: 'Setup guides',

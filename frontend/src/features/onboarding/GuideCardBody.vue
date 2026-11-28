@@ -4,8 +4,7 @@ import ModelIcon from '@/components/common/ModelIcon.vue'
 import GuideBlocks from './GuideBlocks.vue'
 import GuideSupport from './GuideSupport.vue'
 import { useGuideCopy } from './copy'
-import type { GuideClient } from './config'
-import type { GuideView } from './viewModel'
+import type { GuideOptionId, GuideView } from './viewModel'
 
 const props = defineProps<{
   view: GuideView
@@ -24,7 +23,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  choose: [client: GuideClient]
+  choose: [id: GuideOptionId]
   askSkip: []
   confirmSkip: []
   cancelSkip: []
@@ -103,6 +102,12 @@ const stageLabel = computed(() => {
           <button v-for="(opt, i) in view.options" :key="opt.id" type="button" class="og-option" :style="{ '--i': i }" :data-og-autofocus="i === 0 ? '' : undefined" @click="emit('choose', opt.id)">
             <span v-if="opt.id === 'chat'" class="og-option-glyph" aria-hidden="true">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z" /><path d="M8.5 8.5h7M8.5 11.5h4" /></svg>
+            </span>
+            <span v-else-if="opt.id === 'image' || opt.id === 'image-web'" class="og-option-glyph og-option-glyph--image" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M3.5 16l4.6-4.6a1.6 1.6 0 0 1 2.3 0l4.9 4.9m-1.6-1.6 1.2-1.2a1.6 1.6 0 0 1 2.3 0l2.3 2.3" /><path d="M15.5 7.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z" /></svg>
+            </span>
+            <span v-else-if="opt.id === 'image-agent'" class="og-option-glyph og-option-glyph--image" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5" /><path d="M7 10l3 2.5L7 15M12.5 15H17" /></svg>
             </span>
             <span v-else-if="opt.id === 'fortune'" class="og-option-glyph og-option-glyph--fortune" aria-hidden="true">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" /><path d="M16.5 3.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" /></svg>

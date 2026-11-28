@@ -5,10 +5,13 @@
  * 「买码并兑换」拆成 buy（去小铺）/ returned（问买好没）/ redeem（去兑换）三步；
  * 「创建 Key」是一步，具体高亮哪个按钮由页面当前状态决定（见 GuideLayer）。
  * 选了站内聊天类用法（纯聊天 / 玄学测算）：创建 Key 之后进 chat（去聊天页），再到 finish 等第一次调用。
+ * 选了生图：先在 imageMode 里选「网页生图 / 智能体生图」，创建 Key 之后分别进 imageGo（去生图页）
+ * 或 skill（复制一段话发给智能体），再到 finish 等第一次调用。
  */
 export type GuideStepId =
   | 'welcome'
   | 'client'
+  | 'imageMode'
   | 'buy'
   | 'returned'
   | 'redeem'
@@ -19,11 +22,13 @@ export type GuideStepId =
   | 'imported'
   | 'manual'
   | 'chat'
+  | 'imageGo'
+  | 'skill'
   | 'finish'
   | 'success'
 
 export const STEP_ORDER: GuideStepId[] = [
-  'welcome', 'client', 'buy', 'returned', 'redeem', 'key', 'ccs', 'download', 'import', 'imported', 'manual', 'chat', 'finish', 'success'
+  'welcome', 'client', 'imageMode', 'buy', 'returned', 'redeem', 'key', 'ccs', 'download', 'import', 'imported', 'manual', 'chat', 'imageGo', 'skill', 'finish', 'success'
 ]
 
 /** 进度条的四个阶段（欢迎页不算）。 */
@@ -34,6 +39,7 @@ export function stageOf(step: GuideStepId): number {
   switch (step) {
     case 'welcome':
     case 'client':
+    case 'imageMode':
       return 0
     case 'buy':
     case 'returned':
@@ -58,10 +64,15 @@ export interface GuideContext {
   redeemAvailable: boolean
   /** 选的是站内聊天类用法：建好 Key 直接去聊天页，不用安装和导入。 */
   chatOnly?: boolean
+  /** 选的是生图。 */
+  imageClient?: boolean
+  /** 生图方式；还没选时为空。 */
+  imageMode?: 'web' | 'agent' | null
 }
 
 /** 创建 Key 之后的下一步。 */
-export function afterKeyStep(ctx: Pick<GuideContext, 'chatOnly'>): GuideStepId {
+export function afterKeyStep(ctx: Pick<GuideContext, 'chatOnly' | 'imageClient' | 'imageMode'>): GuideStepId {
+  if (ctx.imageClient) return ctx.imageMode === 'agent' ? 'skill' : 'imageGo'
   return ctx.chatOnly ? 'chat' : 'ccs'
 }
 
@@ -78,6 +89,8 @@ export function nextStep(current: GuideStepId, ctx: GuideContext): GuideStepId {
     case 'welcome':
       return 'client'
     case 'client':
+      return ctx.imageClient ? 'imageMode' : firstFundStep(ctx)
+    case 'imageMode':
       return firstFundStep(ctx)
     case 'buy':
       return ctx.hasFunds ? 'key' : 'returned'
@@ -88,6 +101,8 @@ export function nextStep(current: GuideStepId, ctx: GuideContext): GuideStepId {
     case 'key':
       return afterKeyStep(ctx)
     case 'chat': // 打开了聊天页
+    case 'imageGo': // 打开了生图页
+    case 'skill': // 「我发过去了」
       return 'finish'
     case 'ccs': // 「都装好了」
     case 'download': // 「我装好了，继续」
@@ -108,6 +123,8 @@ export function prevStep(current: GuideStepId): GuideStepId {
   switch (current) {
     case 'client':
       return 'welcome'
+    case 'imageMode':
+      return 'client'
     case 'returned':
       return 'buy'
     case 'download':

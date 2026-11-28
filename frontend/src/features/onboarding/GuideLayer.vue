@@ -12,6 +12,7 @@ import { useUiLabels } from '@/features/tutorials/uiLabels'
 import GlowDots from '@/components/visual/GlowDots.vue'
 import GuideCardBody from './GuideCardBody.vue'
 import GuideConfetti from './GuideConfetti.vue'
+import GuideFlyHome from './GuideFlyHome.vue'
 import GuideInvite from './GuideInvite.vue'
 import GuideSpotlight from './GuideSpotlight.vue'
 import { useGuideCopy } from './copy'
@@ -22,9 +23,11 @@ import { useDownloadResources } from './useDownloadResources'
 import { useFirstCallWatcher } from './useFirstCallWatcher'
 import { afterKeyStep, FUND_STEPS, nextStep, prevStep, stageOf, type GuideContext, type GuideStepId, type PurchaseMode } from './steps'
 import { useGuideTarget, type TargetResolver } from './useGuideTarget'
-import { chatPathFor, isChatClient, type GuideClient } from './config'
+import { chatPathFor, isChatClient, type GuideClient, type ImageMode } from './config'
+import { listImageModels } from '@/features/image/api'
+import { buildSkillPrompt, imageBaseUrl, maskKey } from '@/features/image/skillPrompt'
 import { CHAT_MODEL_CATALOG } from '@/features/chat/modelCatalog'
-import type { GuideBlock, GuideView } from './viewModel'
+import type { GuideBlock, GuideOptionId, GuideView } from './viewModel'
 import './guide.css'
 
 const route = useRoute()
@@ -99,8 +102,11 @@ const ctx = computed<GuideContext>(() => ({
   hasFunds: hasFunds.value,
   purchaseMode: purchaseMode.value,
   redeemAvailable: !auth.isSimpleMode,
-  chatOnly: isChatClient(guide.client)
+  chatOnly: isChatClient(guide.client),
+  imageClient: guide.client === 'image',
+  imageMode: guide.imageMode
 }))
+const isImageWeb = computed(() => guide.client === 'image' && guide.imageMode !== 'agent')
 
 // ---------------------------------------------------------------- 系统与下载资源
 
@@ -261,14 +267,38 @@ async function loadManualKey() {
   } catch {
     manualKey.value = null
   }
+  if (manualKey.value && guide.step === 'skill') {
+    try {
+      skillModel.value = (await listImageModels(manualKey.value))[0] ?? null
+    } catch {
+      skillModel.value = null
+    }
+  }
 }
+/** 智能体那段话里写的模型：这把密钥实际能用的最新生图模型。 */
+const skillModel = ref<string | null>(null)
 watch(
-  () => guide.active && guide.step === 'manual',
+  () => guide.active && (guide.step === 'manual' || guide.step === 'skill'),
   (on) => {
     if (on) void loadManualKey()
   },
   { immediate: true }
 )
+
+/** 复制给智能体的那段话：本站生图地址（带 /v1）+ 引导里建的那把密钥。 */
+function skillPromptBlock(): GuideBlock | null {
+  const c = copy.value
+  if (!manualKey.value) return null
+  const lang = locale.value.startsWith('zh') ? 'zh' : 'en'
+  const baseUrl = imageBaseUrl(app.cachedPublicSettings?.api_base_url)
+  return {
+    type: 'prompt',
+    heading: c.skill.heading,
+    shown: buildSkillPrompt({ lang, baseUrl, apiKey: maskKey(manualKey.value), model: skillModel.value }),
+    value: buildSkillPrompt({ lang, baseUrl, apiKey: manualKey.value, model: skillModel.value }),
+    note: c.skill.note
+  }
+}
 
 // ---------------------------------------------------------------- 当前这一屏
 
@@ -300,8 +330,21 @@ const view = computed<GuideView | null>(() => {
         options: [
           { id: 'codex', name: 'Codex', desc: c.client.codex },
           { id: 'claude-code', name: 'Claude Code', desc: c.client.claude },
+          { id: 'image', name: c.clientName('image'), desc: c.client.image },
           { id: 'chat', name: c.clientName('chat'), desc: c.client.chat },
           { id: 'fortune', name: c.clientName('fortune'), desc: c.client.fortune }
+        ],
+        resolvers: []
+      }
+    case 'imageMode':
+      return {
+        kind: 'modal',
+        key: 'imageMode',
+        title: c.imageMode.title,
+        body: c.imageMode.body,
+        options: [
+          { id: 'image-web', name: c.imageMode.web, desc: c.imageMode.webDesc },
+          { id: 'image-agent', name: c.imageMode.agent, desc: c.imageMode.agentDesc }
         ],
         resolvers: []
       }
@@ -350,7 +393,7 @@ const view = computed<GuideView | null>(() => {
       const titles = { name: c.keyName.title, form: c.keyForm.title, submit: c.keySubmit.title, create: c.keyCreate.title, nav: c.keyNav.title }
       const bodies = {
         name: c.keyName.body(clientName),
-        form: isChatClient(guide.client) ? c.keyForm.bodyChat : c.keyForm.body(clientName),
+        form: guide.client === 'image' ? c.keyForm.bodyImage : isChatClient(guide.client) ? c.keyForm.bodyChat : c.keyForm.body(clientName),
         submit: c.keySubmit.body,
         create: c.keyCreate.body,
         nav: c.keyNav.body(targetText.value || t('nav.apiKeys'))
@@ -470,7 +513,62 @@ const view = computed<GuideView | null>(() => {
         resolvers: []
       }
     }
+    case 'imageGo':
+      return {
+        kind: 'modal',
+        key: 'imageGo',
+        title: c.imageGo.title,
+        body: c.imageGo.body,
+        primary: {
+          label: c.imageGo.open,
+          run: () => {
+            advance()
+            void router.push('/image')
+          }
+        },
+        resolvers: []
+      }
+    case 'skill': {
+      const block = skillPromptBlock()
+      return {
+        kind: 'modal',
+        key: 'skill',
+        wide: true,
+        title: c.skill.title,
+        body: c.skill.body,
+        blocks: block ? [block] : undefined,
+        hint: block ? undefined : c.skill.loading,
+        primary: { label: c.skill.sent, run: advance },
+        // 还没装智能体：新标签页打开 Codex 的图文教程（含下载），装好回来接着复制
+        secondary: { label: c.skill.noAgent, run: () => void window.open(router.resolve('/tutorials/codex').href, '_blank', 'noopener'), quiet: true },
+        resolvers: []
+      }
+    }
     case 'finish':
+      if (guide.client === 'image') {
+        const web = isImageWeb.value
+        return {
+          kind: 'modal' as const,
+          key: web ? 'finish-image' : 'finish-skill',
+          collapsible: true,
+          pillLabel: web ? c.finish.pillImage : c.finish.pill,
+          title: web ? c.finish.titleImage : c.finish.titleSkill,
+          body: web ? c.finish.bodyImage : c.finish.bodySkill,
+          list: web ? c.finish.stepsImage : c.finish.stepsSkill,
+          blocks: [{ type: 'status', text: c.finish.waiting }],
+          primary: web
+            ? {
+                label: c.finish.openImage,
+                run: () => {
+                  chatPillHidden.value = false
+                  void router.push('/image')
+                }
+              }
+            : { label: c.finish.done, run: () => guide.finish() },
+          secondary: web ? { label: c.finish.done, run: () => guide.finish() } : undefined,
+          resolvers: []
+        }
+      }
       if (isChatClient(guide.client)) {
         const target = guide.client
         return {
@@ -515,6 +613,27 @@ const view = computed<GuideView | null>(() => {
         resolvers: []
       }
     case 'success':
+      if (guide.client === 'image') {
+        const web = isImageWeb.value
+        return {
+          kind: 'modal',
+          key: 'success',
+          title: web ? c.success.titleImage : c.success.titleSkill,
+          body: web ? c.success.bodyImage : c.success.bodySkill,
+          hint: affiliateEnabled.value && !auth.isSimpleMode ? c.success.affiliateHint(affiliateRebateRate.value) : undefined,
+          primary: web
+            ? { label: c.success.keepGoing, run: () => guide.finish() }
+            : { label: c.success.done, run: () => guide.finish() },
+          secondary: {
+            label: c.success.usage,
+            run: () => {
+              guide.finish()
+              void router.push('/usage')
+            }
+          },
+          resolvers: []
+        }
+      }
       return {
         kind: 'modal',
         key: 'success',
@@ -573,18 +692,24 @@ function goBack() {
 }
 
 /** 配置完成后（等第一次调用、接通了；聊天用法从「去聊天」起）不再显示「不想配置？加群」。 */
-const showSupport = computed(() => !['chat', 'finish', 'success'].includes(guide.step))
+const showSupport = computed(() => !['chat', 'imageGo', 'finish', 'success'].includes(guide.step))
 
 /** 右下角「图文教程」：按选的工具打开对应教程，新标签页里打开，不打断引导。 */
 const tutorialHref = computed(() => {
-  const client = guide.client === 'codex' || guide.client === 'claude-code' ? guide.client : null
+  const client = guide.client === 'codex' || guide.client === 'claude-code' || guide.client === 'image' ? guide.client : null
   return router.resolve(client ? `/tutorials/${client}` : '/tutorials').href
 })
 
 const stage = computed(() => (guide.step === 'welcome' ? -1 : guide.step === 'success' ? 4 : stageOf(guide.step)))
 
-function choose(client: GuideClient) {
-  guide.chooseClient(client)
+function choose(id: GuideOptionId) {
+  if (id === 'image-web' || id === 'image-agent') {
+    const mode: ImageMode = id === 'image-web' ? 'web' : 'agent'
+    guide.chooseImageMode(mode)
+    guide.go(nextStep('imageMode', ctx.value))
+    return
+  }
+  guide.chooseClient(id as GuideClient)
   guide.go(nextStep('client', ctx.value))
 }
 
@@ -668,7 +793,11 @@ const minimized = ref(false)
  * 用户点胶囊展开后本步内不再自动收起。
  */
 const chatPillHidden = ref(false)
-const onChatPage = computed(() => route.path === '/chat' && guide.step === 'finish' && isChatClient(guide.client))
+const onChatPage = computed(
+  () =>
+    guide.step === 'finish' &&
+    ((route.path === '/chat' && isChatClient(guide.client)) || (route.path === '/image' && isImageWeb.value))
+)
 const showPill = computed(
   () => guide.active && !!view.value?.collapsible && (minimized.value || (onChatPage.value && !chatPillHidden.value))
 )
@@ -677,7 +806,7 @@ watch(() => guide.step, () => {
   chatPillHidden.value = false
 })
 watch(() => route.path, (path) => {
-  if (path === '/chat') chatPillHidden.value = false
+  if (path === '/chat' || path === '/image') chatPillHidden.value = false
 })
 function expandPill() {
   minimized.value = false
@@ -777,6 +906,34 @@ function onKeydown(event: KeyboardEvent) {
     first.focus()
   }
 }
+
+// ---------------------------------------------------------------- 结束后飞进头像
+
+/** 引导完成或跳过时，卡片飞进右上角头像，并提示「点头像随时再来一遍」。每个账号只演一次。 */
+const flyToken = ref(0)
+const flyFrom = ref<DOMRect | null>(null)
+const flyGhost = ref<HTMLElement | null>(null)
+const flyKey = () => (auth.user?.id == null ? null : `onboarding_flyhome_v1:${auth.user.id}`)
+watch(
+  () => guide.status,
+  (next, prev) => {
+    if (prev !== 'active' || (next !== 'done' && next !== 'skipped') || !eligible.value) return
+    const key = flyKey()
+    try {
+      if (!key || localStorage.getItem(key)) return
+      localStorage.setItem(key, '1')
+    } catch {
+      /* 存不了也照样演一次 */
+    }
+    flyFrom.value = cardEl.value?.getBoundingClientRect() ?? null
+    // 带着卡片的样子起飞：复制一份当前卡片，飞行途中淡出成光点
+    const ghost = cardEl.value?.cloneNode(true) as HTMLElement | undefined
+    ghost?.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'))
+    flyGhost.value = ghost ?? null
+    flyToken.value++
+  },
+  { flush: 'sync' }
+)
 
 // ---------------------------------------------------------------- 老用户邀请
 
@@ -904,5 +1061,6 @@ onBeforeUnmount(() => {
     </template>
 
     <GuideInvite :show="inviteVisible && eligible && !guide.active" @start="startFromInvite" @dismiss="dismissInvite" />
+    <GuideFlyHome :token="flyToken" :from="flyFrom" :ghost="flyGhost" />
   </div>
 </template>

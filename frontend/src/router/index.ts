@@ -32,7 +32,7 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== Public Routes ====================
   {
-    path: '/tutorials/:client(claude-code|codex)?',
+    path: '/tutorials/:client(claude-code|codex|image)?',
     name: 'Tutorials',
     component: () => import('@/features/tutorials/TutorialView.vue'),
     meta: { requiresAuth: false, title: 'Setup guides', titleKey: 'tutorials.title' }
@@ -231,6 +231,18 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: false,
       title: 'Chat',
       titleKey: 'chat.title'
+    }
+  },
+  {
+    path: '/image',
+    name: 'ImageStudio',
+    component: () => import('@/features/image/ImageView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Images',
+      titleKey: 'nav.image',
+      descriptionKey: 'imageStudio.description'
     }
   },
   {

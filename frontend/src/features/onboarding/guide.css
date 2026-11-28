@@ -258,3 +258,20 @@
 
 /* 在教程页里内嵌下载块：不是浮层，按普通内容排布 */
 .og-root--inline { position: static; inset: auto; z-index: auto; pointer-events: auto; }
+
+/* 复制给智能体的那段话 */
+.og-prompt { position: relative; border-radius: 12px; background: #111113; border: 1px solid var(--og-line); }
+.og-prompt pre { max-height: 188px; overflow: auto; padding: 14px 16px 48px; color: #e4e4e7; font: 12px/1.7 'Geist Mono Variable', ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+.og-prompt-copy { position: absolute; right: 10px; bottom: 10px; padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 500; background: #fafafa; color: #0a0a0b; transition: background-color 0.2s var(--og-ease), color 0.2s var(--og-ease); }
+.og-prompt-copy.is-done { background: var(--og-accent); color: var(--og-bg); }
+
+/* 引导结束：卡片缩成一颗光点飞进头像，头像下冒出一句提示 */
+.og-fly { position: fixed; z-index: 90; left: 0; top: 0; overflow: hidden; pointer-events: none; background: var(--og-bg); border: 1px solid var(--og-line); box-shadow: var(--og-shadow), 0 0 40px var(--og-glow); will-change: transform, opacity, border-radius; }
+.og-avatar-ping { position: fixed; z-index: 89; pointer-events: none; border-radius: 12px; border: 2px solid var(--og-accent); box-shadow: 0 0 18px var(--og-glow); animation: og-avatar-ping 0.9s var(--og-ease) forwards; }
+@keyframes og-avatar-ping { from { transform: scale(0.9); opacity: 1; } to { transform: scale(1.9); opacity: 0; } }
+.og-home-tip { position: fixed; z-index: 90; display: flex; align-items: center; gap: 12px; max-width: min(400px, calc(100vw - 32px)); padding: 12px 12px 12px 16px; border-radius: 14px; background: var(--og-btn-bg); color: var(--og-btn-fg); font-size: 13px; line-height: 1.5; box-shadow: var(--og-shadow); }
+.og-home-tip::before { content: ''; position: absolute; top: -5px; right: var(--tip-arrow, 20px); width: 10px; height: 10px; background: inherit; transform: rotate(45deg); border-radius: 2px; }
+.og-home-tip button { flex: none; padding: 5px 12px; border-radius: 999px; font-size: 12px; background: color-mix(in oklab, var(--og-btn-fg) 16%, transparent); color: inherit; }
+.og-tip-enter-active, .og-tip-leave-active { transition: opacity 0.3s var(--og-ease), transform 0.3s var(--og-ease); }
+.og-tip-enter-from, .og-tip-leave-to { opacity: 0; transform: translateY(-6px); }
+@media (prefers-reduced-motion: reduce) { .og-avatar-ping { animation: none; opacity: 0; } }

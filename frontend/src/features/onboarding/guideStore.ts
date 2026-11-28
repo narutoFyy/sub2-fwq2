@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { GUIDE_CLIENTS, GUIDE_STORAGE_PREFIX, type GuideClient } from './config'
+import { GUIDE_CLIENTS, GUIDE_STORAGE_PREFIX, type GuideClient, type ImageMode } from './config'
 import type { GuideStepId } from './steps'
 
 /**
@@ -13,6 +13,8 @@ interface Persisted {
   status: GuideStatus
   step: GuideStepId
   client: GuideClient | null
+  /** 选了生图时的方式（网页 / 智能体）。 */
+  imageMode: ImageMode | null
   /** 引导里创建的那把 Key，用来在 Key 列表里高亮它的「导入」按钮。 */
   keyId: number | null
   /** 走过的步骤（最近的在最后），给左上角的返回箭头用。 */
@@ -20,7 +22,7 @@ interface Persisted {
 }
 
 const HISTORY_LIMIT = 30
-const DEFAULT: Persisted = { status: 'idle', step: 'welcome', client: null, keyId: null, history: [] }
+const DEFAULT: Persisted = { status: 'idle', step: 'welcome', client: null, imageMode: null, keyId: null, history: [] }
 const key = (userId: number) => `${GUIDE_STORAGE_PREFIX}:${userId}`
 
 function read(userId: number): Persisted {
@@ -32,6 +34,7 @@ function read(userId: number): Persisted {
       status: parsed.status ?? 'idle',
       step: parsed.step ?? 'welcome',
       client: parsed.client && GUIDE_CLIENTS.includes(parsed.client) ? parsed.client : null,
+      imageMode: parsed.imageMode === 'web' || parsed.imageMode === 'agent' ? parsed.imageMode : null,
       keyId: typeof parsed.keyId === 'number' ? parsed.keyId : null,
       history: Array.isArray(parsed.history) ? parsed.history.filter((s): s is GuideStepId => typeof s === 'string').slice(-HISTORY_LIMIT) : []
     }
@@ -46,6 +49,7 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
   const status = ref<GuideStatus>('idle')
   const step = ref<GuideStepId>('welcome')
   const client = ref<GuideClient | null>(null)
+  const imageMode = ref<ImageMode | null>(null)
   const keyId = ref<number | null>(null)
   const history = ref<GuideStepId[]>([])
   /** 兑换成功 / Key 创建成功这类页面事件的计数，GuideLayer 据此推进。 */
@@ -57,7 +61,7 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
   function persist() {
     if (userId.value == null) return
     try {
-      localStorage.setItem(key(userId.value), JSON.stringify({ status: status.value, step: step.value, client: client.value, keyId: keyId.value, history: history.value }))
+      localStorage.setItem(key(userId.value), JSON.stringify({ status: status.value, step: step.value, client: client.value, imageMode: imageMode.value, keyId: keyId.value, history: history.value }))
     } catch {
       /* 存储不可用时本次会话内仍可用 */
     }
@@ -70,6 +74,7 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
     status.value = saved.status
     step.value = saved.step
     client.value = saved.client
+    imageMode.value = saved.imageMode
     keyId.value = saved.keyId
     history.value = saved.history
   }
@@ -78,6 +83,7 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
     status.value = 'active'
     step.value = 'welcome'
     client.value = null
+    imageMode.value = null
     keyId.value = null
     history.value = []
     persist()
@@ -100,6 +106,12 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
 
   function chooseClient(next: GuideClient) {
     client.value = next
+    if (next !== 'image') imageMode.value = null
+    persist()
+  }
+
+  function chooseImageMode(next: ImageMode) {
+    imageMode.value = next
     persist()
   }
 
@@ -136,6 +148,7 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
     status,
     step,
     client,
+    imageMode,
     keyId,
     history,
     active,
@@ -146,6 +159,7 @@ export const useGuideStore = defineStore('onboardingGuide', () => {
     go,
     backTo,
     chooseClient,
+    chooseImageMode,
     finish,
     skip,
     dismiss,

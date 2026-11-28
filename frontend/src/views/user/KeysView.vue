@@ -97,6 +97,12 @@
       </template>
 
       <template #table>
+        <div v-if="imageHintRow && !guideStore.active" class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-100 px-4 py-3 text-[13px] text-gray-500 dark:border-dark-700 dark:text-dark-400" data-test="keys-image-hint">
+          <span>{{ imageCopy.keysHint.text(imageHintRow.name) }}</span>
+          <button type="button" class="font-medium text-gray-900 underline-offset-4 hover:underline dark:text-white" @click="imageHintDialog = true">{{ imageCopy.keysHint.action }}</button>
+          <button type="button" class="ml-auto text-xs text-gray-400 hover:text-gray-600 dark:text-dark-500 dark:hover:text-dark-300" @click="rememberImageHint('off')">{{ imageCopy.keysHint.dismiss }}</button>
+        </div>
+        <SkillPromptDialog v-if="imageHintRow" :show="imageHintDialog" :preferred-key-id="imageHintKeyId" @close="imageHintDialog = false" />
         <DataTable
           :columns="columns"
           :data="apiKeys"
@@ -1277,6 +1283,8 @@ import { maskApiKey } from '@/utils/maskApiKey'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import { platformBadgeLightClass } from '@/utils/platformColors'
 import { KEY_GROUP_PROVIDERS, KEY_GROUP_PROVIDER_ICONS, getKeyGroupProvider, type KeyGroupProvider } from '@/utils/keyGroupProviders'
+import SkillPromptDialog from '@/features/image/SkillPromptDialog.vue'
+import { useImageCopy } from '@/features/image/copy'
 import {
   CC_SWITCH_USAGE_SCRIPT,
   buildCcSwitchImportDeeplink,
@@ -1307,6 +1315,7 @@ interface GroupOption {
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
 const guideStore = useGuideStore()
+const imageCopy = useImageCopy()
 const { copyToClipboard: clipboardCopy } = useClipboard()
 
 const allColumns = computed<Column[]>(() => [
@@ -1582,15 +1591,60 @@ const createProviderOptions = computed(() => KEY_GROUP_PROVIDERS.map((value) => 
   count: groups.value.filter((group) => getKeyGroupProvider(group.platform) === value).length
 })))
 
+/** 新手引导走「生图」时，只列能生图的分组，免得新手选到不能生图的分组（没有能生图的分组时不过滤）。 */
+const guidedImageGroupIds = computed(() => {
+  if (!guideStore.active || guideStore.step !== 'key' || guideStore.client !== 'image') return null
+  const ids = new Set(groups.value.filter((group) => group.allow_image_generation).map((group) => group.id))
+  return ids.size > 0 ? ids : null
+})
 const formGroupOptions = computed(() => showEditModal.value
   ? groupOptions.value
-  : groupOptions.value.filter((group) => getKeyGroupProvider(group.platform) === createProvider.value)
+  : groupOptions.value.filter((group) =>
+      getKeyGroupProvider(group.platform) === createProvider.value &&
+      (!guidedImageGroupIds.value || guidedImageGroupIds.value.has(group.value))
+    )
 )
 
 // 可额外勾选的分组：所有分组里除去当前主分组（不限供应商，这正是多分组的用途）。
 const extraGroupCandidates = computed(() =>
   groupOptions.value.filter((group) => group.value !== formData.value.group_id)
 )
+
+/** 新手引导里建密钥：Codex / Claude Code 预选对应供应商；生图预选第一个能生图的分组所在的供应商。 */
+const guidedCreateProvider = (): KeyGroupProvider | null => {
+  if (!guideStore.active || guideStore.step !== 'key' || !guideStore.client) return null
+  if (guideStore.client === 'image') {
+    const group = groups.value.find((item) => item.allow_image_generation)
+    return group ? getKeyGroupProvider(group.platform) : null
+  }
+  return CLIENT_PROVIDER[guideStore.client] ?? null
+}
+
+// ---------------------------------------------------------------- 生图分组的轻提示
+// 不在引导里、自己建了一把能生图的密钥：表格上方出现一行小字，告诉用户也能装进智能体里生图。
+// 点「不再提示」后这个账号永远不再出现；没点就一直留着那一行（不弹窗、不 toast）。
+// 账号 id 取自引导 store（GuideLayer 登录后就载入了当前账号）
+const imageHintKey = computed(() => (guideStore.userId == null ? null : `keys_image_skill_hint_v1:${guideStore.userId}`))
+const imageHintKeyId = ref<number | null>(null)
+const imageHintDialog = ref(false)
+function readImageHint() {
+  try {
+    const raw = imageHintKey.value ? localStorage.getItem(imageHintKey.value) : null
+    imageHintKeyId.value = raw && raw !== 'off' ? Number(raw) || null : null
+  } catch {
+    imageHintKeyId.value = null
+  }
+}
+function rememberImageHint(value: number | 'off') {
+  try {
+    if (imageHintKey.value && localStorage.getItem(imageHintKey.value) !== 'off') localStorage.setItem(imageHintKey.value, String(value))
+  } catch {
+    /* ignore */
+  }
+  imageHintKeyId.value = value === 'off' ? null : value
+}
+const imageHintRow = computed(() => apiKeys.value.find((key) => key.id === imageHintKeyId.value) ?? null)
+watch(imageHintKey, readImageHint, { immediate: true })
 
 const selectCreateProvider = (provider: KeyGroupProvider) => {
   if (createProvider.value === provider) return
@@ -1603,7 +1657,7 @@ watch([showCreateModal, createProviderOptions], ([isOpen, providers], [wasOpen])
   if (!isOpen) return
   if (!wasOpen || !providers.some((provider) => provider.value === createProvider.value && provider.count > 0)) {
     // 新手引导里选了 Codex / Claude Code：创建弹窗打开时预选对应的供应商。
-    const guided = guideStore.active && guideStore.step === 'key' && guideStore.client ? (CLIENT_PROVIDER[guideStore.client] ?? null) : null
+    const guided = guidedCreateProvider()
     const guidedUsable = guided !== null && providers.some((provider) => provider.value === guided && provider.count > 0)
     selectCreateProvider(guidedUsable ? guided : (providers.find((provider) => provider.count > 0)?.value ?? 'anthropic'))
   }
@@ -1960,7 +2014,11 @@ const handleSubmit = async () => {
         extraGroupIds
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
+      const wasGuided = guideStore.active
       guideStore.notifyKeyCreated(created?.id)
+      const createdGroup = groups.value.find((group) => group.id === formData.value.group_id)
+      const imageCapable = !!createdGroup?.allow_image_generation || extraGroupIds.some((id) => groups.value.find((group) => group.id === id)?.allow_image_generation)
+      if (!wasGuided && imageCapable && created?.id) rememberImageHint(created.id)
       // Only advance tour if active, on submit step, and creation succeeded
       if (onboardingStore.isCurrentStep('[data-tour="key-form-submit"]')) {
         onboardingStore.nextStep(500)

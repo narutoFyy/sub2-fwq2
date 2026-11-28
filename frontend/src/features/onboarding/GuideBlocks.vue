@@ -24,7 +24,7 @@ function mask(value: string): string {
 
 /** 带标题的块依次编号（①②③），纯提示块不占编号。 */
 function numberOf(blocks: GuideBlock[], index: number): number {
-  return blocks.slice(0, index + 1).filter((b) => b.type === 'download' || b.type === 'command' || (b.type === 'copy' && b.heading)).length
+  return blocks.slice(0, index + 1).filter((b) => b.type === 'download' || b.type === 'command' || b.type === 'prompt' || (b.type === 'copy' && b.heading)).length
 }
 
 onBeforeUnmount(() => clearTimeout(timer))
@@ -68,6 +68,15 @@ onBeforeUnmount(() => clearTimeout(timer))
           <a v-if="block.backup" :href="block.backup.href" target="_blank" rel="noopener noreferrer">{{ copy.download.backupLabel }}：{{ block.backup.label }}</a>
           <a v-if="block.verify" :href="block.verify.href" target="_blank" rel="noopener noreferrer">{{ block.verify.label }}</a>
         </div>
+      </template>
+
+      <template v-else-if="block.type === 'prompt'">
+        <h3 class="og-block-head"><span class="og-num">{{ numberOf(blocks, i) }}</span>{{ block.heading }}</h3>
+        <div class="og-prompt">
+          <pre>{{ block.shown }}</pre>
+          <button type="button" class="og-prompt-copy" :class="{ 'is-done': copiedKey === `p${i}` }" data-og-autofocus @click="copyValue(`p${i}`, block.value)">{{ copiedKey === `p${i}` ? copy.download.copied : copy.download.copy }}</button>
+        </div>
+        <p v-if="block.note" class="og-block-hint">{{ block.note }}</p>
       </template>
 
       <template v-else-if="block.type === 'command'">
